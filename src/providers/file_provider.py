@@ -22,28 +22,39 @@ class FileSecretProvider(SecretProvider):
     
     def get_secret(self, secret_id: str) -> str:
         """Retrieve a secret from file"""
-        with open(self.file_path, 'r') as f:
-            secrets = json.load(f)
-            return secrets.get(secret_id, "")
+        try:
+            with open(self.file_path, 'r') as f:
+                secrets = json.load(f)
+                return secrets.get(secret_id, "")
+        except (json.JSONDecodeError, FileNotFoundError) as e:
+            logger.error(f"Error reading secrets file: {e}")
+            return ""
     
     def update_secret(self, secret_id: str, new_value: str) -> bool:
         """Update secret in file"""
-        # Read current secrets
-        with open(self.file_path, 'r') as f:
-            secrets = json.load(f)
-        
-        # Update secret
-        secrets[secret_id] = new_value
-        
-        # Write back to file
-        with open(self.file_path, 'w') as f:
-            json.dump(secrets, f, indent=2)
-        
-        logger.info(f"Successfully updated secret: {secret_id}")
-        return True
-        
+        try:
+            # Read current secrets
+            with open(self.file_path, 'r') as f:
+                secrets = json.load(f)
+            
+            # Update secret
+            secrets[secret_id] = new_value
+            
+            # Write back to file
+            with open(self.file_path, 'w') as f:
+                json.dump(secrets, f, indent=2)
+            
+            logger.info(f"Successfully updated secret: {secret_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error updating secret {secret_id}: {e}")
+            return False
     
     def validate_connection(self) -> bool:
         """Test if file can be accessed"""
-        return self.file_path.exists() and os.access(self.file_path, os.R_OK | os.W_OK)
-        
+        try:
+            return self.file_path.exists() and os.access(self.file_path, os.R_OK | os.W_OK)
+        except Exception as e:
+            logger.error(f"Connection validation failed: {e}")
+            return False
