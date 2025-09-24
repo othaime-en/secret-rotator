@@ -13,6 +13,13 @@ class FileSecretProvider(SecretProvider):
         self.file_path = Path(config.get('file_path', 'secrets.json'))
         self.ensure_file_exists()
     
+    def ensure_file_exists(self):
+        """Create secrets file if it doesn't exist"""
+        if not self.file_path.exists():
+            self.file_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.file_path, 'w') as f:
+                json.dump({}, f)
+    
     def get_secret(self, secret_id: str) -> str:
         """Retrieve a secret from file"""
         with open(self.file_path, 'r') as f:
@@ -35,4 +42,8 @@ class FileSecretProvider(SecretProvider):
         logger.info(f"Successfully updated secret: {secret_id}")
         return True
         
+    
+    def validate_connection(self) -> bool:
+        """Test if file can be accessed"""
+        return self.file_path.exists() and os.access(self.file_path, os.R_OK | os.W_OK)
         
