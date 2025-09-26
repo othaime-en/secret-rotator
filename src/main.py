@@ -1,7 +1,8 @@
 import sys
 from pathlib import Path
 
-# Remember to add src to path so we can import our modules
+# Add src to path so we can import our modules
+sys.path.append(str(Path(__file__).parent))
 
 from config.settings import settings
 from providers.file_provider import FileSecretProvider
@@ -14,9 +15,55 @@ def main():
     logger.info("Starting Secret Rotation System")
     
     # Initialize the rotation engine
+    engine = RotationEngine()
+
     # Set up providers and rotators
-    # Add rotation jobs and perform the rotation  
+    file_provider = FileSecretProvider(
+        name="file_storage",
+        config={"file_path": "data/secrets.json"}
+    )
+    engine.register_provider(file_provider)
+
+    password_rotator = PasswordRotator(
+        name="password_gen",
+        config={
+            "length": 16,
+            "use_symbols": True,
+            "use_numbers": True,
+            "use_uppercase": True,
+            "use_lowercase": True
+        }
+    )
+    engine.register_rotator(password_rotator)
+
+    # Add rotation jobs
+    jobs = [
+        {
+            "name": "database_password",
+            "provider": "file_storage",
+            "rotator": "password_gen",
+            "secret_id": "db_password"
+        },
+        {
+            "name": "api_key",
+            "provider": "file_storage", 
+            "rotator": "password_gen",
+            "secret_id": "api_key"
+        }
+    ]
+
+    for job in jobs:
+        engine.add_rotation_job(job)
+
+    # perform the rotation
+    results = engine.rotate_all_secrets()  
+
+
     # Print the results
+    print("\n Rotation Results")
+    for job_name, success in results.items():
+        status="SUCCESS" if success else "FAILED"
+        print(f" {job_name}:{status}")
     
     logger.info("Secret Rotation System finished")
 
