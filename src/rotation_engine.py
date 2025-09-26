@@ -1,8 +1,8 @@
 import time
 from typing import Dict, List, Any
-from src.providers.base import SecretProvider
-from src.rotators.base import SecretRotator
-from src.utils.logger import logger
+from providers.base import SecretProvider
+from rotators.base import SecretRotator
+from utils.logger import logger
 
 class RotationEngine:
     """This is the main engine that orchestrates secret rotation"""

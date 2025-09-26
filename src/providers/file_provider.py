@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any
 from .base import SecretProvider
-from src.utils.logger import logger
+from utils.logger import logger
 
 class FileSecretProvider(SecretProvider):
     """Simple file-based secret storage for testing"""

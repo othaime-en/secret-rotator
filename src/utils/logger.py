@@ -1,7 +1,7 @@
 import logging
 import os
 from pathlib import Path
-from src.config.settings import settings
+from config.settings import settings
 
 def setup_logger():
     """Set up logging configuration"""

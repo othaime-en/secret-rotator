@@ -2,7 +2,7 @@ import secrets
 import string
 from typing import Dict, Any
 from .base import SecretRotator
-from src.utils.logger import logger
+from utils.logger import logger
 
 class PasswordRotator(SecretRotator):
     """Generate random passwords"""
