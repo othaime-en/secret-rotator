@@ -1,6 +1,8 @@
 import schedule
+import time
+import threading
 from typing import Callable
-from src.utils.logger import logger
+from utils.logger import logger
 
 class RotationScheduler:
     """Handle scheduled secret rotations"""
@@ -41,3 +43,26 @@ class RotationScheduler:
         except Exception as e:
             logger.error(f"Error in scheduled rotation: {e}")
     
+    def start(self):
+        #  Start the scheduler in a background thread
+        if self.running:
+            logger.warning("Scheduler already running")
+            return
+        
+        self.running = True
+        self.thread = threading.Thread(target=self._run_scheduler, daemon=True)
+        self.thread.start()
+        logger.info("Rotation scheduler started")
+    
+    def stop(self):
+        # Stop the scheduler
+        self.running = False
+        if self.thread:
+            self.thread.join()
+        logger.info("Rotation scheduler stopped")
+    
+    def _run_scheduler(self):
+        # Internal scheduler loop
+        while self.running:
+            schedule.run_pending()
+            time.sleep(60)  # Check every minute
