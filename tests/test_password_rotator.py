@@ -40,7 +40,7 @@ class TestPasswordRotator(unittest.TestCase):
     
     def test_validate_secret(self):
         """Test secret validation"""
-        valid_password = "Test123!@#"
+        valid_password = "Test12345!@#"
         self.assertTrue(self.rotator.validate_secret(valid_password))
         
         # Test invalid password (too short)
