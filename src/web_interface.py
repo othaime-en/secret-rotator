@@ -1,4 +1,6 @@
 import json
+import threading
+from urllib.parse import parse_qs
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from utils.logger import logger
 
@@ -8,6 +10,24 @@ class RotationWebHandler(BaseHTTPRequestHandler):
     def __init__(self, rotation_engine, *args, **kwargs):
         self.rotation_engine = rotation_engine
         super().__init__(*args, **kwargs)
+    
+    def do_GET(self):
+        """Handle GET requests"""
+        if self.path == "/":
+            self._serve_dashboard()
+        elif self.path == "/api/status":
+            self._serve_status()
+        elif self.path == "/api/jobs":
+            self._serve_jobs()
+        else:
+            self._serve_404()
+    
+    def do_POST(self):
+        """Handle POST requests"""
+        if self.path == "/api/rotate":
+            self._handle_rotation()
+        else:
+            self._serve_404()
     
     def _serve_dashboard(self):
         """Serve main dashboard"""
@@ -119,21 +139,53 @@ class RotationWebHandler(BaseHTTPRequestHandler):
         jobs_data = {"jobs": self.rotation_engine.rotation_jobs}
         self._send_json(jobs_data)
     
+    def _handle_rotation(self):
+        """Handle rotation request"""
+        try:
+            results = self.rotation_engine.rotate_all_secrets()
+            self._send_json({"results": results})
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+    
+    def _send_json(self, data, status=200):
+        """Send JSON response"""
+        self.send_response(status)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
+    
+    def _serve_404(self):
+        """Serve 404 error"""
+        self.send_response(404)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        self.wfile.write(b'<h1>404 Not Found</h1>')
+    
+    def log_message(self, format, *args):
+        """Override to use our logger instead of printing"""
+        logger.info(f"Web request: {format % args}")
 
 
 class WebServer:
-    # This is the main web server manager class
+    """Main web server class to manage the HTTP server"""
     
     def __init__(self, rotation_engine, port=8080):
         self.rotation_engine = rotation_engine
         self.port = port
         self.server = None
+        self.thread = None
     
     def start(self):
-        # I'll implement the starting logic 
+        """Start the web server in a separate thread""" 
+        handler = lambda *args, **kwargs: RotationWebHandler(self.rotation_engine, *args, **kwargs)
+        self.server = HTTPServer(('localhost', self.port), handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
         logger.info(f"Web server started on http://localhost:{self.port}")
-    
+
+
     def stop(self):
+        """Stop the web server"""
         if self.server:
             self.server.shutdown()
             self.server.server_close()
