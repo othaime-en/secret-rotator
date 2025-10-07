@@ -126,4 +126,45 @@ class SecretRotationApp:
             self.web_server.stop()
         
         logger.info("Shutdown complete")
+
+    def _signal_handler(self, signum, frame):
+        """Handle shutdown signals"""
+        logger.info(f"Received signal {signum}, shutting down...")
+        self.stop()
+    
+    def run_once(self):
+        """Run rotation once (for testing or manual execution)"""
+        if not self.engine:
+            self.setup()
+        
+        logger.info("Running one-time secret rotation")
+        results = self.engine.rotate_all_secrets()
+        
+        print("\nRotation Results:")
+        for job_name, success in results.items():
+            status = "SUCCESS" if success else "FAILED"
+            print(f"  {job_name}: {status}")
+        
+        return results
+
+
+def main():
+    """Main entry point"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Secret Rotation System')
+    parser.add_argument('--mode', choices=['daemon', 'once'], default='daemon',
+                      help='Run mode: daemon (with scheduler and web interface) or once (single rotation)')
+    
+    args = parser.parse_args()
+    
+    app = SecretRotationApp()
+    
+    if args.mode == 'once':
+        app.run_once()
+    else:
+        app.start()
+
+if __name__ == "__main__":
+    main()
     
