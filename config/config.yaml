@@ -1,15 +1,49 @@
 # Secret Rotation Configuration
 rotation:
-  schedule: "daily" # daily, weekly, monthly
+  schedule: "daily" # daily, weekly, every_30_minutes, every_2_hours
   retry_attempts: 3
   timeout: 30
+  backup_old_secrets: true
 
+# Logging configuration
 logging:
   level: "INFO"
   file: "logs/rotation.log"
+  max_file_size: "10MB"
+
+# Web Interface
+web:
+  enabled: true
+  port: 8080
+  host: "localhost"
 
 providers:
-  # We'll add provider configs here later
+  file_storage:
+    type: "file"
+    file_path: "data/secrets.json"
+    backup_path: "data/backup/"
+
+  # Example for future AWS Secrets Manager integration
+  aws_secrets:
+    type: "aws"
+    region: "us-east-1"
+    enabled: false
+
+# Rotator configurations
+Rotators:
+  password_gen:
+    type: "password"
+    length: 16
+    use_symbols: true
+    use_numbers: true
+    use_uppercase: true
+    use_lowercase: true
+    exclude_ambiguous: true # exclude 0, O, l, I, etc.
+
+  api_key:
+    type: "api_key"
+    length: 32
+    format: "hex" # hex, base64, alphanumeric
 
 secrets:
   # We'll add secret configs here later
