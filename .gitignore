@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 logs/
 *.log
+config/config.yaml
+data/
+data/secrets.json
+data/backups/
