@@ -10,7 +10,16 @@ def retry_with_backoff(
     backoff_multiplier: float = 2.0,
     exceptions: Tuple[Type[Exception], ...] = (Exception,)
 ):
-
+    """
+    Decorator that retries a function with exponential backoff
+    
+    Args:
+        max_attempts: Maximum number of retry attempts
+        initial_delay: Initial delay in seconds
+        max_delay: Maximum delay in seconds
+        backoff_multiplier: Multiplier for delay between retries
+        exceptions: Tuple of exceptions to catch and retry on
+    """
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:
@@ -45,12 +54,14 @@ def retry_with_backoff(
 
 # Convenience decorators for common retry patterns
 def retry_on_network_error(max_attempts: int = 3):
+    """Retry on common network-related errors"""
     return retry_with_backoff(
         max_attempts=max_attempts,
         exceptions=(ConnectionError, TimeoutError, OSError)
     )
 
 def retry_on_any_error(max_attempts: int = 3):
+    """Retry on any other exceptions"""
     return retry_with_backoff(
         max_attempts=max_attempts,
         exceptions=(Exception,)
