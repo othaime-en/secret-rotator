@@ -2,7 +2,7 @@ import json
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from utils.logger import logger
 
 class BackupManager:
@@ -55,4 +55,41 @@ class BackupManager:
             logger.error(f"Failed to restore backup {backup_file}: {e}")
             raise
     
+
+    def list_backups(self, secret_id: Optional[str] = None) -> list:
+        """List available backup"""
+        backups = []
+        pattern = f"{secret_id}_*.json" if secret_id else "*.json"
+        
+        for backup_file in self.backup_dir.glob(pattern):
+            try:
+                with open(backup_file, 'r') as f:
+                    backup_data = json.load(f)
+                    backup_data['backup_file'] = str(backup_file)
+                    backups.append(backup_data)
+            except Exception as e:
+                logger.warning(f"Failed to read backup file {backup_file}: {e}")
+        
+        # Sort by timestamp (newest first)
+        backups.sort(key=lambda x: x['timestamp'], reverse=True)
+        return backups
+    
+    def cleanup_old_backups(self, days_to_keep: int = 30):
+        """Remove backup files older than specified days"""
+        cutoff_timestamp = datetime.now().timestamp() - (days_to_keep * 24 * 60 * 60)
+        removed_count = 0
+        
+        for backup_file in self.backup_dir.glob("*.json"):
+            try:
+                file_timestamp = backup_file.stat().st_mtime
+                if file_timestamp < cutoff_timestamp:
+                    backup_file.unlink()
+                    removed_count += 1
+                    logger.info(f"Removed old backup: {backup_file}")
+                    
+            except Exception as e:
+                logger.warning(f"Failed to remove backup {backup_file}: {e}")
+        
+        logger.info(f"Cleanup complete: removed {removed_count} old backup files")
+        return removed_count
 
