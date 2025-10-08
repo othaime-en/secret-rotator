@@ -5,14 +5,12 @@ rotation:
   timeout: 30
   backup_old_secrets: true
 
-# Logging configuration
 logging:
-  level: "INFO"
+  level: "INFO" # DEBUG, INFO, WARNING, ERROR
   file: "logs/rotation.log"
   max_file_size: "10MB"
   backup_count: 5
 
-# Web Interface
 web:
   enabled: true
   port: 8080
@@ -24,14 +22,12 @@ providers:
     file_path: "data/secrets.json"
     backup_path: "data/backup/"
 
-  # Example for future AWS Secrets Manager integration
   aws_secrets:
     type: "aws"
-    region: "us-east-1"
+    region: "<your-aws-region>"
     enabled: false
 
-# Rotator configurations
-Rotators:
+rotators:
   password_gen:
     type: "password"
     length: 16
@@ -39,35 +35,34 @@ Rotators:
     use_numbers: true
     use_uppercase: true
     use_lowercase: true
-    exclude_ambiguous: true # exclude 0, O, l, I, etc.
+    exclude_ambiguous: true
 
-  api_key:
+  api_key_gen:
     type: "api_key"
     length: 32
     format: "hex" # hex, base64, alphanumeric
 
-# job configurations
 jobs:
   - name: "database_password"
     provider: "file_storage"
     rotator: "password_gen"
     secret_id: "db_password"
     schedule: "weekly"
-    notifications: true
+    notification: true
 
   - name: "api_key"
     provider: "file_storage"
     rotator: "api_key_gen"
     secret_id: "api_key"
     schedule: "monthly"
-    notifications: false
+    notification: true
 
   - name: "service_token"
     provider: "file_storage"
     rotator: "password_gen"
     secret_id: "service_token"
     schedule: "daily"
-    notifications: false
+    notification: false
 
 notifications:
   enabled: true
@@ -84,8 +79,7 @@ notifications:
     webhook_url: "<your-slack-webhook-url>"
     channel: "<your-slack-channel>"
 
-# Security settings
 security:
   encrypt_backups: true
   audit_log: true
-  require_confirmation: false # for manual rotations
+  require_confirmation: false
