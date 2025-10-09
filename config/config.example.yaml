@@ -1,0 +1,88 @@
+# Secret Rotation Configuration (Example Template)
+# Copy this file to `config.yaml` and fill in your values.
+# DO NOT commit `config.yaml` to version control.
+
+rotation:
+  schedule: "daily" # daily, weekly, every_30_minutes, every_2_hours
+  retry_attempts: 3
+  timeout: 30
+  backup_old_secrets: true
+
+logging:
+  level: "INFO" # DEBUG, INFO, WARNING, ERROR
+  file: "logs/rotation.log"
+  max_file_size: "10MB"
+  backup_count: 5
+
+web:
+  enabled: true
+  port: 8080
+  host: "localhost"
+
+providers:
+  file_storage:
+    type: "file"
+    file_path: "data/secrets.json"
+    backup_path: "data/backup/"
+
+  aws_secrets:
+    type: "aws"
+    region: "<your-aws-region>"
+    enabled: false
+
+rotators:
+  password_gen:
+    type: "password"
+    length: 16
+    use_symbols: true
+    use_numbers: true
+    use_uppercase: true
+    use_lowercase: true
+    exclude_ambiguous: true
+
+  api_key_gen:
+    type: "api_key"
+    length: 32
+    format: "hex" # hex, base64, alphanumeric
+
+jobs:
+  - name: "database_password"
+    provider: "file_storage"
+    rotator: "password_gen"
+    secret_id: "db_password"
+    schedule: "weekly"
+    notification: true
+
+  - name: "api_key"
+    provider: "file_storage"
+    rotator: "api_key_gen"
+    secret_id: "api_key"
+    schedule: "monthly"
+    notification: true
+
+  - name: "service_token"
+    provider: "file_storage"
+    rotator: "password_gen"
+    secret_id: "service_token"
+    schedule: "daily"
+    notification: false
+
+notifications:
+  enabled: true
+  email:
+    enabled: false
+    smtp_server: "<your-smtp-server>"
+    smtp_port: 587
+    username: "<your-email>"
+    password: "<your-app-password>"
+    recipients: ["<your-recipient-email>"]
+
+  slack:
+    enabled: false
+    webhook_url: "<your-slack-webhook-url>"
+    channel: "<your-slack-channel>"
+
+security:
+  encrypt_backups: true
+  audit_log: true
+  require_confirmation: false
