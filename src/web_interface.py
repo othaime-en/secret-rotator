@@ -37,14 +37,23 @@ class RotationWebHandler(BaseHTTPRequestHandler):
         <head>
             <title>Secret Rotation Dashboard</title>
             <style>
-                body { font-family: Arial, sans-serif; margin: 40px; }
-                .container { max-width: 800px; }
-                .job { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; }
-                button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+                body { font-family: Arial, sans-serif; margin: 40px; background: #f8f9fa; }
+                .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                .job { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #007bff; }
+                button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
                 button:hover { background: #0056b3; }
                 .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
                 .success { background: #d4edda; color: #155724; }
                 .error { background: #f8d7da; color: #721c24; }
+                .info { background: #d1ecf1; color: #0c5460; }
+                h1 { color: #333; border-bottom: 3px solid #007bff; padding-bottom: 10px; }
+                h2 { color: #555; margin-top: 30px; }
+                .tab-container { margin: 20px 0; }
+                .tab { display: inline-block; padding: 10px 20px; cursor: pointer; background: #e9ecef; border-radius: 5px 5px 0 0; margin-right: 5px; }
+                .tab.active { background: #007bff; color: white; }
+                .tab-content { display: none; padding: 20px; border: 1px solid #dee2e6; border-radius: 0 5px 5px 5px; }
+                .tab-content.active { display: block; }
+                #logs { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; font-family: 'Courier New', monospace; max-height: 300px; overflow-y: auto; font-size: 13px; }
             </style>
         </head>
         <body>
@@ -53,17 +62,42 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                 
                 <div id="status"></div>
                 
-                <h2>Rotation Jobs</h2>
-                <div id="jobs"></div>
+                <div class="tab-container">
+                    <div class="tab active" onclick="switchTab('jobs')">Rotation Jobs</div>
+                    <div class="tab" onclick="switchTab('backups')">Backups</div>
+                    <div class="tab" onclick="switchTab('logs')">Logs</div>
+                </div>
                 
-                <h2>Actions</h2>
-                <button onclick="rotateAll()">Rotate All Secrets</button>
+                <div id="jobs-content" class="tab-content active">
+                    <h2>Rotation Jobs</h2>
+                    <div id="jobs"></div>
+                    <button onclick="rotateAll()">Rotate All Secrets</button>
+                </div>
                 
-                <h2>Logs</h2>
-                <div id="logs" style="background: #f8f9fa; padding: 15px; border-radius: 5px; font-family: monospace; max-height: 300px; overflow-y: auto;"></div>
+                <div id="backups-content" class="tab-content">
+                    <h2>Backup History</h2>
+                    <div id="backups"></div>
+                </div>
+                
+                <div id="logs-content" class="tab-content">
+                    <h2>Recent Activity Logs</h2>
+                    <div id="logs"></div>
+                </div>
             </div>
             
             <script>
+                function switchTab(tabName) {
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        content.classList.remove('active');
+                    });
+                    document.querySelectorAll('.tab').forEach(tab => {
+                        tab.classList.remove('active');
+                    });
+                    
+                    document.getElementById(tabName + '-content').classList.add('active');
+                    event.target.classList.add('active');
+                }
+                
                 function loadJobs() {
                     fetch('/api/jobs')
                         .then(response => response.json())
@@ -81,7 +115,7 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                 }
                 
                 function rotateAll() {
-                    document.getElementById('status').innerHTML = '<div class="status">Rotation in progress...</div>';
+                    document.getElementById('status').innerHTML = '<div class="status info">Rotation in progress...</div>';
                     
                     fetch('/api/rotate', { method: 'POST' })
                         .then(response => response.json())
@@ -93,9 +127,8 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                             document.getElementById('status').innerHTML = 
                                 `<div class="status ${statusClass}">Rotation complete: ${successful}/${total} successful</div>`;
                             
-                            // Show detailed results
                             const logs = Object.entries(data.results)
-                                .map(([job, success]) => `${job}: ${success ? 'SUCCESS' : 'FAILED'}`)
+                                .map(([job, success]) => `[${new Date().toLocaleTimeString()}] ${job}: ${success ? 'SUCCESS' : 'FAILED'}`)
                                 .join('\\n');
                             document.getElementById('logs').innerHTML = logs;
                         })
@@ -105,7 +138,6 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                         });
                 }
                 
-                // Load jobs on page load
                 loadJobs();
             </script>
         </body>
@@ -147,13 +179,6 @@ class RotationWebHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._send_json({"error": str(e)}, 500)
     
-    def _send_json(self, data, status=200):
-        """Send JSON response"""
-        self.send_response(status)
-        self.send_header('Content-type', 'application/json')
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
-    
     def _serve_404(self):
         """Serve 404 error"""
         self.send_response(404)
@@ -164,7 +189,6 @@ class RotationWebHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         """Override to use our logger instead of printing"""
         logger.info(f"Web request: {format % args}")
-
 
 class WebServer:
     """Main web server class to manage the HTTP server"""
@@ -183,12 +207,9 @@ class WebServer:
         self.thread.start()
         logger.info(f"Web server started on http://localhost:{self.port}")
 
-
     def stop(self):
         """Stop the web server"""
         if self.server:
             self.server.shutdown()
             self.server.server_close()
         logger.info("Web server stopped")
-
-
