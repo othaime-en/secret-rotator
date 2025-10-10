@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, Any
 from .base import SecretProvider
 from utils.logger import logger
+from utils.retry import retry_with_backoff
 
 class FileSecretProvider(SecretProvider):
     """Simple file-based secret storage for testing"""
@@ -20,6 +21,7 @@ class FileSecretProvider(SecretProvider):
             with open(self.file_path, 'w') as f:
                 json.dump({}, f)
     
+    @retry_with_backoff(max_attempts=3, initial_delay=0.5, exceptions=(IOError, json.JSONDecodeError))
     def get_secret(self, secret_id: str) -> str:
         """Retrieve a secret from file"""
         try:
@@ -30,6 +32,7 @@ class FileSecretProvider(SecretProvider):
             logger.error(f"Error reading secrets file: {e}")
             return ""
     
+    @retry_with_backoff(max_attempts=3, initial_delay=0.5, exceptions=(IOError,))
     def update_secret(self, secret_id: str, new_value: str) -> bool:
         """Update secret in file"""
         try:
@@ -51,6 +54,7 @@ class FileSecretProvider(SecretProvider):
             logger.error(f"Error updating secret {secret_id}: {e}")
             return False
     
+    @retry_with_backoff(max_attempts=2, exceptions=(OSError,))
     def validate_connection(self) -> bool:
         """Test if file can be accessed"""
         try:

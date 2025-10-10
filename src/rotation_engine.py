@@ -3,6 +3,9 @@ from typing import Dict, List, Any
 from providers.base import SecretProvider
 from rotators.base import SecretRotator
 from utils.logger import logger
+from utils.retry import retry_with_backoff
+from backup_manager import BackupManager
+from config.settings import settings
 
 class RotationEngine:
     """This is the main engine that orchestrates secret rotation"""
@@ -11,6 +14,7 @@ class RotationEngine:
         self.providers: Dict[str, SecretProvider] = {}
         self.rotators: Dict[str, SecretRotator] = {}
         self.rotation_jobs: List[Dict[str, Any]] = []
+        self.backup_manager = BackupManager(backup_dir=settings.get('providers.file_storage.backup_path', 'data/backup'))  # Use config or default
     
     def register_provider(self, provider: SecretProvider):
         self.providers[provider.name] = provider
@@ -31,6 +35,7 @@ class RotationEngine:
         logger.info(f"Added rotation job: {job_config['name']}")
         return True
     
+    @retry_with_backoff(max_attempts=settings.get('rotation.retry_attempts', 3), exceptions=(Exception,))
     def rotate_secret(self, job_config: Dict[str, Any]) -> bool:
         """Rotate a single secret based on job configuration"""
         job_name = job_config['name']
@@ -56,9 +61,19 @@ class RotationEngine:
             # Step 1: Get current secret (for backup/rollback)
             current_secret = provider.get_secret(secret_id)
             logger.info(f"Retrieved current secret for {secret_id}")
+
+            # Step 1.5: Create backup before rotation
+            if settings.get('rotation.backup_old_secrets', True):
+                try:
+                    new_secret_temp = rotator.generate_new_secret()  # Generate early for backup metadata
+                    backup_path = self.backup_manager.create_backup(secret_id, current_secret, new_secret_temp)
+                    logger.info(f"Backup created at {backup_path}")
+                except Exception as e:
+                    logger.error(f"Backup failed for {job_name}, aborting rotation: {e}")
+                    return False
             
-            # Step 2: Generate new secret
-            new_secret = rotator.generate_new_secret()
+            # Step 2: Generate new secret (re-generate if needed, but we can reuse temp if backup succeeded)
+            new_secret = rotator.generate_new_secret() if 'new_secret_temp' not in locals() else new_secret_temp
             if not new_secret:
                 logger.error(f"Failed to generate new secret for {job_name}")
                 return False

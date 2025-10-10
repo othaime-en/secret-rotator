@@ -3,12 +3,15 @@ import time
 import threading
 from typing import Callable
 from utils.logger import logger
+from config.settings import settings
+from backup_manager import BackupManager
 
 class RotationScheduler:
     """Handle scheduled secret rotations"""
     
-    def __init__(self, rotation_function: Callable):
+    def __init__(self, rotation_function: Callable, backup_manager: BackupManager):
         self.rotation_function = rotation_function
+        self.backup_manager = backup_manager
         self.running = False
         self.thread = None
     
@@ -31,7 +34,11 @@ class RotationScheduler:
                 elif unit == "hours":
                     schedule.every(interval).hours.do(self._run_rotation)
         
+        # Schedule backup cleanup (daily at 03:00)
+        schedule.every().day.at("03:00").do(self._cleanup_backups)
+        
         logger.info(f"Scheduled rotation: {schedule_config}")
+        logger.info("Scheduled backup cleanup: daily at 03:00")
     
     def _run_rotation(self):
         """Internal method to run rotation with error handling"""
@@ -66,3 +73,12 @@ class RotationScheduler:
         while self.running:
             schedule.run_pending()
             time.sleep(60)  # Check every minute
+
+    def _cleanup_backups(self):
+        """Internal method to clean up old backups"""
+        try:
+            days_to_keep = settings.get('rotation.backup_retention_days', 30)
+            self.backup_manager.cleanup_old_backups(days_to_keep)
+            logger.info(f"Scheduled backup cleanup completed, kept backups for {days_to_keep} days")
+        except Exception as e:
+            logger.error(f"Error in scheduled backup cleanup: {e}")
