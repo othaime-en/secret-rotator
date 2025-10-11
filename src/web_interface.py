@@ -1,6 +1,6 @@
 import json
 import threading
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse, unquote
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from utils.logger import logger
 
@@ -19,6 +19,10 @@ class RotationWebHandler(BaseHTTPRequestHandler):
             self._serve_status()
         elif self.path == "/api/jobs":
             self._serve_jobs()
+        elif self.path.startswith("/api/backups/"):
+            self._serve_backup_detail()
+        elif self.path.startswith("/api/backups"):
+            self._serve_backups()
         else:
             self._serve_404()
     
@@ -40,8 +44,11 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                 body { font-family: Arial, sans-serif; margin: 40px; background: #f8f9fa; }
                 .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
                 .job { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #007bff; }
+                .backup { background: #fff3cd; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #ffc107; }
                 button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
                 button:hover { background: #0056b3; }
+                button.success { background: #28a745; }
+                button.success:hover { background: #218838; }
                 .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
                 .success { background: #d4edda; color: #155724; }
                 .error { background: #f8d7da; color: #721c24; }
@@ -54,6 +61,9 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                 .tab-content { display: none; padding: 20px; border: 1px solid #dee2e6; border-radius: 0 5px 5px 5px; }
                 .tab-content.active { display: block; }
                 #logs { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 5px; font-family: 'Courier New', monospace; max-height: 300px; overflow-y: auto; font-size: 13px; }
+                .backup-item { display: flex; justify-content: space-between; align-items: center; }
+                .backup-info { flex-grow: 1; }
+                .backup-actions { display: flex; gap: 10px; }
             </style>
         </head>
         <body>
@@ -76,6 +86,12 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                 
                 <div id="backups-content" class="tab-content">
                     <h2>Backup History</h2>
+                    <div style="margin-bottom: 15px;">
+                        <label for="secretFilter">Filter by Secret ID: </label>
+                        <input type="text" id="secretFilter" placeholder="Enter secret ID..." style="padding: 8px; border-radius: 4px; border: 1px solid #ced4da;">
+                        <button onclick="loadBackups()">Search</button>
+                        <button onclick="document.getElementById('secretFilter').value=''; loadBackups();">Clear</button>
+                    </div>
                     <div id="backups"></div>
                 </div>
                 
@@ -96,6 +112,10 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                     
                     document.getElementById(tabName + '-content').classList.add('active');
                     event.target.classList.add('active');
+                    
+                    if (tabName === 'backups') {
+                        loadBackups();
+                    }
                 }
                 
                 function loadJobs() {
@@ -108,9 +128,62 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                                     <strong>${job.name}</strong><br>
                                     Provider: ${job.provider}<br>
                                     Rotator: ${job.rotator}<br>
-                                    Secret ID: ${job.secret_id}
+                                    Secret ID: <code>${job.secret_id}</code>
                                 </div>`
                             ).join('');
+                        });
+                }
+                
+                function loadBackups() {
+                    const secretFilter = document.getElementById('secretFilter').value;
+                    const url = secretFilter ? `/api/backups?secret_id=${encodeURIComponent(secretFilter)}` : '/api/backups';
+                    
+                    fetch(url)
+                        .then(response => response.json())
+                        .then(data => {
+                            const backupsDiv = document.getElementById('backups');
+                            if (data.backups.length === 0) {
+                                backupsDiv.innerHTML = '<div class="status info">No backups found.</div>';
+                                return;
+                            }
+                            
+                            backupsDiv.innerHTML = data.backups.map(backup => {
+                                const encodedPath = encodeURIComponent(backup.backup_file);
+                                return `<div class="backup">
+                                    <div class="backup-item">
+                                        <div class="backup-info">
+                                            <strong>${backup.secret_id}</strong><br>
+                                            <small>Created: ${new Date(backup.backup_created).toLocaleString()}</small><br>
+                                            <small>File: ${backup.backup_file.split('/').pop()}</small>
+                                        </div>
+                                        <div class="backup-actions">
+                                            <button class="success" onclick="viewBackup('${encodedPath}')">View</button>
+                                        </div>
+                                    </div>
+                                </div>`;
+                            }).join('');
+                        })
+                        .catch(error => {
+                            console.error('Error loading backups:', error);
+                            document.getElementById('backups').innerHTML = '<div class="status error">Error loading backups</div>';
+                        });
+                }
+                
+                function viewBackup(encodedBackupFile) {
+                    fetch(`/api/backups/${encodedBackupFile}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            const details = `
+Secret ID: ${data.secret_id}
+Timestamp: ${new Date(data.backup_created).toLocaleString()}
+Old Value: ${data.old_value.substring(0, 20)}... (truncated)
+New Value: ${data.new_value.substring(0, 20)}... (truncated)
+                            `.trim();
+                            alert('Backup Details:\\n\\n' + details);
+                        })
+                        .catch(error => {
+                            alert('Error viewing backup details');
+                            console.error(error);
                         });
                 }
                 
@@ -135,6 +208,7 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                         .catch(error => {
                             document.getElementById('status').innerHTML = 
                                 '<div class="status error">Error during rotation</div>';
+                            console.error(error);
                         });
                 }
                 
@@ -171,12 +245,42 @@ class RotationWebHandler(BaseHTTPRequestHandler):
         jobs_data = {"jobs": self.rotation_engine.rotation_jobs}
         self._send_json(jobs_data)
     
+    def _serve_backups(self):
+        """Serve list of backups"""
+        try:
+            parsed_url = urlparse(self.path)
+            params = parse_qs(parsed_url.query)
+            secret_id = params.get('secret_id', [None])[0]
+            
+            backups = self.rotation_engine.backup_manager.list_backups(secret_id)
+            self._send_json({"backups": backups})
+        except Exception as e:
+            logger.error(f"Error serving backups: {e}")
+            self._send_json({"error": str(e)}, 500)
+    
+    def _serve_backup_detail(self):
+        """Serve detailed backup information"""
+        try:
+            encoded_path = self.path.split('/api/backups/')[1]
+            backup_file = unquote(encoded_path)
+            
+            logger.info(f"Attempting to load backup from: {backup_file}")
+            backup_data = self.rotation_engine.backup_manager.restore_backup(backup_file)
+            self._send_json(backup_data)
+        except FileNotFoundError:
+            logger.warning(f"Backup file not found: {backup_file if 'backup_file' in locals() else 'unknown'}")
+            self._send_json({"error": "Backup not found"}, 404)
+        except Exception as e:
+            logger.error(f"Error serving backup detail: {e}")
+            self._send_json({"error": str(e)}, 500)
+    
     def _handle_rotation(self):
         """Handle rotation request"""
         try:
             results = self.rotation_engine.rotate_all_secrets()
             self._send_json({"results": results})
         except Exception as e:
+            logger.error(f"Error during rotation: {e}")
             self._send_json({"error": str(e)}, 500)
     
     def _serve_404(self):
