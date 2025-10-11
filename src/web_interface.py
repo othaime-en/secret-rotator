@@ -30,6 +30,8 @@ class RotationWebHandler(BaseHTTPRequestHandler):
         """Handle POST requests"""
         if self.path == "/api/rotate":
             self._handle_rotation()
+        elif self.path == "/api/restore":
+            self._handle_restore()
         else:
             self._serve_404()
     
@@ -47,6 +49,8 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                 .backup { background: #fff3cd; padding: 15px; margin: 10px 0; border-radius: 5px; border-left: 4px solid #ffc107; }
                 button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
                 button:hover { background: #0056b3; }
+                button.danger { background: #dc3545; }
+                button.danger:hover { background: #c82333; }
                 button.success { background: #28a745; }
                 button.success:hover { background: #218838; }
                 .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
@@ -126,11 +130,13 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                             jobsDiv.innerHTML = data.jobs.map(job => 
                                 `<div class="job">
                                     <strong>${job.name}</strong><br>
-                                    Provider: ${job.provider}<br>
-                                    Rotator: ${job.rotator}<br>
+                                    Provider: ${job.provider} | Rotator: ${job.rotator}<br>
                                     Secret ID: <code>${job.secret_id}</code>
                                 </div>`
                             ).join('');
+                        })
+                        .catch(error => {
+                            console.error('Error loading jobs:', error);
                         });
                 }
                 
@@ -158,6 +164,7 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                                         </div>
                                         <div class="backup-actions">
                                             <button class="success" onclick="viewBackup('${encodedPath}')">View</button>
+                                            <button class="danger" onclick="confirmRestore('${backup.backup_file}', '${backup.secret_id}')">Restore</button>
                                         </div>
                                     </div>
                                 </div>`;
@@ -187,6 +194,39 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
                         });
                 }
                 
+                function confirmRestore(backupFile, secretId) {
+                    if (confirm(`Are you sure you want to restore the backup for "${secretId}"?\\n\\nThis will replace the current secret value with the old value from the backup.`)) {
+                        restoreBackup(backupFile);
+                    }
+                }
+                
+                function restoreBackup(backupFile) {
+                    document.getElementById('status').innerHTML = '<div class="status info">Restoring backup...</div>';
+                    
+                    fetch('/api/restore', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ backup_file: backupFile })
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                document.getElementById('status').innerHTML = 
+                                    `<div class="status success">Successfully restored backup for ${data.secret_id}</div>`;
+                                addLog(`Restored backup for ${data.secret_id}`);
+                                loadBackups();
+                            } else {
+                                document.getElementById('status').innerHTML = 
+                                    `<div class="status error">Failed to restore backup: ${data.error}</div>`;
+                            }
+                        })
+                        .catch(error => {
+                            document.getElementById('status').innerHTML = 
+                                '<div class="status error">Error during restoration</div>';
+                            console.error(error);
+                        });
+                }
+                
                 function rotateAll() {
                     document.getElementById('status').innerHTML = '<div class="status info">Rotation in progress...</div>';
                     
@@ -203,7 +243,7 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
                             const logs = Object.entries(data.results)
                                 .map(([job, success]) => `[${new Date().toLocaleTimeString()}] ${job}: ${success ? 'SUCCESS' : 'FAILED'}`)
                                 .join('\\n');
-                            document.getElementById('logs').innerHTML = logs;
+                            addLog(logs);
                         })
                         .catch(error => {
                             document.getElementById('status').innerHTML = 
@@ -212,7 +252,14 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
                         });
                 }
                 
+                function addLog(message) {
+                    const logsDiv = document.getElementById('logs');
+                    const timestamp = new Date().toLocaleTimeString();
+                    logsDiv.innerHTML = `[${timestamp}] ${message}\\n` + logsDiv.innerHTML;
+                }
+                
                 loadJobs();
+                addLog('Dashboard loaded');
             </script>
         </body>
         </html>
@@ -222,13 +269,6 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
         self.send_header('Content-type', 'text/html')
         self.end_headers()
         self.wfile.write(html.encode())
-    
-    def _send_json(self, data, status=200):
-        """Send JSON response"""
-        self.send_response(status)
-        self.send_header('Content-type', 'application/json')
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
     
     def _serve_status(self):
         """Serve system status"""
@@ -282,6 +322,54 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
         except Exception as e:
             logger.error(f"Error during rotation: {e}")
             self._send_json({"error": str(e)}, 500)
+    
+    def _handle_restore(self):
+        """Handle backup restoration request"""
+        try:
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            backup_file = data.get('backup_file')
+            if not backup_file:
+                self._send_json({"success": False, "error": "backup_file required"}, 400)
+                return
+            
+            logger.info(f"Restoring backup from: {backup_file}")
+            
+            backup_data = self.rotation_engine.backup_manager.restore_backup(backup_file)
+            secret_id = backup_data['secret_id']
+            old_value = backup_data['old_value']
+            
+            provider = list(self.rotation_engine.providers.values())[0]
+            
+            success = provider.update_secret(secret_id, old_value)
+            
+            if success:
+                logger.info(f"Successfully restored backup for {secret_id} from {backup_file}")
+                self._send_json({
+                    "success": True,
+                    "secret_id": secret_id,
+                    "message": f"Restored backup for {secret_id}"
+                })
+            else:
+                self._send_json({
+                    "success": False,
+                    "error": "Failed to update secret"
+                }, 500)
+                
+        except FileNotFoundError:
+            self._send_json({"success": False, "error": "Backup file not found"}, 404)
+        except Exception as e:
+            logger.error(f"Error during restoration: {e}")
+            self._send_json({"success": False, "error": str(e)}, 500)
+    
+    def _send_json(self, data, status=200):
+        """Send JSON response"""
+        self.send_response(status)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
     
     def _serve_404(self):
         """Serve 404 error"""
