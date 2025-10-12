@@ -8,3 +8,10 @@ config/config.yaml
 data/
 data/secrets.json
 data/backups/
+
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+coverage.json
+htmlcov/
