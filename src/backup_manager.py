@@ -14,7 +14,7 @@ class BackupManager:
     
     def create_backup(self, secret_id: str, old_value: str, new_value: str) -> str:
         """ Create a backup of the old secret value """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         backup_filename = f"{secret_id}_{timestamp}.json"
         backup_path = self.backup_dir / backup_filename
         
