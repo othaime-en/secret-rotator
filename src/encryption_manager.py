@@ -6,6 +6,7 @@ from cryptography.fernet import Fernet
 import base64
 import os
 from pathlib import Path
+from typing import Optional
 from utils.logger import logger
 
 
@@ -74,3 +75,27 @@ class EncryptionManager:
         except Exception as e:
             logger.error(f"Decryption failed: {e}")
             raise
+    
+    def rotate_master_key(self, new_key: Optional[bytes] = None):
+        """
+        Rotate the master encryption key.
+        This requires re-encrypting all secrets with the new key.
+        """
+        if new_key is None:
+            new_key = Fernet.generate_key()
+        
+        old_cipher = self.cipher
+        new_cipher = Fernet(new_key)
+        
+        # This method should be called by the rotation engine
+        # which will handle re-encrypting all secrets
+        self.cipher = new_cipher
+        
+        # Save new key
+        with open(self.key_file, 'wb') as f:
+            f.write(new_key)
+        
+        os.chmod(self.key_file, 0o600)
+        
+        logger.info("Master encryption key rotated successfully")
+        return old_cipher
