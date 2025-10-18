@@ -3,6 +3,7 @@ Encryption manager for securing secrets at rest and in backups.
 Uses Fernet (symmetric encryption) from cryptography library.
 """
 from cryptography.fernet import Fernet
+import base64
 import os
 from pathlib import Path
 from utils.logger import logger
@@ -48,3 +49,28 @@ class EncryptionManager:
         )
         
         return key
+    
+    def encrypt(self, plaintext: str) -> str:
+        """Encrypt plaintext and return base64-encoded ciphertext"""
+        if not plaintext:
+            return ""
+        
+        try:
+            encrypted_bytes = self.cipher.encrypt(plaintext.encode('utf-8'))
+            return base64.b64encode(encrypted_bytes).decode('utf-8')
+        except Exception as e:
+            logger.error(f"Encryption failed: {e}")
+            raise
+    
+    def decrypt(self, ciphertext: str) -> str:
+        """Decrypt base64-encoded ciphertext and return plaintext"""
+        if not ciphertext:
+            return ""
+        
+        try:
+            encrypted_bytes = base64.b64decode(ciphertext.encode('utf-8'))
+            decrypted_bytes = self.cipher.decrypt(encrypted_bytes)
+            return decrypted_bytes.decode('utf-8')
+        except Exception as e:
+            logger.error(f"Decryption failed: {e}")
+            raise
