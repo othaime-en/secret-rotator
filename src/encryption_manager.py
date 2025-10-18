@@ -3,6 +3,7 @@ Encryption manager for securing secrets at rest and in backups.
 Uses Fernet (symmetric encryption) from cryptography library.
 """
 from cryptography.fernet import Fernet
+import os
 from pathlib import Path
 from utils.logger import logger
 
@@ -29,4 +30,21 @@ class EncryptionManager:
     
     def _generate_and_save_key(self) -> bytes:
         """Generate a new encryption key and save it securely"""
-        raise NotImplementedError("Key generation to be implemented")
+        key = Fernet.generate_key()
+        
+        # Create config directory if it doesn't exist
+        self.key_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Save key with restricted permissions (owner read/write only)
+        with open(self.key_file, 'wb') as f:
+            f.write(key)
+        
+        # Set file permissions to 0600 (owner read/write only)
+        os.chmod(self.key_file, 0o600)
+        
+        logger.warning(
+            f"Master key generated at {self.key_file}. "
+            "BACKUP THIS FILE SECURELY - it cannot be recovered if lost!"
+        )
+        
+        return key
