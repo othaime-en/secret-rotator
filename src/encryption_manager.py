@@ -3,6 +3,9 @@ Encryption manager for securing secrets at rest and in backups.
 Uses Fernet (symmetric encryption) from cryptography library.
 """
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.backends import default_backend
 import base64
 import os
 from pathlib import Path
@@ -99,3 +102,25 @@ class EncryptionManager:
         
         logger.info("Master encryption key rotated successfully")
         return old_cipher
+    
+    @staticmethod
+    def derive_key_from_passphrase(passphrase: str, salt: Optional[bytes] = None) -> tuple[bytes, bytes]:
+        """
+        Derive an encryption key from a passphrase.
+        Useful for environments where you can't store a key file.
+        
+        Returns: (derived_key, salt)
+        """
+        if salt is None:
+            salt = os.urandom(16)
+        
+        kdf = PBKDF2(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+            backend=default_backend()
+        )
+        
+        key = base64.urlsafe_b64encode(kdf.derive(passphrase.encode()))
+        return key, salt
