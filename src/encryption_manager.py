@@ -124,3 +124,43 @@ class EncryptionManager:
         
         key = base64.urlsafe_b64encode(kdf.derive(passphrase.encode()))
         return key, salt
+
+
+class SecretMasker:
+    """Utility for masking secrets in logs and UI"""
+    
+    @staticmethod
+    def mask_secret(secret: str, visible_chars: int = 4, mask_char: str = "*") -> str:
+        """
+        Mask a secret, showing only the first few characters.
+        
+        Examples:
+            "my_secret_password" -> "my_s************"
+            "abc" -> "***"
+        """
+        if not secret:
+            return ""
+        
+        if len(secret) <= visible_chars:
+            return mask_char * len(secret)
+        
+        visible_part = secret[:visible_chars]
+        masked_part = mask_char * (len(secret) - visible_chars)
+        return visible_part + masked_part
+    
+    @staticmethod
+    def mask_for_backup_display(secret: str) -> str:
+        """Mask secret for backup display (show first and last 2 chars)"""
+        if not secret or len(secret) < 8:
+            return "****"
+        
+        return f"{secret[:2]}...{secret[-2:]}"
+    
+    @staticmethod
+    def hash_secret_for_comparison(secret: str) -> str:
+        """
+        Create a hash of the secret for comparison purposes.
+        Useful for verifying a secret matches without exposing it.
+        """
+        import hashlib
+        return hashlib.sha256(secret.encode()).hexdigest()[:16]
