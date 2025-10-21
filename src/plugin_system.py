@@ -59,3 +59,64 @@ class PluginRegistry:
             "notifiers": list(self.notifiers.keys()),
             "validators": list(self.validators.keys())
         }
+
+
+class PluginLoader:
+    """Load plugins from the plugins directory"""
+    
+    def __init__(self, plugins_dir: str = "plugins"):
+        self.plugins_dir = Path(plugins_dir)
+        self.registry = PluginRegistry()
+    
+    def discover_and_load_plugins(self):
+        """Automatically discover and load all plugins"""
+        if not self.plugins_dir.exists():
+            logger.warning(f"Plugins directory not found: {self.plugins_dir}")
+            self.plugins_dir.mkdir(parents=True, exist_ok=True)
+            self._create_example_plugin()
+            return
+        
+        # Load providers
+        self._load_plugins_from_dir(self.plugins_dir / "providers", "providers")
+        
+        # Load rotators
+        self._load_plugins_from_dir(self.plugins_dir / "rotators", "rotators")
+        
+        # Load notifiers
+        self._load_plugins_from_dir(self.plugins_dir / "notifiers", "notifiers")
+        
+        # Load validators
+        self._load_plugins_from_dir(self.plugins_dir / "validators", "validators")
+        
+        logger.info("Plugin discovery complete")
+    
+    def _load_plugins_from_dir(self, plugin_dir: Path, plugin_type: str):
+        """Load all plugins from a specific directory"""
+        if not plugin_dir.exists():
+            plugin_dir.mkdir(parents=True, exist_ok=True)
+            return
+        
+        for plugin_file in plugin_dir.glob("*.py"):
+            if plugin_file.name.startswith("_"):
+                continue
+            
+            try:
+                module_name = f"plugins.{plugin_type}.{plugin_file.stem}"
+                module = importlib.import_module(module_name)
+                
+                # Find all classes in the module that inherit from the base class
+                for name, obj in inspect.getmembers(module, inspect.isclass):
+                    if self._is_valid_plugin(obj, plugin_type):
+                        plugin_name = getattr(obj, 'plugin_name', name.lower())
+                        
+                        if plugin_type == "providers":
+                            self.registry.register_provider(plugin_name, obj)
+                        elif plugin_type == "rotators":
+                            self.registry.register_rotator(plugin_name, obj)
+                        elif plugin_type == "notifiers":
+                            self.registry.register_notifier(plugin_name, obj)
+                        elif plugin_type == "validators":
+                            self.registry.register_validator(plugin_name, obj)
+                
+            except Exception as e:
+                logger.error(f"Failed to load plugin {plugin_file}: {e}")
