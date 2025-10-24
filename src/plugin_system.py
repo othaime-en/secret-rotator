@@ -182,3 +182,26 @@ class PluginLoader:
                 f.write(example_provider)
 
             logger.info(f"Created example plugin at {example_file}")
+
+class PluginMetadata:
+    """Metadata for plugin documentation and validation"""
+
+    def __init__(self, name: str, version: str, author: str, description: str,
+                 required_config: List[str], optional_config: Dict[str, Any]):
+        self.name = name
+        self.version = version
+        self.author = author
+        self.description = description
+        self.required_config = required_config
+        self.optional_config = optional_config
+
+    def validate_config(self, config: Dict[str, Any]) -> tuple[bool, List[str]]:
+        """Validate plugin configuration"""
+        missing = []
+        for key in self.required_config:
+            if key not in config:
+                missing.append(key)
+
+        if missing:
+            return False, missing
+        return True, []
