@@ -120,3 +120,65 @@ class PluginLoader:
                 
             except Exception as e:
                 logger.error(f"Failed to load plugin {plugin_file}: {e}")
+
+    def _is_valid_plugin(self, obj: Type, plugin_type: str) -> bool:
+            """Check if a class is a valid plugin"""
+            # Avoid registering base classes
+            if inspect.isabstract(obj):
+                return False
+
+            # Check if it inherits from the appropriate base class
+            from providers.base import SecretProvider
+            from rotators.base import SecretRotator
+
+            if plugin_type == "providers":
+                return issubclass(obj, SecretProvider) and obj != SecretProvider
+            elif plugin_type == "rotators":
+                return issubclass(obj, SecretRotator) and obj != SecretRotator
+
+            # For notifiers and validators, just check if they have required methods
+            return True
+
+    def _create_example_plugin(self):
+            """Create an example plugin file to help users get started"""
+            example_provider = '''"""
+    Example custom secret provider plugin.
+    Copy this file and modify it to create your own provider.
+    """
+    from providers.base import SecretProvider
+    from typing import Dict, Any
+
+    class CustomDatabaseProvider(SecretProvider):
+        """Example: Store secrets in a custom database"""
+
+        plugin_name = "custom_db"  # This is how you'll reference it in config
+
+        def __init__(self, name: str, config: Dict[str, Any]):
+            super().__init__(name, config)
+            self.db_host = config.get('host', 'localhost')
+            self.db_port = config.get('port', 5432)
+            # Initialize your database connection here
+
+        def get_secret(self, secret_id: str) -> str:
+            """Retrieve secret from your database"""
+            # Implement your logic here
+            pass
+
+        def update_secret(self, secret_id: str, new_value: str) -> bool:
+            """Update secret in your database"""
+            # Implement your logic here
+            pass
+
+        def validate_connection(self) -> bool:
+            """Test database connection"""
+            # Implement your logic here
+            pass
+    '''
+
+            example_file = self.plugins_dir / "providers" / "example_custom_provider.py.example"
+            example_file.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(example_file, 'w') as f:
+                f.write(example_provider)
+
+            logger.info(f"Created example plugin at {example_file}")
