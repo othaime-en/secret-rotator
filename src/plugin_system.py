@@ -221,3 +221,6 @@ def register_rotator(name: str):
         cls.plugin_name = name
         return cls
     return decorator
+
+# Global plugin registry instance
+plugin_registry = PluginRegistry()
