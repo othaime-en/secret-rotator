@@ -205,3 +205,19 @@ class PluginMetadata:
         if missing:
             return False, missing
         return True, []
+
+# Decorators for easy plugin registration
+def register_provider(name: str):
+    """Decorator to register a provider plugin"""
+    def decorator(cls):
+        cls.plugin_name = name
+        return cls
+    return decorator
+
+
+def register_rotator(name: str):
+    """Decorator to register a rotator plugin"""
+    def decorator(cls):
+        cls.plugin_name = name
+        return cls
+    return decorator
