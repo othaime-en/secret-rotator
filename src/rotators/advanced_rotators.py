@@ -107,3 +107,56 @@ class DatabasePasswordRotator(SecretRotator):
         except Exception as e:
             logger.error(f"Database connection test failed: {e}")
             return False
+
+class APIKeyRotator(SecretRotator):
+"""
+Generate API keys in various formats.
+Supports prefixes for easy identification.
+"""
+
+    plugin_name = "api_key"
+
+    def __init__(self, name: str, config: Dict[str, Any]):
+        super().__init__(name, config)
+        self.length = config.get('length', 32)
+        self.format = config.get('format', 'hex')  # hex, base64, alphanumeric
+        self.prefix = config.get('prefix', '')  # e.g., "sk_live_"
+        self.include_checksum = config.get('include_checksum', False)
+
+    def generate_new_secret(self) -> str:
+        """Generate an API key"""
+        if self.format == 'hex':
+            key_part = secrets.token_hex(self.length // 2)
+        elif self.format == 'base64':
+            key_part = secrets.token_urlsafe(self.length)[:self.length]
+        else:  # alphanumeric
+            chars = string.ascii_letters + string.digits
+            key_part = ''.join(secrets.choice(chars) for _ in range(self.length))
+
+        api_key = f"{self.prefix}{key_part}"
+
+        if self.include_checksum:
+            checksum = self._calculate_checksum(api_key)
+            api_key = f"{api_key}_{checksum}"
+
+        logger.info(f"Generated new API key with format {self.format}")
+        return api_key
+
+    def validate_secret(self, secret: str) -> bool:
+        """Validate API key format"""
+        if self.prefix and not secret.startswith(self.prefix):
+            return False
+
+        if self.include_checksum:
+            if '_' not in secret:
+                return False
+            key_part, checksum = secret.rsplit('_', 1)
+            expected_checksum = self._calculate_checksum(key_part)
+            return checksum == expected_checksum
+
+        return len(secret) >= self.length
+
+    def _calculate_checksum(self, value: str) -> str:
+        """Calculate checksum for API key validation"""
+        import hashlib
+        return hashlib.sha256(value.encode()).hexdigest()[:8]
