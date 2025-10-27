@@ -160,3 +160,55 @@ Supports prefixes for easy identification.
         """Calculate checksum for API key validation"""
         import hashlib
         return hashlib.sha256(value.encode()).hexdigest()[:8]
+
+
+class JWTSecretRotator(SecretRotator):
+"""
+Generate secrets for JWT signing.
+Creates cryptographically secure keys suitable for HS256, HS384, HS512.
+"""
+
+    plugin_name = "jwt_secret"
+
+    def __init__(self, name: str, config: Dict[str, Any]):
+        super().__init__(name, config)
+        self.algorithm = config.get('algorithm', 'HS256')
+        self.min_length = self._get_min_length()
+
+    def _get_min_length(self) -> int:
+        """Get minimum length based on algorithm"""
+        if self.algorithm == 'HS256':
+            return 32  # 256 bits
+        elif self.algorithm == 'HS384':
+            return 48  # 384 bits
+        elif self.algorithm == 'HS512':
+            return 64  # 512 bits
+        return 32
+
+    def generate_new_secret(self) -> str:
+        """Generate JWT signing secret"""
+        # Generate URL-safe base64 encoded secret
+        secret = secrets.token_urlsafe(self.min_length)
+        logger.info(f"Generated new JWT secret for {self.algorithm}")
+        return secret
+
+    def validate_secret(self, secret: str) -> bool:
+        """Validate JWT secret meets minimum length"""
+        if len(secret) < self.min_length:
+            logger.warning(f"JWT secret too short for {self.algorithm}")
+            return False
+
+        # Test if it can be used with PyJWT
+        try:
+            import jwt
+            test_payload = {"test": "data"}
+            token = jwt.encode(test_payload, secret, algorithm=self.algorithm)
+            decoded = jwt.decode(token, secret, algorithms=[self.algorithm])
+            return decoded == test_payload
+        except ImportError:
+            logger.warning("PyJWT not installed, skipping JWT validation")
+            return True
+        except Exception as e:
+            logger.error(f"JWT validation failed: {e}")
+            return False
+
