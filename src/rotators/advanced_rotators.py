@@ -109,10 +109,10 @@ class DatabasePasswordRotator(SecretRotator):
             return False
 
 class APIKeyRotator(SecretRotator):
-"""
-Generate API keys in various formats.
-Supports prefixes for easy identification.
-"""
+    """
+    Generate API keys in various formats.
+    Supports prefixes for easy identification.
+    """
 
     plugin_name = "api_key"
 
@@ -163,10 +163,10 @@ Supports prefixes for easy identification.
 
 
 class JWTSecretRotator(SecretRotator):
-"""
-Generate secrets for JWT signing.
-Creates cryptographically secure keys suitable for HS256, HS384, HS512.
-"""
+    """
+    Generate secrets for JWT signing.
+    Creates cryptographically secure keys suitable for HS256, HS384, HS512.
+    """
 
     plugin_name = "jwt_secret"
 
@@ -210,5 +210,76 @@ Creates cryptographically secure keys suitable for HS256, HS384, HS512.
             return True
         except Exception as e:
             logger.error(f"JWT validation failed: {e}")
+            return False
+
+
+class SSHKeyRotator(SecretRotator):
+    """
+    Generate SSH key pairs.
+    Creates both private and public keys.
+    """
+
+    plugin_name = "ssh_key"
+
+    def __init__(self, name: str, config: Dict[str, Any]):
+        super().__init__(name, config)
+        self.key_type = config.get('key_type', 'rsa')  # rsa, ed25519
+        self.key_size = config.get('key_size', 4096)
+        self.comment = config.get('comment', '')
+
+    def generate_new_secret(self) -> str:
+        """Generate SSH key pair"""
+        try:
+            from cryptography.hazmat.primitives.asymmetric import rsa, ed25519
+            from cryptography.hazmat.primitives import serialization
+            from cryptography.hazmat.backends import default_backend
+
+            if self.key_type == 'rsa':
+                private_key = rsa.generate_private_key(
+                    public_exponent=65537,
+                    key_size=self.key_size,
+                    backend=default_backend()
+                )
+            elif self.key_type == 'ed25519':
+                private_key = ed25519.Ed25519PrivateKey.generate()
+            else:
+                raise ValueError(f"Unsupported key type: {self.key_type}")
+
+            # Serialize private key
+            private_pem = private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.OpenSSH,
+                encryption_algorithm=serialization.NoEncryption()
+            )
+
+            # Get public key
+            public_key = private_key.public_key()
+            public_ssh = public_key.public_bytes(
+                encoding=serialization.Encoding.OpenSSH,
+                format=serialization.PublicFormat.OpenSSH
+            )
+
+            # Return as JSON with both keys
+            key_pair = {
+                'private_key': private_pem.decode('utf-8'),
+                'public_key': public_ssh.decode('utf-8') + (f" {self.comment}" if self.comment else "")
+            }
+
+            logger.info(f"Generated new {self.key_type} SSH key pair")
+            return json.dumps(key_pair)
+
+        except ImportError:
+            logger.error("cryptography library not installed")
+            raise
+        except Exception as e:
+            logger.error(f"SSH key generation failed: {e}")
+            raise
+
+    def validate_secret(self, secret: str) -> bool:
+        """Validate SSH key pair"""
+        try:
+            key_pair = json.loads(secret)
+            return 'private_key' in key_pair and 'public_key' in key_pair
+        except:
             return False
 
