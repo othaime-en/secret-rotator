@@ -283,3 +283,93 @@ class SSHKeyRotator(SecretRotator):
         except:
             return False
 
+class CertificateRotator(SecretRotator):
+    """
+    Generate self-signed certificates or CSRs.
+    Useful for internal services and testing.
+    """
+
+    plugin_name = "certificate"
+
+    def __init__(self, name: str, config: Dict[str, Any]):
+        super().__init__(name, config)
+        self.common_name = config.get('common_name', 'localhost')
+        self.validity_days = config.get('validity_days', 365)
+        self.key_size = config.get('key_size', 2048)
+        self.san_list = config.get('san_list', [])  # Subject Alternative Names
+
+    def generate_new_secret(self) -> str:
+        """Generate self-signed certificate"""
+        try:
+            from cryptography import x509
+            from cryptography.x509.oid import NameOID, ExtensionOID
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.primitives.asymmetric import rsa
+            from cryptography.hazmat.primitives import serialization
+            from cryptography.hazmat.backends import default_backend
+            import datetime
+
+            # Generate private key
+            private_key = rsa.generate_private_key(
+                public_exponent=65537,
+                key_size=self.key_size,
+                backend=default_backend()
+            )
+
+            # Create certificate
+            subject = issuer = x509.Name([
+                x509.NameAttribute(NameOID.COMMON_NAME, self.common_name)
+            ])
+
+            cert_builder = x509.CertificateBuilder()
+            cert_builder = cert_builder.subject_name(subject)
+            cert_builder = cert_builder.issuer_name(issuer)
+            cert_builder = cert_builder.public_key(private_key.public_key())
+            cert_builder = cert_builder.serial_number(x509.random_serial_number())
+            cert_builder = cert_builder.not_valid_before(datetime.datetime.utcnow())
+            cert_builder = cert_builder.not_valid_after(
+                datetime.datetime.utcnow() + datetime.timedelta(days=self.validity_days)
+            )
+
+            # Add SAN if provided
+            if self.san_list:
+                san = [x509.DNSName(name) for name in self.san_list]
+                cert_builder = cert_builder.add_extension(
+                    x509.SubjectAlternativeName(san),
+                    critical=False
+                )
+
+            # Sign certificate
+            certificate = cert_builder.sign(private_key, hashes.SHA256(), default_backend())
+
+            # Serialize
+            cert_pem = certificate.public_bytes(serialization.Encoding.PEM)
+            key_pem = private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption()
+            )
+
+            result = {
+                'certificate': cert_pem.decode('utf-8'),
+                'private_key': key_pem.decode('utf-8')
+            }
+
+            logger.info(f"Generated new certificate for {self.common_name}")
+            return json.dumps(result)
+
+        except ImportError:
+            logger.error("cryptography library not installed")
+            raise
+        except Exception as e:
+            logger.error(f"Certificate generation failed: {e}")
+            raise
+
+    def validate_secret(self, secret: str) -> bool:
+        """Validate certificate"""
+        try:
+            cert_data = json.loads(secret)
+            return 'certificate' in cert_data and 'private_key' in cert_data
+        except:
+            return False
+
