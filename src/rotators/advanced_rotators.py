@@ -373,3 +373,30 @@ class CertificateRotator(SecretRotator):
         except:
             return False
 
+
+class OAuth2TokenRotator(SecretRotator):
+    """
+    Rotate OAuth2 client secrets.
+    Integrates with OAuth providers to update credentials.
+    """
+
+    plugin_name = "oauth2_secret"
+
+    def __init__(self, name: str, config: Dict[str, Any]):
+        super().__init__(name, config)
+        self.provider = config.get('provider')  # google, github, azure, etc.
+        self.client_id = config.get('client_id')
+        self.length = config.get('length', 48)
+
+    def generate_new_secret(self) -> str:
+        """Generate OAuth2 client secret"""
+        # Generate a URL-safe secret
+        secret = secrets.token_urlsafe(self.length)
+        logger.info(f"Generated new OAuth2 secret for {self.provider}")
+        return secret
+
+    def validate_secret(self, secret: str) -> bool:
+        """Validate OAuth2 secret format"""
+        return len(secret) >= 32
+
+
