@@ -160,3 +160,43 @@ class ConfigFileDistributor(SecretDistributionMethod):
         for key in keys[:-1]:
             d = d.setdefault(key, {})
         d[keys[-1]] = value
+
+
+class SecretAPIDistributor(SecretDistributionMethod):
+    """
+    Distribute secrets via HTTP API endpoint.
+    Applications can pull secrets from this endpoint.
+    """
+
+    def __init__(self, api_url: str, auth_token: str):
+        self.api_url = api_url
+        self.auth_token = auth_token
+
+    def distribute(self, secret_id: str, secret_value: str, metadata: Dict):
+        """Push secret to API endpoint"""
+        import requests
+
+        headers = {
+            "Authorization": f"Bearer {self.auth_token}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "secret_id": secret_id,
+            "value": secret_value,
+            "rotated_at": datetime.now().isoformat(),
+            "metadata": metadata
+        }
+
+        try:
+            response = requests.post(
+                f"{self.api_url}/secrets/{secret_id}",
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
+            response.raise_for_status()
+            logger.info(f"Distributed secret {secret_id} to API endpoint")
+        except Exception as e:
+            logger.error(f"Failed to distribute secret via API: {e}")
+            raise
