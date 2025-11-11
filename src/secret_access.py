@@ -53,6 +53,7 @@ class SecretAccessPolicy:
 
         return True
 
+
 class SecretDistributionMethod:
     """Base class for different secret distribution methods"""
 
@@ -98,3 +99,64 @@ class EnvironmentVariableDistributor(SecretDistributionMethod):
         os.chmod(self.env_file, 0o600)
 
         logger.info(f"Distributed secret {secret_id} to {self.env_file}")
+
+
+class ConfigFileDistributor(SecretDistributionMethod):
+    """
+    Distribute secrets to application config files.
+    Supports JSON, YAML, TOML formats.
+    """
+
+    def __init__(self, config_file: str, file_format: str = "json"):
+        self.config_file = Path(config_file)
+        self.file_format = file_format.lower()
+
+    def distribute(self, secret_id: str, secret_value: str, metadata: Dict):
+        """Update secret in config file"""
+        config_path = metadata.get('config_path', secret_id)
+
+        # Read existing config
+        if self.config_file.exists():
+            config = self._read_config()
+        else:
+            config = {}
+
+        # Update secret using dot notation path
+        self._set_nested_value(config, config_path, secret_value)
+
+        # Write back
+        self._write_config(config)
+
+        logger.info(f"Distributed secret {secret_id} to {self.config_file}")
+
+    def _read_config(self) -> Dict:
+        """Read config file based on format"""
+        with open(self.config_file, 'r') as f:
+            if self.file_format == "json":
+                return json.load(f)
+            elif self.file_format == "yaml":
+                import yaml
+                return yaml.safe_load(f)
+            elif self.file_format == "toml":
+                import toml
+                return toml.load(f)
+        return {}
+
+    def _write_config(self, config: Dict):
+        """Write config file based on format"""
+        with open(self.config_file, 'w') as f:
+            if self.file_format == "json":
+                json.dump(config, f, indent=2)
+            elif self.file_format == "yaml":
+                import yaml
+                yaml.dump(config, f, default_flow_style=False)
+            elif self.file_format == "toml":
+                import toml
+                toml.dump(config, f)
+
+    def _set_nested_value(self, d: Dict, path: str, value: Any):
+        """Set a nested dictionary value using dot notation"""
+        keys = path.split('.')
+        for key in keys[:-1]:
+            d = d.setdefault(key, {})
+        d[keys[-1]] = value
