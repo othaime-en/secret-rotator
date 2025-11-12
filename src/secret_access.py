@@ -200,3 +200,48 @@ class SecretAPIDistributor(SecretDistributionMethod):
         except Exception as e:
             logger.error(f"Failed to distribute secret via API: {e}")
             raise
+
+class SecretAccessAudit:
+    """Audit log for secret access events"""
+
+    def __init__(self, audit_file: str = "logs/secret_access.log"):
+        self.audit_file = Path(audit_file)
+        self.audit_file.parent.mkdir(parents=True, exist_ok=True)
+
+    def log_access(self, secret_id: str, service_name: str,
+                   action: str, success: bool, ip_address: Optional[str] = None):
+        """Log a secret access event"""
+        event = {
+            "timestamp": datetime.now().isoformat(),
+            "secret_id": secret_id,
+            "service": service_name,
+            "action": action,
+            "success": success,
+            "ip_address": ip_address
+        }
+
+        with open(self.audit_file, 'a') as f:
+            f.write(json.dumps(event) + "\n")
+
+    def get_access_history(self, secret_id: Optional[str] = None,
+                          hours: int = 24) -> List[Dict]:
+        """Get access history for a secret"""
+        if not self.audit_file.exists():
+            return []
+
+        cutoff = datetime.now() - timedelta(hours=hours)
+        events = []
+
+        with open(self.audit_file, 'r') as f:
+            for line in f:
+                try:
+                    event = json.loads(line)
+                    event_time = datetime.fromisoformat(event['timestamp'])
+
+                    if event_time > cutoff:
+                        if secret_id is None or event['secret_id'] == secret_id:
+                            events.append(event)
+                except:
+                    continue
+
+        return events
