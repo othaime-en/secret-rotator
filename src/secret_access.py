@@ -245,3 +245,86 @@ class SecretAccessAudit:
                     continue
 
         return events
+
+class SecretAccessManager:
+    """
+    Central manager for secret access and distribution.
+    Handles encryption, access control, and distribution.
+    """
+
+    def __init__(self, encryption_manager: EncryptionManager):
+        self.encryption = encryption_manager
+        self.access_policy = SecretAccessPolicy()
+        self.audit = SecretAccessAudit()
+        self.distributors: Dict[str, SecretDistributionMethod] = {}
+
+    def register_distributor(self, name: str, distributor: SecretDistributionMethod):
+        """Register a secret distribution method"""
+        self.distributors[name] = distributor
+        logger.info(f"Registered distributor: {name}")
+
+    def get_secret(self, secret_id: str, service_name: str,
+                   ip_address: Optional[str] = None,
+                   decrypt: bool = True) -> Optional[str]:
+        """
+        Get a secret with access control.
+        This is the secure way for applications to retrieve secrets.
+        """
+        # Check access policy
+        if not self.access_policy.can_access(secret_id, service_name, ip_address):
+            self.audit.log_access(secret_id, service_name, "get", False, ip_address)
+            logger.warning(f"Access denied for {service_name} to secret {secret_id}")
+            return None
+
+        try:
+            # Retrieve encrypted secret from provider
+            # (This would integrate with your provider system)
+            encrypted_value = self._retrieve_from_provider(secret_id)
+
+            if decrypt:
+                secret_value = self.encryption.decrypt(encrypted_value)
+            else:
+                secret_value = encrypted_value
+
+            self.audit.log_access(secret_id, service_name, "get", True, ip_address)
+            return secret_value
+
+        except Exception as e:
+            self.audit.log_access(secret_id, service_name, "get", False, ip_address)
+            logger.error(f"Failed to retrieve secret {secret_id}: {e}")
+            return None
+
+    def distribute_secret(self, secret_id: str, secret_value: str,
+                         distribution_methods: List[str],
+                         metadata: Optional[Dict] = None):
+        """
+        Distribute a secret using configured methods.
+        Called after rotation to push secrets to applications.
+        """
+        metadata = metadata or {}
+
+        for method_name in distribution_methods:
+            distributor = self.distributors.get(method_name)
+            if distributor:
+                try:
+                    distributor.distribute(secret_id, secret_value, metadata)
+                    logger.info(f"Distributed {secret_id} via {method_name}")
+                except Exception as e:
+                    logger.error(f"Distribution via {method_name} failed: {e}")
+            else:
+                logger.warning(f"Unknown distribution method: {method_name}")
+
+    def get_masked_secret(self, secret_id: str, service_name: str) -> Optional[str]:
+        """Get a masked version of the secret for display purposes"""
+        secret = self.get_secret(secret_id, service_name)
+        if secret:
+            return SecretMasker.mask_secret(secret)
+        return None
+
+    def _retrieve_from_provider(self, secret_id: str) -> str:
+        """
+        Retrieve encrypted secret from storage provider.
+        This should integrate with your existing provider system.
+        """
+        # Placeholder - integrate with your provider system
+        pass
