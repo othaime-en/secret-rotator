@@ -328,3 +328,42 @@ class SecretAccessManager:
         """
         # Placeholder - integrate with your provider system
         pass
+
+class SecretRotationHook:
+    """
+    Hooks that execute before/after rotation.
+    Useful for custom validation, notifications, or distribution.
+    """
+
+    def __init__(self):
+        self.pre_rotation_hooks = []
+        self.post_rotation_hooks = []
+
+    def register_pre_rotation(self, func):
+        """Register a hook to run before rotation"""
+        self.pre_rotation_hooks.append(func)
+
+    def register_post_rotation(self, func):
+        """Register a hook to run after rotation"""
+        self.post_rotation_hooks.append(func)
+
+    def execute_pre_rotation(self, secret_id: str, old_value: str) -> bool:
+        """Execute all pre-rotation hooks"""
+        for hook in self.pre_rotation_hooks:
+            try:
+                result = hook(secret_id, old_value)
+                if result is False:
+                    logger.warning(f"Pre-rotation hook failed for {secret_id}")
+                    return False
+            except Exception as e:
+                logger.error(f"Pre-rotation hook error: {e}")
+                return False
+        return True
+
+    def execute_post_rotation(self, secret_id: str, new_value: str):
+        """Execute all post-rotation hooks"""
+        for hook in self.post_rotation_hooks:
+            try:
+                hook(secret_id, new_value)
+            except Exception as e:
+                logger.error(f"Post-rotation hook error: {e}")
