@@ -16,3 +16,7 @@ internal/
 coverage.xml
 coverage.json
 htmlcov/
+
+# Master Key file
+*.key
+*.pem
