@@ -31,9 +31,9 @@ class SecretRotationApp:
         logger.info("Setting up Secret Rotation System")
         
         # Initialize encryption manager if enabled
-        encryption_enabled = settings.get('encryption.enabled', True)
+        encryption_enabled = settings.get('security.encryption.enabled', True)
         if encryption_enabled:
-            key_file = settings.get('encryption.key_file', 'config/.master.key')
+            key_file = settings.get('security.encryption.key_file', 'config/.master.key')
             self.encryption_manager = EncryptionManager(key_file=key_file)
             logger.info("Encryption initialized")
         else:
@@ -59,7 +59,7 @@ class SecretRotationApp:
             config={
                 "file_path": settings.get('providers.file_storage.file_path', 'data/secrets.json'),
                 "encrypt_secrets": encrypt_secrets,
-                "encryption_key_file": settings.get('encryption.key_file', 'config/.master.key')
+                "encryption_key_file": settings.get('security.encryption.master_key_file', 'config/.master.key')
             }
         )
         self.engine.register_provider(file_provider)
@@ -137,16 +137,16 @@ class SecretRotationApp:
         logger.info("SECURITY STATUS")
         logger.info("=" * 60)
         
-        encryption_enabled = settings.get('encryption.enabled', True)
+        encryption_enabled = settings.get('security.encryption.enabled', True)
         encrypt_secrets = settings.get('providers.file_storage.encrypt_secrets', True)
-        encrypt_backups = settings.get('encryption.encrypt_backups', True)
+        encrypt_backups = settings.get('backup.encrypt_backups', True)
         
         logger.info(f"Encryption System: {'ENABLED' if encryption_enabled else 'DISABLED'}")
         logger.info(f"Secret Storage Encryption: {'ENABLED' if encrypt_secrets else 'DISABLED'}")
         logger.info(f"Backup Encryption: {'ENABLED' if encrypt_backups else 'DISABLED'}")
         
         if encryption_enabled:
-            key_file = settings.get('encryption.key_file', 'config/.master.key')
+            key_file = settings.get('security.encryption.master_key_file', 'config/.master.key')
             key_path = Path(key_file)
             if key_path.exists():
                 logger.info(f"Master Key: {key_file} (EXISTS)")
