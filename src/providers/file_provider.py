@@ -115,3 +115,41 @@ class FileSecretProvider(SecretProvider):
             logger.error(f"Connection validation failed: {e}")
             return False
     
+    def migrate_to_encrypted(self) -> bool:
+        """
+        Migrate existing plaintext secrets to encrypted format.
+        This should be called once when enabling encryption on existing data.
+        """
+        if not self.encryption_manager:
+            logger.error("Cannot migrate: encryption manager not initialized")
+            return False
+        
+        try:
+            with open(self.file_path, 'r') as f:
+                secrets = json.load(f)
+            
+            migrated_secrets = {}
+            for secret_id, value in secrets.items():
+                # Try to decrypt - if it fails, assume it's plaintext
+                try:
+                    self.encryption_manager.decrypt(value)
+                    # Already encrypted, keep as is
+                    migrated_secrets[secret_id] = value
+                    logger.debug(f"Secret {secret_id} already encrypted")
+                except:
+                    # Not encrypted, encrypt it now
+                    encrypted_value = self.encryption_manager.encrypt(value)
+                    migrated_secrets[secret_id] = encrypted_value
+                    logger.info(f"Migrated secret {secret_id} to encrypted format")
+            
+            # Write back encrypted secrets
+            with open(self.file_path, 'w') as f:
+                json.dump(migrated_secrets, f, indent=2)
+            
+            logger.info(f"Successfully migrated {len(migrated_secrets)} secrets to encrypted format")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Migration failed: {e}")
+            return False
+        
