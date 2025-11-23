@@ -100,7 +100,43 @@ class BackupManager:
                 with open(backup_file, 'r') as f:
                     backup_data = json.load(f)
                     backup_data['backup_file'] = str(backup_file)
-                                     
+
+                    # Mask sensitive values in the listing
+                    if mask_values:
+                        is_encrypted = backup_data.get('encrypted', False)
+                        
+                        if is_encrypted and self.encryption_manager:
+                            # For encrypted backups, decrypt then mask
+                            try:
+                                old_decrypted = self.encryption_manager.decrypt(
+                                    backup_data['old_value']
+                                )
+                                new_decrypted = self.encryption_manager.decrypt(
+                                    backup_data['new_value']
+                                )
+                                backup_data['old_value_masked'] = SecretMasker.mask_for_backup_display(
+                                    old_decrypted
+                                )
+                                backup_data['new_value_masked'] = SecretMasker.mask_for_backup_display(
+                                    new_decrypted
+                                )
+                            except Exception as e:
+                                logger.warning(f"Could not decrypt backup for masking: {e}")
+                                backup_data['old_value_masked'] = "****"
+                                backup_data['new_value_masked'] = "****"
+                        else:
+                            # For plaintext backups, just mask
+                            backup_data['old_value_masked'] = SecretMasker.mask_for_backup_display(
+                                backup_data['old_value']
+                            )
+                            backup_data['new_value_masked'] = SecretMasker.mask_for_backup_display(
+                                backup_data['new_value']
+                            )
+                        
+                        # Remove actual values from listing for security
+                        backup_data.pop('old_value', None)
+                        backup_data.pop('new_value', None)
+                                       
                     backups.append(backup_data)
                     
             except Exception as e:
