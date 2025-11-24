@@ -82,7 +82,27 @@ notifications:
     webhook_url: "<your-slack-webhook-url>"
     channel: "<your-slack-channel>"
 
+# Security settings
 security:
+  encryption:
+    enabled: true
+    master_key_file: "config/.master.key"
+    rotate_master_key_days: 90
+
+# Backup configuration
+backup:
+  enabled: true
+  storage_path: "data/backup/"
   encrypt_backups: true
-  audit_log: true
-  require_confirmation: false
+  compression: true # gzip compression
+  retention:
+    days: 90
+    max_backups_per_secret: 10
+
+  # Remote backup (optional)
+  remote_backup:
+    enabled: false
+    type: "s3" # s3, azure_blob, gcs
+    bucket: "my-secret-backups"
+    region: "us-east-1"
+    prefix: "rotator/backups/"
