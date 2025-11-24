@@ -9,6 +9,7 @@ data/
 data/secrets.json
 data/backups/
 internal/
+*0.py
 
 # Coverage
 .coverage
