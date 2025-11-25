@@ -185,6 +185,49 @@ class TestFileProviderWithEncryption(unittest.TestCase):
             retrieved = self.provider.get_secret(secret_id)
             self.assertEqual(retrieved, secret_value)
 
+class TestFileProviderPlaintext(unittest.TestCase):
+    """Tests for provider without encryption (backward compatibility)"""
+    
+    def setUp(self):
+        """Set up test fixtures without encryption"""
+        self.temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+        self.temp_file.write('{"test_secret": "test_value"}')
+        self.temp_file.close()
+        
+        self.config = {
+            "file_path": self.temp_file.name,
+            "encrypt_secrets": False
+        }
+        self.provider = FileSecretProvider("test_provider", self.config)
+    
+    def tearDown(self):
+        """Clean up test fixtures"""
+        os.unlink(self.temp_file.name)
+    
+    def test_get_secret_plaintext(self):
+        """Test retrieving secret without encryption"""
+        value = self.provider.get_secret("test_secret")
+        self.assertEqual(value, "test_value")
+    
+    def test_update_secret_plaintext(self):
+        """Test updating secret without encryption"""
+        success = self.provider.update_secret("test_secret", "new_value")
+        self.assertTrue(success)
+        
+        # Verify the update
+        value = self.provider.get_secret("test_secret")
+        self.assertEqual(value, "new_value")
+        
+        # Verify it's stored as plaintext
+        with open(self.temp_file.name, 'r') as f:
+            file_contents = json.load(f)
+            self.assertEqual(file_contents["test_secret"], "new_value")
+    
+    def test_validate_connection_plaintext(self):
+        """Test connection validation without encryption"""
+        self.assertTrue(self.provider.validate_connection())
+
+
 
 if __name__ == '__main__':
     unittest.main()
