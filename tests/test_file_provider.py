@@ -227,6 +227,69 @@ class TestFileProviderPlaintext(unittest.TestCase):
         """Test connection validation without encryption"""
         self.assertTrue(self.provider.validate_connection())
 
+class TestFileProviderErrorHandling(unittest.TestCase):
+    """Test error handling scenarios"""
+    
+    def setUp(self):
+        """Set up test fixtures"""
+        self.temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+        self.temp_file.write('{}')
+        self.temp_file.close()
+
+    
+    def tearDown(self):
+        """Clean up test fixtures"""
+        if os.path.exists(self.temp_file.name):
+            os.unlink(self.temp_file.name)
+        
+    
+    def test_corrupted_json_file(self):
+        """Test handling of corrupted JSON file"""
+        # Write invalid JSON
+        with open(self.temp_file.name, 'w') as f:
+            f.write('invalid json content {[}')
+        
+        config = {
+            "file_path": self.temp_file.name,
+            "encrypt_secrets": True,
+            "encryption_key_file": 'config/.master.key'
+        }
+        provider = FileSecretProvider("test_provider", config)
+        
+        # Should return empty string instead of crashing
+        value = provider.get_secret("any_secret")
+        self.assertEqual(value, "")
+    
+    def test_file_permission_error(self):
+        """Test handling of file permission errors"""
+        # Make file read-only
+        os.chmod(self.temp_file.name, 0o444)
+        
+        config = {
+            "file_path": self.temp_file.name,
+            "encrypt_secrets": False
+        }
+        provider = FileSecretProvider("test_provider", config)
+        
+        # Update should fail gracefully
+        success = provider.update_secret("test", "value")
+        self.assertFalse(success)
+        
+        # Restore permissions for cleanup
+        os.chmod(self.temp_file.name, 0o644)
+    
+    def test_migration_without_encryption_manager(self):
+        """Test migration fails gracefully without encryption manager"""
+        config = {
+            "file_path": self.temp_file.name,
+            "encrypt_secrets": False  # No encryption manager
+        }
+        provider = FileSecretProvider("test_provider", config)
+        
+        # Migration should fail
+        success = provider.migrate_to_encrypted()
+        self.assertFalse(success)
+
 
 
 if __name__ == '__main__':
