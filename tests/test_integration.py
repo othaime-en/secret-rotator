@@ -388,5 +388,73 @@ class TestIntegrationWithEncryption(unittest.TestCase):
             self.assertTrue(len(stored_encrypted) > len(new_password))
 
 
+class TestIntegrationPlaintextMode(unittest.TestCase):
+    """Integration tests without encryption for backward compatibility"""
+    
+    def setUp(self):
+        """Set up test fixtures without encryption"""
+        self.temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+        self.temp_file.write('{"db_password": "initial_password"}')
+        self.temp_file.close()
+        
+        self.temp_backup_dir = tempfile.mkdtemp()
+        
+        self.engine = RotationEngine()
+        self.engine.backup_manager = BackupManager(
+            backup_dir=self.temp_backup_dir,
+            encrypt_backups=False
+        )
+        
+        # Set up provider without encryption
+        provider = FileSecretProvider("file_storage", {
+            "file_path": self.temp_file.name,
+            "encrypt_secrets": False
+        })
+        self.engine.register_provider(provider)
+        
+        # Set up rotator
+        rotator = PasswordRotator("password_gen", {
+            "length": 16,
+            "use_symbols": True,
+            "use_numbers": True,
+            "use_uppercase": True,
+            "use_lowercase": True
+        })
+        self.engine.register_rotator(rotator)
+    
+    def tearDown(self):
+        """Clean up"""
+        import os
+        import shutil
+        os.unlink(self.temp_file.name)
+        if Path(self.temp_backup_dir).exists():
+            shutil.rmtree(self.temp_backup_dir)
+    
+    @patch('rotation_engine.settings')
+    def test_plaintext_rotation_workflow(self, mock_settings):
+        """Test rotation works in plaintext mode (backward compatibility)"""
+        mock_settings.get.return_value = True
+        
+        job = {
+            "name": "database_password",
+            "provider": "file_storage",
+            "rotator": "password_gen",
+            "secret_id": "db_password"
+        }
+        self.engine.add_rotation_job(job)
+        
+        # Perform rotation
+        results = self.engine.rotate_all_secrets()
+        self.assertTrue(results["database_password"])
+        
+        # Verify plaintext backup
+        backups = self.engine.backup_manager.list_backups(
+            secret_id="db_password",
+            mask_values=False
+        )
+        self.assertEqual(len(backups), 1)
+        self.assertFalse(backups[0]['encrypted'])
+
+
 if __name__ == '__main__':
     unittest.main()
