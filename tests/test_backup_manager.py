@@ -222,5 +222,67 @@ class TestBackupManagerWithEncryption(unittest.TestCase):
         self.assertIsNotNone(metadata['oldest_backup'])
         self.assertIsNotNone(metadata['newest_backup'])
 
+
+class TestBackupManagerWithoutEncryption(unittest.TestCase):
+    """Test backup manager with encryption disabled"""
+    
+    def setUp(self):
+        """Set up test fixtures without encryption"""
+        self.temp_backup_dir = tempfile.mkdtemp()
+        self.backup_manager = BackupManager(
+            backup_dir=self.temp_backup_dir,
+            encrypt_backups=False
+        )
+    
+    def tearDown(self):
+        """Clean up test fixtures"""
+        import shutil
+        if Path(self.temp_backup_dir).exists():
+            shutil.rmtree(self.temp_backup_dir)
+    
+    def test_create_plaintext_backup(self):
+        """Test creating plaintext backup"""
+        secret_id = "test_secret"
+        old_value = "old_password"
+        new_value = "new_password"
+        
+        backup_path = self.backup_manager.create_backup(secret_id, old_value, new_value)
+        
+        # Verify backup content
+        with open(backup_path, 'r') as f:
+            backup_data = json.load(f)
+        
+        self.assertEqual(backup_data['secret_id'], secret_id)
+        self.assertFalse(backup_data['encrypted'])
+        
+        # Values should be plaintext
+        self.assertEqual(backup_data['old_value'], old_value)
+        self.assertEqual(backup_data['new_value'], new_value)
+    
+    def test_restore_plaintext_backup(self):
+        """Test restoring plaintext backup"""
+        secret_id = "test_secret"
+        old_value = "old_password"
+        new_value = "new_password"
+        
+        backup_path = self.backup_manager.create_backup(secret_id, old_value, new_value)
+        
+        # Restore
+        restored_data = self.backup_manager.restore_backup(backup_path)
+        
+        self.assertEqual(restored_data['old_value'], old_value)
+        self.assertEqual(restored_data['new_value'], new_value)
+    
+    def test_export_metadata_without_encryption(self):
+        """Test metadata export shows encryption disabled"""
+        self.backup_manager.create_backup("test", "old", "new")
+        
+        metadata = self.backup_manager.export_backup_metadata()
+        
+        self.assertFalse(metadata['encryption_enabled'])
+        self.assertEqual(metadata['total_backups'], 1)
+
+
+
 if __name__ == '__main__':
     unittest.main()
