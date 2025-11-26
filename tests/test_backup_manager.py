@@ -283,6 +283,90 @@ class TestBackupManagerWithoutEncryption(unittest.TestCase):
         self.assertEqual(metadata['total_backups'], 1)
 
 
+class TestBackupManagerEdgeCases(unittest.TestCase):
+    """Test edge cases and error scenarios"""
+    
+    def setUp(self):
+        """Set up test fixtures"""
+        self.temp_backup_dir = tempfile.mkdtemp()
+        self.backup_manager = BackupManager(
+            backup_dir=self.temp_backup_dir,
+            encrypt_backups=True
+        )
+    
+    def tearDown(self):
+        """Clean up test fixtures"""
+        import shutil
+        if Path(self.temp_backup_dir).exists():
+            shutil.rmtree(self.temp_backup_dir)
+    
+    def test_backup_with_empty_values(self):
+        """Test creating backup with empty string values"""
+        backup_path = self.backup_manager.create_backup("test", "", "")
+        
+        restored = self.backup_manager.restore_backup(backup_path)
+        self.assertEqual(restored['old_value'], "")
+        self.assertEqual(restored['new_value'], "")
+    
+    def test_backup_with_special_characters(self):
+        """Test backup with special characters in values"""
+        special_values = {
+            "old": "p@ssw0rd!#$%\n\t",
+            "new": "unicode_café_日本語"
+        }
+        
+        backup_path = self.backup_manager.create_backup(
+            "test",
+            special_values["old"],
+            special_values["new"]
+        )
+        
+        restored = self.backup_manager.restore_backup(backup_path)
+        self.assertEqual(restored['old_value'], special_values["old"])
+        self.assertEqual(restored['new_value'], special_values["new"])
+    
+    def test_backup_with_very_long_values(self):
+        """Test backup with very long secret values"""
+        long_value = "x" * 10000
+        
+        backup_path = self.backup_manager.create_backup("test", long_value, long_value)
+        
+        restored = self.backup_manager.restore_backup(backup_path)
+        self.assertEqual(len(restored['old_value']), 10000)
+    
+    def test_list_backups_empty_directory(self):
+        """Test listing backups when directory is empty"""
+        backups = self.backup_manager.list_backups()
+        self.assertEqual(len(backups), 0)
+    
+    def test_verify_nonexistent_backup(self):
+        """Test verifying nonexistent backup"""
+        is_valid = self.backup_manager.verify_backup_integrity("nonexistent.json")
+        self.assertFalse(is_valid)
+    
+    def test_multiple_rapid_backups_same_secret(self):
+        """Test creating multiple backups of same secret rapidly"""
+        secret_id = "test_secret"
+        
+        backup_paths = []
+        for i in range(5):
+            backup_path = self.backup_manager.create_backup(
+                secret_id,
+                f"old_value_{i}",
+                f"new_value_{i}"
+            )
+            backup_paths.append(backup_path)
+            time.sleep(0.001)  # Tiny delay to ensure different timestamps
+        
+        # All backups should exist
+        for backup_path in backup_paths:
+            self.assertTrue(Path(backup_path).exists())
+        
+        # Should have 5 backups
+        backups = self.backup_manager.list_backups(secret_id=secret_id)
+        self.assertEqual(len(backups), 5)
+
+
 
 if __name__ == '__main__':
     unittest.main()
