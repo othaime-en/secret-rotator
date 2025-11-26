@@ -138,7 +138,89 @@ class TestBackupManagerWithEncryption(unittest.TestCase):
         for backup in secret1_backups:
             self.assertEqual(backup['secret_id'], "secret1")
     
- 
+    def test_list_backups_sorting(self):
+        """Test backups are sorted by timestamp (newest first)"""
+        # Create backups with slight delays
+        self.backup_manager.create_backup("test", "old1", "new1")
+        time.sleep(0.01)
+        self.backup_manager.create_backup("test", "old2", "new2")
+        time.sleep(0.01)
+        self.backup_manager.create_backup("test", "old3", "new3")
+        
+        backups = self.backup_manager.list_backups(secret_id="test", mask_values=False)
+        
+        # Verify newest is first
+        self.assertEqual(len(backups), 3)
+        # Timestamps should be in descending order
+        timestamps = [b['timestamp'] for b in backups]
+        self.assertEqual(timestamps, sorted(timestamps, reverse=True))
+    
+    def test_cleanup_old_backups(self):
+        """Test cleaning up old backups"""
+        # Create a backup
+        backup_path = self.backup_manager.create_backup("test", "old", "new")
+        
+        # Modify file timestamp to be 31 days old
+        old_time = time.time() - (31 * 24 * 60 * 60)
+        os.utime(backup_path, (old_time, old_time))
+        
+        # Cleanup backups older than 30 days
+        removed = self.backup_manager.cleanup_old_backups(days_to_keep=30)
+        
+        self.assertEqual(removed, 1)
+        self.assertFalse(Path(backup_path).exists())
+    
+    def test_cleanup_keeps_recent_backups(self):
+        """Test cleanup keeps recent backups"""
+        # Create a recent backup
+        backup_path = self.backup_manager.create_backup("test", "old", "new")
+        
+        # Cleanup old backups
+        removed = self.backup_manager.cleanup_old_backups(days_to_keep=30)
+        
+        # Should not remove recent backup
+        self.assertEqual(removed, 0)
+        self.assertTrue(Path(backup_path).exists())
+    
+    def test_verify_backup_integrity(self):
+        """Test backup integrity verification"""
+        secret_id = "test_secret"
+        old_value = "old_password"
+        new_value = "new_password"
+        
+        backup_path = self.backup_manager.create_backup(secret_id, old_value, new_value)
+        
+        # Verify integrity
+        is_valid = self.backup_manager.verify_backup_integrity(backup_path)
+        self.assertTrue(is_valid)
+    
+    def test_verify_corrupted_backup(self):
+        """Test integrity check fails for corrupted backup"""
+        # Create a backup
+        backup_path = self.backup_manager.create_backup("test", "old", "new")
+        
+        # Corrupt the backup file
+        with open(backup_path, 'w') as f:
+            f.write('corrupted data')
+        
+        # Verify should fail
+        is_valid = self.backup_manager.verify_backup_integrity(backup_path)
+        self.assertFalse(is_valid)
+    
+    def test_export_backup_metadata(self):
+        """Test exporting backup metadata"""
+        # Create some backups
+        self.backup_manager.create_backup("secret1", "old1", "new1")
+        self.backup_manager.create_backup("secret2", "old2", "new2")
+        
+        metadata = self.backup_manager.export_backup_metadata()
+        
+        self.assertEqual(metadata['total_backups'], 2)
+        self.assertEqual(metadata['secrets_with_backups'], 2)
+        self.assertTrue(metadata['encryption_enabled'])
+        self.assertIn('backup_directory', metadata)
+        self.assertIsNotNone(metadata['oldest_backup'])
+        self.assertIsNotNone(metadata['newest_backup'])
 
 if __name__ == '__main__':
     unittest.main()
