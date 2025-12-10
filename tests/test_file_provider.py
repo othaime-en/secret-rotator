@@ -4,6 +4,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from cryptography.fernet import Fernet
 
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
@@ -17,17 +18,31 @@ class TestFileProviderWithEncryption(unittest.TestCase):
         self.temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
         self.temp_file.write('{}')
         self.temp_file.close()
+
+        # Create temporary key file with a real key
+        self.temp_key_file = tempfile.NamedTemporaryFile(mode='wb',suffix='.key',delete=False)
+        
+        # Generate a valid Fernet key for testing
+        test_key = Fernet.generate_key()
+        self.temp_key_file.write(test_key)
+        self.temp_key_file.flush()
+        self.temp_key_file.close()
+        
+        # Set restrictive permissions on key file (like the real system does)
+        os.chmod(self.temp_key_file.name, 0o600)
         
         self.config = {
             "file_path": self.temp_file.name,
             "encrypt_secrets": True,
-            "encryption_key_file": 'config/.master.key'
+            "encryption_key_file": self.temp_key_file.name
         }
         self.provider = FileSecretProvider("test_provider", self.config)
     
     def tearDown(self):
         """Clean up test fixtures"""
         os.unlink(self.temp_file.name)
+        if os.path.exists(self.temp_key_file.name):
+            os.unlink(self.temp_key_file.name)
        
     def test_update_and_get_secret_encrypted(self):
         """Test storing and retrieving encrypted secret"""
@@ -236,11 +251,24 @@ class TestFileProviderErrorHandling(unittest.TestCase):
         self.temp_file.write('{}')
         self.temp_file.close()
 
+        # Create temporary key file with a real key
+        self.temp_key_file = tempfile.NamedTemporaryFile(mode='wb',suffix='.key',delete=False)
+        
+        # Generate a valid Fernet key for testing
+        test_key = Fernet.generate_key()
+        self.temp_key_file.write(test_key)
+        self.temp_key_file.close()
+        
+        # Set restrictive permissions on key file (like the real system does)
+        os.chmod(self.temp_key_file.name, 0o600)
+
     
     def tearDown(self):
         """Clean up test fixtures"""
         if os.path.exists(self.temp_file.name):
             os.unlink(self.temp_file.name)
+        if os.path.exists(self.temp_key_file.name):
+            os.unlink(self.temp_key_file.name)
         
     
     def test_corrupted_json_file(self):
@@ -252,7 +280,7 @@ class TestFileProviderErrorHandling(unittest.TestCase):
         config = {
             "file_path": self.temp_file.name,
             "encrypt_secrets": True,
-            "encryption_key_file": 'config/.master.key'
+            "encryption_key_file": self.temp_key_file.name
         }
         provider = FileSecretProvider("test_provider", config)
         
