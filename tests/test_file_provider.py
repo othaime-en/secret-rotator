@@ -25,7 +25,6 @@ class TestFileProviderWithEncryption(unittest.TestCase):
         # Generate a valid Fernet key for testing
         test_key = Fernet.generate_key()
         self.temp_key_file.write(test_key)
-        self.temp_key_file.flush()
         self.temp_key_file.close()
         
         # Set restrictive permissions on key file (like the real system does)
