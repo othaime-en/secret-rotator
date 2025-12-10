@@ -4,6 +4,7 @@ import sys
 import os
 from pathlib import Path
 from unittest.mock import patch
+from cryptography.fernet import Fernet
 
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
@@ -21,6 +22,16 @@ class TestIntegrationWithEncryption(unittest.TestCase):
         self.temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
         self.temp_file.write('{}')
         self.temp_file.close()
+
+        self.temp_key_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.key', delete=False)
+        
+        # Generate a valid Fernet key for testing
+        test_key = Fernet.generate_key()
+        self.temp_key_file.write(test_key)
+        self.temp_key_file.close()
+
+        # Set restrictive permissions on key file (just like the real system does)
+        os.chmod(self.temp_key_file.name, 0o600)
         
         self.temp_backup_dir = tempfile.mkdtemp()
         
@@ -34,7 +45,7 @@ class TestIntegrationWithEncryption(unittest.TestCase):
         provider = FileSecretProvider("file_storage", {
             "file_path": self.temp_file.name,
             "encrypt_secrets": True,
-            "encryption_key_file": 'config/.master.key'
+            "encryption_key_file": self.temp_key_file.name
         })
         self.engine.register_provider(provider)
         
@@ -58,6 +69,9 @@ class TestIntegrationWithEncryption(unittest.TestCase):
         os.unlink(self.temp_file.name)
         if Path(self.temp_backup_dir).exists():
             shutil.rmtree(self.temp_backup_dir)
+
+        if os.path.exists(self.temp_key_file.name):
+            os.unlink(self.temp_key_file.name)
     
     @patch('rotation_engine.settings')
     def test_complete_encrypted_rotation_workflow(self, mock_settings):
