@@ -158,7 +158,6 @@ class EncryptionManager:
         
         return info
     
-
     def should_rotate_key(self, max_age_days: int = 90) -> bool:
         """
         Check if master key should be rotated based on age.
@@ -187,31 +186,116 @@ class EncryptionManager:
         except Exception as e:
             logger.error(f"Error checking key age: {e}")
             return True  # Err on the side of caution
-     
+
+    def rotate_master_key(
+        self,
+        new_key: Optional[bytes] = None,
+        re_encrypt_callback=None
+    ) -> bool:
+        """
+        Rotate the master encryption key with backup and rollback support.
         
-    def rotate_master_key(self, new_key: Optional[bytes] = None):
+        CRITICAL: This requires re-encrypting ALL secrets with the new key.
+        The callback function will be called to handle re-encryption of all secrets.
+        
+        Args:
+            new_key: Optional new key (if None, generates random key)
+            re_encrypt_callback: Function(old_cipher, new_cipher) -> bool
+                                Called to re-encrypt all secrets
+        
+        Returns:
+            True if rotation succeeded, False if failed (with rollback)
         """
-        Rotate the master encryption key.
-        This requires re-encrypting all secrets with the new key.
-        """
+        if not self.cipher:
+            raise ValueError("No master key to rotate")
+        
+        logger.info("Starting master key rotation")
+        
+        # Save old cipher for re-encryption
+        old_cipher = self.cipher
+        
+        # Generate or use provided new key
         if new_key is None:
             new_key = Fernet.generate_key()
         
-        old_cipher = self.cipher
         new_cipher = Fernet(new_key)
         
-        # This method should be called by the rotation engine
-        # which will handle re-encrypting all secrets
-        self.cipher = new_cipher
+        # Create new metadata
+        new_metadata = {
+            "version": self.key_metadata.get("version", 0) + 1,
+            "created_at": datetime.now().isoformat(),
+            "algorithm": "Fernet",
+            "key_id": hashlib.sha256(new_key).hexdigest()[:16],
+            "rotated_from": self.key_metadata.get("key_id"),
+            "rotated_at": datetime.now().isoformat()
+        }
         
-        # Save new key
-        with open(self.key_file, 'wb') as f:
-            f.write(new_key)
+        # Backup old key file
+        backup_path = self.key_file.with_suffix('.key.backup')
+        if self.key_file.exists():
+            import shutil
+            try:
+                shutil.copy2(self.key_file, backup_path)
+                logger.info(f"Backed up old key to {backup_path}")
+            except Exception as e:
+                logger.error(f"Failed to backup old key: {e}")
+                return False
         
-        os.chmod(self.key_file, 0o600)
-        
-        logger.info("Master encryption key rotated successfully")
-        return old_cipher
+        try:
+            # Re-encrypt all secrets if callback provided
+            if re_encrypt_callback:
+                logger.info("Re-encrypting all secrets with new key...")
+                success = re_encrypt_callback(old_cipher, new_cipher)
+                if not success:
+                    raise Exception("Re-encryption callback failed")
+                logger.info("All secrets re-encrypted successfully")
+            else:
+                logger.warning(
+                    "No re-encryption callback provided. "
+                    "Existing encrypted data will become unreadable!"
+                )
+            
+            # Update in-memory cipher and metadata
+            self.cipher = new_cipher
+            self.key_metadata = new_metadata
+            
+            # Save new key with metadata
+            key_data = {
+                "key": base64.b64encode(new_key).decode('utf-8'),
+                "metadata": new_metadata
+            }
+            
+            with open(self.key_file, 'w') as f:
+                json.dump(key_data, f, indent=2)
+            
+            os.chmod(self.key_file, 0o600)
+            
+            logger.info("Master key rotation completed successfully")
+            logger.info(f"New key ID: {new_metadata['key_id']}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Master key rotation failed: {e}")
+            logger.info("Restoring old key from backup...")
+            
+            # Restore from backup
+            if backup_path.exists():
+                import shutil
+                try:
+                    shutil.copy2(backup_path, self.key_file)
+                    # Reload the old key
+                    key = self._load_existing_key()
+                    self.cipher = Fernet(key)
+                    logger.info("Successfully restored old key")
+                except Exception as restore_error:
+                    logger.critical(f"Failed to restore old key: {restore_error}")
+                    raise
+            else:
+                logger.critical("No backup found to restore!")
+                raise
+            
+            return False
     
     @staticmethod
     def derive_key_from_passphrase(passphrase: str, salt: Optional[bytes] = None) -> tuple[bytes, bytes]:
