@@ -8,8 +8,11 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC as PBKDF2
 from cryptography.hazmat.backends import default_backend
 import base64
 import os
+import json
+import hashlib
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
+from datetime import datetime
 from utils.logger import logger
 
 
@@ -19,13 +22,13 @@ class EncryptionManager:
     def __init__(self, key_file: str = "config/.master.key"):
         self.key_file = Path(key_file)
         self.cipher = None
+        self.key_metadata: Dict[str, Any] = {}
         self._initialize_encryption()
     
     def _initialize_encryption(self):
         """Initialize encryption cipher with master key"""
         if self.key_file.exists():
-            with open(self.key_file, 'rb') as f:
-                key = f.read()
+            key = self._load_existing_key()
             logger.info("Loaded existing master encryption key")
         else:
             key = self._generate_and_save_key()
@@ -33,16 +36,66 @@ class EncryptionManager:
         
         self.cipher = Fernet(key)
     
+    def _load_existing_key(self) -> bytes:
+        """Load existing key from file with metadata validation"""
+        try:
+            with open(self.key_file, 'r') as f:
+                key_data = json.load(f)
+            
+            # Extract key and metadata
+            key = base64.b64decode(key_data["key"].encode())
+            self.key_metadata = key_data.get("metadata", {})
+            
+            # Verify key integrity
+            expected_key_id = self.key_metadata.get("key_id")
+            if expected_key_id:
+                actual_key_id = hashlib.sha256(key).hexdigest()[:16]
+                if expected_key_id != actual_key_id:
+                    raise ValueError("Master key integrity check failed")
+            
+            return key
+            
+        except json.JSONDecodeError:
+            # Handle legacy key files (raw bytes without metadata)
+            logger.warning("Loading legacy key file without metadata")
+            with open(self.key_file, 'rb') as f:
+                key = f.read()
+            
+            # Create metadata for legacy key
+            self.key_metadata = {
+                "version": 0,
+                "algorithm": "Fernet",
+                "key_id": hashlib.sha256(key).hexdigest()[:16],
+                "legacy": True
+            }
+            
+            return key
+    
     def _generate_and_save_key(self) -> bytes:
-        """Generate a new encryption key and save it securely"""
+        """Generate a new encryption key and save it securely with metadata"""
+        # Generate cryptographically secure random key
         key = Fernet.generate_key()
+        
+        # Create metadata
+        self.key_metadata = {
+            "version": 1,
+            "created_at": datetime.now().isoformat(),
+            "algorithm": "Fernet",
+            "key_id": hashlib.sha256(key).hexdigest()[:16]
+        }
+        
+        # Package key with metadata
+        key_data = {
+            "key": base64.b64encode(key).decode('utf-8'),
+            "metadata": self.key_metadata
+        }
         
         # Create config directory if it doesn't exist
         self.key_file.parent.mkdir(parents=True, exist_ok=True)
         
-        # Save key with restricted permissions (owner read/write only)
-        with open(self.key_file, 'wb') as f:
-            f.write(key)
+        # Save key with metadata as JSON
+        with open(self.key_file, 'w') as f:
+            json.dump(key_data, f, indent=2)
         
         # Set file permissions to 0600 (owner read/write only)
         os.chmod(self.key_file, 0o600)
@@ -162,6 +215,4 @@ class SecretMasker:
         Create a hash of the secret for comparison purposes.
         Useful for verifying a secret matches without exposing it.
         """
-        import hashlib
         return hashlib.sha256(secret.encode()).hexdigest()[:16]
-
