@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime
 from utils.logger import logger
+from datetime import datetime, timedelta
 
 
 class EncryptionManager:
@@ -157,7 +158,37 @@ class EncryptionManager:
         
         return info
     
-    
+
+    def should_rotate_key(self, max_age_days: int = 90) -> bool:
+        """
+        Check if master key should be rotated based on age.
+        
+        Args:
+            max_age_days: Maximum age in days before rotation recommended
+        
+        Returns:
+            True if key should be rotated
+        """
+        # If no creation date, recommend rotation
+        if not self.key_metadata.get("created_at"):
+            logger.warning("Key has no creation date, rotation recommended")
+            return True
+        
+        try:
+            created_at = datetime.fromisoformat(self.key_metadata["created_at"])
+            age = datetime.now() - created_at
+            
+            if age > timedelta(days=max_age_days):
+                logger.info(f"Key is {age.days} days old (max: {max_age_days}), rotation recommended")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking key age: {e}")
+            return True  # Err on the side of caution
+     
+        
     def rotate_master_key(self, new_key: Optional[bytes] = None):
         """
         Rotate the master encryption key.
