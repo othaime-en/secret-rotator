@@ -132,6 +132,32 @@ class EncryptionManager:
             logger.error(f"Decryption failed: {e}")
             raise
     
+    def get_key_info(self) -> Dict[str, Any]:
+        """
+        Get information about the current master key (non-sensitive).
+        
+        Returns:
+            Dictionary with key metadata
+        """
+        info = {
+            "key_id": self.key_metadata.get("key_id"),
+            "version": self.key_metadata.get("version"),
+            "algorithm": self.key_metadata.get("algorithm"),
+            "created_at": self.key_metadata.get("created_at"),
+        }
+        
+        # Calculate age if creation date available
+        if self.key_metadata.get("created_at"):
+            try:
+                created_at = datetime.fromisoformat(self.key_metadata["created_at"])
+                age = datetime.now() - created_at
+                info["age_days"] = age.days
+            except:
+                info["age_days"] = None
+        
+        return info
+    
+    
     def rotate_master_key(self, new_key: Optional[bytes] = None):
         """
         Rotate the master encryption key.
