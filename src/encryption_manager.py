@@ -145,6 +145,8 @@ class EncryptionManager:
             "version": self.key_metadata.get("version"),
             "algorithm": self.key_metadata.get("algorithm"),
             "created_at": self.key_metadata.get("created_at"),
+            "rotated_from": self.key_metadata.get("rotated_from"),
+            "rotated_at": self.key_metadata.get("rotated_at"),
         }
         
         # Calculate age if creation date available
