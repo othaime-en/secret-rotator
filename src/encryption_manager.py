@@ -346,6 +346,35 @@ class EncryptionManager:
             "algorithm": "PBKDF2-SHA256"
         }
 
+    @staticmethod
+    def create_from_passphrase(passphrase: str, salt: bytes) -> 'EncryptionManager':
+        """
+        Create an EncryptionManager from a passphrase (without key file).
+        
+        Args:
+            passphrase: User passphrase
+            salt: Salt used during key derivation (must be same as original)
+        
+        Returns:
+            Configured EncryptionManager instance
+        """
+        key_data = EncryptionManager.derive_key_from_passphrase(passphrase, salt)
+        
+        # Create instance without key file
+        manager = EncryptionManager.__new__(EncryptionManager)
+        manager.key_file = None
+        manager.key_metadata = {
+            "version": 1,
+            "algorithm": "Fernet",
+            "derived_from": "passphrase",
+            "iterations": key_data["iterations"]
+        }
+        
+        # Initialize cipher with derived key
+        manager.cipher = Fernet(key_data["key"].encode())
+        
+        return manager
+
 class SecretMasker:
     """Utility for masking secrets in logs and UI"""
     
