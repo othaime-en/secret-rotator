@@ -109,30 +109,89 @@ class EncryptionManager:
         
         return key
     
-    def encrypt(self, plaintext: str) -> str:
-        """Encrypt plaintext and return base64-encoded ciphertext"""
+    def encrypt(self, plaintext: str, associated_data: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Encrypt plaintext and return base64-encoded ciphertext.
+        
+        Args:
+            plaintext: Data to encrypt
+            associated_data: Optional metadata to include (stored separately, not encrypted)
+        
+        Returns:
+            Base64-encoded ciphertext, or JSON with metadata if associated_data provided
+        """
         if not plaintext:
             return ""
         
         try:
             encrypted_bytes = self.cipher.encrypt(plaintext.encode('utf-8'))
-            return base64.b64encode(encrypted_bytes).decode('utf-8')
+            ciphertext = base64.b64encode(encrypted_bytes).decode('utf-8')
+            
+            # If no associated data, return simple base64 string (backward compatible)
+            if not associated_data:
+                return ciphertext
+            
+            # If associated data provided, package with metadata
+            package = {
+                "ciphertext": ciphertext,
+                "metadata": associated_data,
+                "encrypted_at": datetime.now().isoformat()
+            }
+            return json.dumps(package)
+            
         except Exception as e:
             logger.error(f"Encryption failed: {e}")
             raise
     
     def decrypt(self, ciphertext: str) -> str:
-        """Decrypt base64-encoded ciphertext and return plaintext"""
+        """
+        Decrypt base64-encoded ciphertext and return plaintext.
+        
+        Args:
+            ciphertext: Base64-encoded ciphertext or JSON package with metadata
+        
+        Returns:
+            Decrypted plaintext
+        """
         if not ciphertext:
             return ""
         
         try:
-            encrypted_bytes = base64.b64decode(ciphertext.encode('utf-8'))
+            # Try to parse as JSON first (if it has associated data)
+            try:
+                package = json.loads(ciphertext)
+                if "ciphertext" in package:
+                    actual_ciphertext = package["ciphertext"]
+                else:
+                    actual_ciphertext = ciphertext
+            except json.JSONDecodeError:
+                # Not JSON, treat as raw base64 ciphertext
+                actual_ciphertext = ciphertext
+            
+            # Decrypt
+            encrypted_bytes = base64.b64decode(actual_ciphertext.encode('utf-8'))
             decrypted_bytes = self.cipher.decrypt(encrypted_bytes)
             return decrypted_bytes.decode('utf-8')
+            
         except Exception as e:
             logger.error(f"Decryption failed: {e}")
             raise
+    
+    def get_metadata(self, ciphertext: str) -> Optional[Dict[str, Any]]:
+        """
+        Extract metadata from encrypted package without decrypting.
+        
+        Args:
+            ciphertext: Encrypted data (possibly with metadata)
+        
+        Returns:
+            Metadata dict if present, None otherwise
+        """
+        try:
+            package = json.loads(ciphertext)
+            return package.get("metadata")
+        except json.JSONDecodeError:
+            return None
     
     def get_key_info(self) -> Dict[str, Any]:
         """
