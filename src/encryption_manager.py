@@ -10,6 +10,7 @@ import base64
 import os
 import json
 import hashlib
+import secrets
 from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime
@@ -300,27 +301,50 @@ class EncryptionManager:
             return False
     
     @staticmethod
-    def derive_key_from_passphrase(passphrase: str, salt: Optional[bytes] = None) -> tuple[bytes, bytes]:
+    def derive_key_from_passphrase(
+        passphrase: str,
+        salt: Optional[bytes] = None,
+        iterations: int = 600000  # OWASP 2023 recommendation
+    ) -> Dict[str, str]:
         """
-        Derive an encryption key from a passphrase.
+        Derive an encryption key from a passphrase using PBKDF2.
         Useful for environments where you can't store a key file.
         
-        Returns: (derived_key, salt)
+        IMPORTANT: You MUST store the returned salt! Without it, the key cannot be derived again.
+        
+        Args:
+            passphrase: User passphrase to derive key from
+            salt: Salt for key derivation (if None, generates random salt)
+            iterations: Number of PBKDF2 iterations (default: 600,000)
+        
+        Returns:
+            Dictionary containing:
+            - key: Base64-encoded derived key (ready for Fernet)
+            - salt: Base64-encoded salt (MUST BE STORED)
+            - iterations: Number of iterations used
+            - algorithm: Algorithm used for derivation
         """
         if salt is None:
-            salt = os.urandom(16)
+            salt = secrets.token_bytes(32)  # 256 bits
         
         kdf = PBKDF2(
             algorithm=hashes.SHA256(),
-            length=32,
+            length=32,  # Fernet requires 32 bytes
             salt=salt,
-            iterations=100000,
+            iterations=iterations,
             backend=default_backend()
         )
         
-        key = base64.urlsafe_b64encode(kdf.derive(passphrase.encode()))
-        return key, salt
-
+        # Derive key and encode for Fernet
+        derived_key = kdf.derive(passphrase.encode('utf-8'))
+        fernet_key = base64.urlsafe_b64encode(derived_key)
+        
+        return {
+            "key": fernet_key.decode('utf-8'),
+            "salt": base64.b64encode(salt).decode('utf-8'),
+            "iterations": iterations,
+            "algorithm": "PBKDF2-SHA256"
+        }
 
 class SecretMasker:
     """Utility for masking secrets in logs and UI"""
