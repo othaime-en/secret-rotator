@@ -199,6 +199,3 @@ class BackupManager:
         
         return metadata
 
-
-backups = BackupManager().export_backup_metadata()
-print(backups)
