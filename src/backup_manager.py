@@ -413,3 +413,67 @@ class BackupIntegrityChecker:
         #         priority="high"
         #     )
 
+    def verify_backup_checksums(self) -> Dict[str, Any]:
+        """
+        Verify backup checksums if they exist.
+        More lightweight than full decryption verification.
+        """
+        report = {
+            "timestamp": datetime.now().isoformat(),
+            "backups_checked": 0,
+            "checksum_matches": 0,
+            "checksum_mismatches": 0,
+            "no_checksum": 0,
+            "errors": []
+        }
+        
+        all_backups = self.backup_manager.list_backups(mask_values=False)
+        
+        for backup in all_backups:
+            backup_file = backup['backup_file']
+            report["backups_checked"] += 1
+            
+            try:
+                current_checksum = self._calculate_file_checksum(backup_file)
+                
+                # Check if backup has stored checksum
+                with open(backup_file, 'r') as f:
+                    backup_data = json.load(f)
+                
+                stored_checksum = backup_data.get('checksum')
+                
+                if stored_checksum:
+                    if current_checksum == stored_checksum:
+                        report["checksum_matches"] += 1
+                    else:
+                        report["checksum_mismatches"] += 1
+                        logger.warning(
+                            f"Checksum mismatch for {backup_file}: "
+                            f"expected {stored_checksum}, got {current_checksum}"
+                        )
+                else:
+                    report["no_checksum"] += 1
+                    # Add checksum if missing
+                    backup_data['checksum'] = current_checksum
+                    with open(backup_file, 'w') as f:
+                        json.dump(backup_data, f, indent=2)
+                    logger.info(f"Added checksum to {backup_file}")
+            
+            except Exception as e:
+                report["errors"].append({
+                    "backup_file": backup_file,
+                    "error": str(e)
+                })
+                logger.error(f"Error checking checksum for {backup_file}: {e}")
+        
+        return report
+    
+    def _calculate_file_checksum(self, file_path: str) -> str:
+        """Calculate SHA-256 checksum of file"""
+        sha256 = hashlib.sha256()
+        
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                sha256.update(chunk)
+        
+        return sha256.hexdigest()
