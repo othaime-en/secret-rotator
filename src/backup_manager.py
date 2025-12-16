@@ -1,7 +1,7 @@
 import json
 import hashlib
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 from utils.logger import logger
@@ -306,4 +306,110 @@ class BackupManager:
             logger.error(f"Error verifying backup checksum: {e}")
             return False, f"error: {str(e)}"
         
+
+class BackupIntegrityChecker:
+    """Verify backup integrity on a scheduled basis"""
+    
+    def __init__(self, backup_manager):
+        self.backup_manager = backup_manager
+        self.verification_log_file = Path("logs/backup_verification.log")
+        self.verification_log_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    def verify_all_backups(self) -> Dict[str, Any]:
+        """
+        Verify integrity of all backups.
+        Returns a report with status of each backup.
+        """
+        logger.info("Starting scheduled backup integrity verification")
+        
+        report = {
+            "timestamp": datetime.now().isoformat(),
+            "total_backups": 0,
+            "verified": 0,
+            "failed": 0,
+            "corrupted": [],
+            "errors": []
+        }
+        
+        try:
+            # Get all backups
+            all_backups = self.backup_manager.list_backups(mask_values=False)
+            report["total_backups"] = len(all_backups)
+            
+            for backup in all_backups:
+                backup_file = backup['backup_file']
+                secret_id = backup['secret_id']
+                
+                try:
+                    # Verify this backup
+                    is_valid = self.backup_manager.verify_backup_integrity(backup_file)
+                    
+                    if is_valid:
+                        report["verified"] += 1
+                        logger.debug(f"Backup verified: {backup_file}")
+                    else:
+                        report["failed"] += 1
+                        report["corrupted"].append({
+                            "backup_file": backup_file,
+                            "secret_id": secret_id,
+                            "timestamp": backup.get('timestamp'),
+                            "reason": "integrity_check_failed"
+                        })
+                        logger.error(f"Backup integrity check failed: {backup_file}")
+                
+                except Exception as e:
+                    report["failed"] += 1
+                    report["errors"].append({
+                        "backup_file": backup_file,
+                        "secret_id": secret_id,
+                        "error": str(e)
+                    })
+                    logger.error(f"Error verifying backup {backup_file}: {e}")
+            
+            # Log the report
+            self._log_verification_report(report)
+            
+            # Alert if there are failures
+            if report["failed"] > 0:
+                self._alert_verification_failures(report)
+            
+            logger.info(
+                f"Backup verification complete: "
+                f"{report['verified']}/{report['total_backups']} verified, "
+                f"{report['failed']} failed"
+            )
+            
+            return report
+            
+        except Exception as e:
+            logger.error(f"Backup verification failed: {e}")
+            report["errors"].append({
+                "error": str(e),
+                "context": "verification_process"
+            })
+            return report
+    
+    def _log_verification_report(self, report: Dict[str, Any]):
+        """Log verification report to file"""
+        try:
+            with open(self.verification_log_file, 'a') as f:
+                f.write(json.dumps(report) + "\n")
+        except Exception as e:
+            logger.error(f"Failed to log verification report: {e}")
+    
+    def _alert_verification_failures(self, report: Dict[str, Any]):
+        """Alert administrators about verification failures"""
+        # This should integrate with our notification system
+        logger.warning(
+            f"ALERT: {report['failed']} backup(s) failed verification. "
+            f"See {self.verification_log_file} for details."
+        )
+        
+        # TODO: Send email/slack notification
+        # if self.notification_manager:
+        #     self.notification_manager.send_alert(
+        #         subject="Backup Verification Failures",
+        #         message=f"{report['failed']} backups failed verification",
+        #         priority="high"
+        #     )
 
