@@ -501,3 +501,41 @@ class BackupIntegrityChecker:
             logger.error(f"Error reading verification history: {e}")
         
         return sorted(history, key=lambda x: x['timestamp'], reverse=True)
+
+    def get_backup_health_metrics(self) -> Dict[str, Any]:
+        """Get overall backup health metrics"""
+        recent_verifications = self.get_verification_history(days=7)
+        
+        if not recent_verifications:
+            return {
+                "status": "unknown",
+                "message": "No recent verifications",
+                "last_verification": None
+            }
+        
+        latest = recent_verifications[0]
+        
+        # Calculate success rate
+        total_backups = latest.get('total_backups', 0)
+        verified = latest.get('verified', 0)
+        success_rate = (verified / total_backups * 100) if total_backups > 0 else 0
+        
+        # Determine health status
+        if success_rate == 100:
+            status = "healthy"
+        elif success_rate >= 95:
+            status = "warning"
+        else:
+            status = "critical"
+        
+        return {
+            "status": status,
+            "success_rate": round(success_rate, 2),
+            "total_backups": total_backups,
+            "verified": verified,
+            "failed": latest.get('failed', 0),
+            "last_verification": latest.get('timestamp'),
+            "recent_corrupted": sum(
+                len(v.get('corrupted', [])) for v in recent_verifications
+            )
+        }
