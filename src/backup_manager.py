@@ -3,7 +3,7 @@ import hashlib
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 from utils.logger import logger
 from encryption_manager import EncryptionManager, SecretMasker
 
@@ -477,3 +477,27 @@ class BackupIntegrityChecker:
                 sha256.update(chunk)
         
         return sha256.hexdigest()
+
+    def get_verification_history(self, days: int = 30) -> List[Dict[str, Any]]:
+        """Get verification history for the last N days"""
+        if not self.verification_log_file.exists():
+            return []
+        
+        cutoff = datetime.now() - timedelta(days=days)
+        history = []
+        
+        try:
+            with open(self.verification_log_file, 'r') as f:
+                for line in f:
+                    try:
+                        report = json.loads(line)
+                        report_time = datetime.fromisoformat(report['timestamp'])
+                        
+                        if report_time > cutoff:
+                            history.append(report)
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+        except Exception as e:
+            logger.error(f"Error reading verification history: {e}")
+        
+        return sorted(history, key=lambda x: x['timestamp'], reverse=True)
