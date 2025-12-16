@@ -1,4 +1,5 @@
 import json
+import hashlib
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -198,4 +199,64 @@ class BackupManager:
         }
         
         return metadata
+
+    def create_backup_with_checksum(
+        self, 
+        secret_id: str, 
+        old_value: str, 
+        new_value: str
+    ) -> str:
+        """Create backup with checksum for integrity verification"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        backup_filename = f"{secret_id}_{timestamp}.json"
+        backup_path = self.backup_dir / backup_filename
+        
+        # Prepare backup data
+        backup_data = {
+            "secret_id": secret_id,
+            "timestamp": timestamp,
+            "old_value": old_value,
+            "new_value": new_value,
+            "backup_created": datetime.now().isoformat(),
+            "encrypted": self.encrypt_backups
+        }
+        
+        # Encrypt if needed
+        if self.encrypt_backups and self.encryption_manager:
+            try:
+                backup_data["old_value"] = self.encryption_manager.encrypt(old_value)
+                backup_data["new_value"] = self.encryption_manager.encrypt(new_value)
+            except Exception as e:
+                logger.error(f"Failed to encrypt backup for {secret_id}: {e}")
+                raise
+        
+        try:
+            # Write backup
+            with open(backup_path, 'w') as f:
+                json.dump(backup_data, f, indent=2)
+            
+            # Calculate and add checksum
+            checksum = self._calculate_backup_checksum(backup_path)
+            backup_data['checksum'] = checksum
+            
+            # Rewrite with checksum
+            with open(backup_path, 'w') as f:
+                json.dump(backup_data, f, indent=2)
+            
+            logger.info(f"Created backup with checksum for {secret_id}: {backup_path}")
+            return str(backup_path)
+            
+        except Exception as e:
+            logger.error(f"Failed to create backup for {secret_id}: {e}")
+            raise
+    
+    def _calculate_backup_checksum(self, backup_path: Path) -> str:
+        """Calculate SHA-256 checksum of backup file"""
+        sha256 = hashlib.sha256()
+        
+        with open(backup_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                sha256.update(chunk)
+        
+        return sha256.hexdigest()
 
