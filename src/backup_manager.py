@@ -3,7 +3,7 @@ import hashlib
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from utils.logger import logger
 from encryption_manager import EncryptionManager, SecretMasker
 
@@ -259,4 +259,51 @@ class BackupManager:
                 sha256.update(chunk)
         
         return sha256.hexdigest()
+
+    def verify_backup_with_checksum(self, backup_file: str) -> Tuple[bool, str]:
+        """
+        Verify backup using stored checksum.
+        Returns (is_valid, reason)
+        """
+        backup_path = Path(backup_file)
+        
+        if not backup_path.exists():
+            return False, "file_not_found"
+        
+        try:
+            with open(backup_path, 'r') as f:
+                backup_data = json.load(f)
+            
+            stored_checksum = backup_data.get('checksum')
+            
+            if not stored_checksum:
+                # No checksum stored, fall back to full verification
+                return self.verify_backup_integrity(backup_file), "no_checksum_stored"
+            
+            # Temporarily remove checksum for calculation
+            temp_data = backup_data.copy()
+            temp_data.pop('checksum', None)
+            
+            # Write temporary file without checksum
+            temp_path = backup_path.with_suffix('.tmp')
+            with open(temp_path, 'w') as f:
+                json.dump(temp_data, f, indent=2)
+            
+            calculated_checksum = self._calculate_backup_checksum(temp_path)
+            
+            temp_path.unlink()
+            
+            if calculated_checksum == stored_checksum:
+                return True, "checksum_valid"
+            else:
+                logger.error(
+                    f"Checksum mismatch for {backup_file}: "
+                    f"expected {stored_checksum}, got {calculated_checksum}"
+                )
+                return False, "checksum_mismatch"
+                
+        except Exception as e:
+            logger.error(f"Error verifying backup checksum: {e}")
+            return False, f"error: {str(e)}"
+        
 
