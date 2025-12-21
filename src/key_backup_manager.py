@@ -386,6 +386,71 @@ class MasterKeyBackupManager:
         
         return str(backup_file)
     
+    def list_backups(self) -> List[Dict[str, Any]]:
+        """List all available key backups"""
+        backups = []
+        
+        # Find encrypted backups
+        for backup_file in self.backup_dir.glob("*.enc"):
+            try:
+                with open(backup_file, 'r') as f:
+                    backup_data = json.load(f)
+                
+                backups.append({
+                    "type": "encrypted",
+                    "file": str(backup_file),
+                    "created_at": backup_data.get("created_at"),
+                    "key_id": backup_data.get("key_id"),
+                    "status": "available"
+                })
+            except Exception as e:
+                logger.warning(f"Error reading backup {backup_file}: {e}")
+        
+        # Find share backups (group by timestamp)
+        share_groups = {}
+        for share_file in self.backup_dir.glob("*.share"):
+            try:
+                with open(share_file, 'r') as f:
+                    share_data = json.load(f)
+                
+                timestamp = share_data.get("created_at")
+                if timestamp not in share_groups:
+                    share_groups[timestamp] = {
+                        "type": "split_key",
+                        "created_at": timestamp,
+                        "threshold": share_data.get("threshold"),
+                        "total_shares": share_data.get("total_shares"),
+                        "key_id": share_data.get("key_id"),
+                        "shares": []
+                    }
+                
+                share_groups[timestamp]["shares"].append(str(share_file))
+            except Exception as e:
+                logger.warning(f"Error reading share {share_file}: {e}")
+        
+        # Add share groups to backups
+        for share_group in share_groups.values():
+            share_group["available_shares"] = len(share_group["shares"])
+            share_group["status"] = (
+                "complete" if share_group["available_shares"] >= share_group["threshold"]
+                else "incomplete"
+            )
+            backups.append(share_group)
+        
+        # Find plaintext backups
+        for backup_file in self.backup_dir.glob("*.key"):
+            if backup_file.name != self.master_key_file.name:
+                stat = backup_file.stat()
+                backups.append({
+                    "type": "plaintext",
+                    "file": str(backup_file),
+                    "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    "status": "available",
+                    "warning": "unencrypted"
+                })
+        
+        return sorted(backups, key=lambda x: x.get("created_at", ""), reverse=True)
+    
     def _calculate_checksum(self, data: bytes) -> str:
         """Calculate SHA-256 checksum"""
         return hashlib.sha256(data).hexdigest()
