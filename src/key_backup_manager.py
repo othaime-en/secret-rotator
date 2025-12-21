@@ -192,6 +192,82 @@ class MasterKeyBackupManager:
             logger.error(f"Failed to restore from backup: {e}")
             raise
     
+    def create_split_key_backup(
+        self,
+        num_shares: int = 5,
+        threshold: int = 3
+    ) -> List[str]:
+        """
+        Create a Shamir's Secret Sharing backup of the master key.
+        
+        Splits the key into N shares where any K shares can reconstruct it.
+        This allows distributed storage with no single point of failure.
+        
+        Args:
+            num_shares: Total number of shares to create
+            threshold: Minimum number of shares needed to reconstruct
+            
+        Returns:
+            List of share file paths
+        """
+        try:
+            from secretsharing import PlaintextToHexSecretSharer
+        except ImportError:
+            logger.error(
+                "secretsharing library not installed. "
+                "Install with: pip install secretsharing"
+            )
+            raise
+        
+        if threshold > num_shares:
+            raise ValueError("Threshold cannot exceed number of shares")
+        
+        if not self.master_key_file.exists():
+            raise FileNotFoundError(f"Master key not found: {self.master_key_file}")
+        
+        # Read the master key
+        with open(self.master_key_file, 'r') as f:
+            key_data = json.load(f)
+        
+        # Convert to hex string for splitting
+        key_json = json.dumps(key_data)
+        key_hex = key_json.encode().hex()
+        
+        # Split the key
+        shares = PlaintextToHexSecretSharer.split_secret(key_hex, threshold, num_shares)
+        
+        # Save each share
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        share_files = []
+        
+        for i, share in enumerate(shares, 1):
+            share_file = self.backup_dir / f"master_key_share_{i}_of_{num_shares}_{timestamp}.share"
+            
+            share_package = {
+                "version": 1,
+                "share_number": i,
+                "total_shares": num_shares,
+                "threshold": threshold,
+                "created_at": datetime.now().isoformat(),
+                "share_data": share,
+                "key_id": key_data.get("metadata", {}).get("key_id")
+            }
+            
+            with open(share_file, 'w') as f:
+                json.dump(share_package, f, indent=2)
+            
+            os.chmod(share_file, 0o600)
+            share_files.append(str(share_file))
+            
+            logger.info(f"Created key share {i}/{num_shares}: {share_file}")
+        
+        logger.warning(
+            f"IMPORTANT: Distribute these {num_shares} shares to different secure locations. "
+            f"Any {threshold} shares can reconstruct the key."
+        )
+        
+        return share_files
+    
     def _calculate_checksum(self, data: bytes) -> str:
         """Calculate SHA-256 checksum"""
         return hashlib.sha256(data).hexdigest()
