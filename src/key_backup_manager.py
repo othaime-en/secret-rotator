@@ -351,6 +351,41 @@ class MasterKeyBackupManager:
         
         return True
     
+    def create_plaintext_backup(self, backup_name: Optional[str] = None) -> str:
+        """
+        Create an unencrypted backup of the master key.
+        
+        WARNING: Use only for immediate manual secure storage.
+        The backup file must be stored in a physically secure location.
+        
+        Args:
+            backup_name: Optional name for the backup file
+            
+        Returns:
+            Path to the backup file
+        """
+        if not self.master_key_file.exists():
+            raise FileNotFoundError(f"Master key not found: {self.master_key_file}")
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_name = backup_name or f"master_key_backup_{timestamp}"
+        backup_file = self.backup_dir / f"{backup_name}.key"
+        
+        # Copy the key file
+        import shutil
+        shutil.copy2(self.master_key_file, backup_file)
+        
+        # Set restrictive permissions
+        os.chmod(backup_file, 0o600)
+        
+        logger.warning(
+            f"Created UNENCRYPTED key backup: {backup_file}\n"
+            f"WARNING: This file must be stored in a physically secure location!\n"
+            f"Consider using encrypted or split-key backups instead."
+        )
+        
+        return str(backup_file)
+    
     def _calculate_checksum(self, data: bytes) -> str:
         """Calculate SHA-256 checksum"""
         return hashlib.sha256(data).hexdigest()
