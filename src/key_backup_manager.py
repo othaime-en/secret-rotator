@@ -268,6 +268,89 @@ class MasterKeyBackupManager:
         
         return share_files
     
+    def restore_from_split_key(
+        self,
+        share_files: List[str],
+        verify_only: bool = False
+    ) -> bool:
+        """
+        Restore master key from Shamir shares.
+        
+        Args:
+            share_files: List of paths to share files
+            verify_only: If True, only verify shares can reconstruct, don't restore
+            
+        Returns:
+            True if successful
+        """
+        try:
+            from secretsharing import PlaintextToHexSecretSharer
+        except ImportError:
+            logger.error("secretsharing library not installed")
+            raise
+        
+        if not share_files:
+            raise ValueError("No share files provided")
+        
+        # Read all shares
+        shares = []
+        threshold = None
+        key_id = None
+        
+        for share_file in share_files:
+            if not Path(share_file).exists():
+                raise FileNotFoundError(f"Share file not found: {share_file}")
+            
+            with open(share_file, 'r') as f:
+                share_package = json.load(f)
+            
+            shares.append(share_package['share_data'])
+            
+            if threshold is None:
+                threshold = share_package['threshold']
+            
+            if key_id is None:
+                key_id = share_package.get('key_id')
+        
+        if len(shares) < threshold:
+            raise ValueError(
+                f"Insufficient shares: need {threshold}, have {len(shares)}"
+            )
+        
+        logger.info(f"Reconstructing key from {len(shares)} shares (threshold: {threshold})")
+        
+        # Reconstruct the key
+        reconstructed_hex = PlaintextToHexSecretSharer.recover_secret(shares)
+        reconstructed_json = bytes.fromhex(reconstructed_hex).decode()
+        key_data = json.loads(reconstructed_json)
+        
+        # Verify key ID matches if available
+        if key_id and key_data.get("metadata", {}).get("key_id") != key_id:
+            logger.warning("Reconstructed key ID doesn't match expected key ID")
+        
+        logger.info("Successfully reconstructed master key from shares")
+        
+        if verify_only:
+            logger.info("Verification successful - shares can reconstruct key")
+            return True
+        
+        # Create backup of current key before restoring
+        if self.master_key_file.exists():
+            current_backup = self.master_key_file.with_suffix('.key.pre_restore')
+            import shutil
+            shutil.copy2(self.master_key_file, current_backup)
+            logger.info(f"Backed up current key to: {current_backup}")
+        
+        # Restore the master key
+        with open(self.master_key_file, 'w') as f:
+            json.dump(key_data, f, indent=2)
+        
+        os.chmod(self.master_key_file, 0o600)
+        
+        logger.info("Successfully restored master key from shares")
+        
+        return True
+    
     def _calculate_checksum(self, data: bytes) -> str:
         """Calculate SHA-256 checksum"""
         return hashlib.sha256(data).hexdigest()
