@@ -451,6 +451,55 @@ class MasterKeyBackupManager:
         
         return sorted(backups, key=lambda x: x.get("created_at", ""), reverse=True)
     
+    def verify_backup(self, backup_file: str, passphrase: Optional[str] = None) -> bool:
+        """
+        Verify a backup can be successfully restored.
+        
+        Args:
+            backup_file: Path to backup file
+            passphrase: Required for encrypted backups
+            
+        Returns:
+            True if backup is valid
+        """
+        backup_path = Path(backup_file)
+        
+        if not backup_path.exists():
+            logger.error(f"Backup file not found: {backup_file}")
+            return False
+        
+        try:
+            if backup_path.suffix == '.enc':
+                if not passphrase:
+                    logger.error("Passphrase required for encrypted backup")
+                    return False
+                return self.restore_from_encrypted_backup(
+                    backup_file, 
+                    passphrase, 
+                    verify_only=True
+                )
+            
+            elif backup_path.suffix == '.share':
+                logger.warning(
+                    "Cannot verify single share - need threshold shares to verify"
+                )
+                return False
+            
+            elif backup_path.suffix == '.key':
+                # Verify it's valid JSON
+                with open(backup_path, 'r') as f:
+                    json.load(f)
+                logger.info("Plaintext backup verified")
+                return True
+            
+            else:
+                logger.error(f"Unknown backup type: {backup_path.suffix}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Backup verification failed: {e}")
+            return False
+    
     def _calculate_checksum(self, data: bytes) -> str:
         """Calculate SHA-256 checksum"""
         return hashlib.sha256(data).hexdigest()
