@@ -503,3 +503,93 @@ class MasterKeyBackupManager:
     def _calculate_checksum(self, data: bytes) -> str:
         """Calculate SHA-256 checksum"""
         return hashlib.sha256(data).hexdigest()
+    
+    def export_backup_instructions(self, output_file: str = "KEY_BACKUP_INSTRUCTIONS.txt"):
+        """Generate human-readable backup instructions"""
+        instructions = f"""
+=============================================================================
+MASTER KEY BACKUP AND RECOVERY INSTRUCTIONS
+Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+=============================================================================
+
+IMPORTANT: Read and follow these instructions carefully. Losing access to
+your master encryption key means ALL encrypted secrets become unrecoverable.
+
+BACKUP LOCATIONS
+================
+Master Key File: {self.master_key_file}
+Backup Directory: {self.backup_dir}
+
+AVAILABLE BACKUP TYPES
+=======================
+
+1. ENCRYPTED BACKUP (Recommended for remote storage)
+   - Protected by passphrase
+   - Can be stored in cloud storage
+   - Requires strong passphrase (20+ characters)
+   
+   Create: python -c "from key_backup_manager import MasterKeyBackupManager; \\
+                      mgr = MasterKeyBackupManager(); \\
+                      mgr.create_encrypted_key_backup('YOUR_STRONG_PASSPHRASE')"
+   
+   Restore: python -c "from key_backup_manager import MasterKeyBackupManager; \\
+                       mgr = MasterKeyBackupManager(); \\
+                       mgr.restore_from_encrypted_backup('backup_file.enc', 'YOUR_PASSPHRASE')"
+
+2. SPLIT KEY BACKUP (Recommended for distributed storage)
+   - Key split into multiple shares using Shamir's Secret Sharing
+   - Any K of N shares can reconstruct the key
+   - No single person/location has complete key
+   
+   Create: python -c "from key_backup_manager import MasterKeyBackupManager; \\
+                      mgr = MasterKeyBackupManager(); \\
+                      mgr.create_split_key_backup(num_shares=5, threshold=3)"
+   
+   Restore: python -c "from key_backup_manager import MasterKeyBackupManager; \\
+                       mgr = MasterKeyBackupManager(); \\
+                       mgr.restore_from_split_key(['share1.share', 'share2.share', 'share3.share'])"
+
+3. PLAINTEXT BACKUP (Use only for immediate physical storage)
+   - Unencrypted copy of master key
+   - MUST be stored in physically secure location (safe, vault)
+   - Should be used only as last resort
+   
+   Create: python -c "from key_backup_manager import MasterKeyBackupManager; \\
+                      mgr = MasterKeyBackupManager(); \\
+                      mgr.create_plaintext_backup()"
+
+BACKUP BEST PRACTICES
+======================
+1. Create backups IMMEDIATELY after key generation
+2. Test backup restoration in non-production environment
+3. Store backups in multiple secure locations:
+   - Physical safe/vault (plaintext backup)
+   - Password manager (encrypted backup passphrase)
+   - Distributed across trusted parties (split key shares)
+4. Document backup locations and recovery procedures
+5. Regularly verify backups are accessible
+6. Update backups after key rotation
+
+RECOVERY PROCEDURES
+===================
+If master key is lost:
+1. Locate your backup files
+2. Verify backup integrity before restoration
+3. Stop the secret rotation application
+4. Restore master key from backup
+5. Restart the application
+6. Verify application can decrypt existing secrets
+
+EMERGENCY CONTACTS
+==================
+System Administrator: [YOUR NAME/EMAIL]
+Backup Custodians: [LIST PEOPLE WHO HAVE ACCESS TO BACKUPS]
+"""
+        
+        output_path = Path(output_file)
+        with open(output_path, 'w') as f:
+            f.write(instructions)
+        
+        logger.info(f"Backup instructions written to: {output_path}")
+        return str(output_path)
+    
