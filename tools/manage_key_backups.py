@@ -75,6 +75,54 @@ def create_encrypted_backup(args):
         sys.exit(1)
 
 
+def create_split_backup(args):
+    """Create a split key backup using Shamir's Secret Sharing"""
+    manager = MasterKeyBackupManager(
+        master_key_file=args.key_file,
+        backup_dir=args.backup_dir
+    )
+    
+    print("\n" + "="*70)
+    print("CREATE SPLIT KEY BACKUP (Shamir's Secret Sharing)")
+    print("="*70)
+    print(f"\nThis will split your master key into {args.shares} shares.")
+    print(f"Any {args.threshold} of these shares can reconstruct the key.")
+    print("\nIMPORTANT:")
+    print(f"  - Distribute the {args.shares} shares to different secure locations")
+    print(f"  - No single location will have the complete key")
+    print(f"  - You need {args.threshold} shares to recover the key")
+    print()
+    
+    response = input(f"Create {args.shares} shares (threshold {args.threshold})? (yes/no): ")
+    if response.lower() != 'yes':
+        print("Cancelled.")
+        return
+    
+    try:
+        share_files = manager.create_split_key_backup(
+            num_shares=args.shares,
+            threshold=args.threshold
+        )
+        
+        print(f"\n✓ SUCCESS: Created {len(share_files)} key shares")
+        print(f"\nShare files:")
+        for i, share_file in enumerate(share_files, 1):
+            print(f"  {i}. {share_file}")
+        
+        print(f"\nNext steps:")
+        print(f"  1. Distribute shares to {args.shares} different secure locations:")
+        print(f"     - Physical safes in different buildings")
+        print(f"     - Trusted individuals")
+        print(f"     - Different cloud storage accounts")
+        print(f"  2. Document who has each share")
+        print(f"  3. Test restoration with {args.threshold} shares:")
+        print(f"     python {sys.argv[0]} restore-split share1.share share2.share ...")
+        
+    except Exception as e:
+        print(f"\n✗ ERROR: Failed to create split backup: {e}")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Manage master encryption key backups",
@@ -102,6 +150,14 @@ def main():
     )
     parser_encrypted.add_argument('--name', help='Optional backup name')
     
+    # Create split key backup
+    parser_split = subparsers.add_parser(
+        'create-split',
+        help='Create split key backup (Shamir Secret Sharing)'
+    )
+    parser_split.add_argument('--shares', type=int, default=5, help='Number of shares (default: 5)')
+    parser_split.add_argument('--threshold', type=int, default=3, help='Threshold to reconstruct (default: 3)')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -111,6 +167,7 @@ def main():
     # Execute command
     commands = {
         'create-encrypted': create_encrypted_backup,
+        'create-split': create_split_backup,
     }
     
     commands[args.command](args)
