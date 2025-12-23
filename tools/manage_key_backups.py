@@ -123,6 +123,41 @@ def create_split_backup(args):
         sys.exit(1)
 
 
+def create_plaintext_backup(args):
+    """Create a plaintext backup (for immediate physical storage)"""
+    manager = MasterKeyBackupManager(
+        master_key_file=args.key_file,
+        backup_dir=args.backup_dir
+    )
+    
+    print("\n" + "="*70)
+    print("CREATE PLAINTEXT MASTER KEY BACKUP")
+    print("="*70)
+    print("\n⚠️  WARNING: This creates an UNENCRYPTED backup!")
+    print("\nThis backup type should ONLY be used if:")
+    print("  - You will immediately store it in a physical safe/vault")
+    print("  - You cannot use encrypted or split-key backups")
+    print("\nConsider using encrypted or split-key backups instead.")
+    print()
+    
+    response = input("Are you sure you want to create an unencrypted backup? (yes/no): ")
+    if response.lower() != 'yes':
+        print("Cancelled. Consider using: create-encrypted or create-split")
+        return
+    
+    try:
+        backup_file = manager.create_plaintext_backup(backup_name=args.name)
+        
+        print(f"\n✓ SUCCESS: Plaintext backup created")
+        print(f"  Location: {backup_file}")
+        print(f"\n⚠️  CRITICAL: This file is UNENCRYPTED!")
+        print(f"  Store it in a physically secure location immediately!")
+        
+    except Exception as e:
+        print(f"\n✗ ERROR: Failed to create backup: {e}")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Manage master encryption key backups",
@@ -158,6 +193,13 @@ def main():
     parser_split.add_argument('--shares', type=int, default=5, help='Number of shares (default: 5)')
     parser_split.add_argument('--threshold', type=int, default=3, help='Threshold to reconstruct (default: 3)')
     
+    # Create plaintext backup
+    parser_plain = subparsers.add_parser(
+        'create-plaintext',
+        help='Create unencrypted backup (not recommended)'
+    )
+    parser_plain.add_argument('--name', help='Optional backup name')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -168,6 +210,7 @@ def main():
     commands = {
         'create-encrypted': create_encrypted_backup,
         'create-split': create_split_backup,
+        'create-plaintext': create_plaintext_backup,
     }
     
     commands[args.command](args)
