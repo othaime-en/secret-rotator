@@ -198,6 +198,49 @@ def list_backups(args):
             print(f"   ⚠️  WARNING: {backup.get('warning', 'unencrypted')}")
 
 
+def verify_backup(args):
+    """Verify a backup can be restored"""
+    manager = MasterKeyBackupManager(
+        master_key_file=args.key_file,
+        backup_dir=args.backup_dir
+    )
+    
+    print("\n" + "="*70)
+    print("VERIFY BACKUP")
+    print("="*70)
+    print(f"\nVerifying: {args.backup_file}")
+    
+    # Check if encrypted backup
+    if args.backup_file.endswith('.enc'):
+        passphrase = getpass.getpass("\nEnter passphrase: ")
+        
+        try:
+            success = manager.verify_backup(args.backup_file, passphrase)
+            
+            if success:
+                print("\n✓ SUCCESS: Backup is valid and can be restored")
+            else:
+                print("\n✗ ERROR: Backup verification failed")
+                sys.exit(1)
+                
+        except Exception as e:
+            print(f"\n✗ ERROR: Verification failed: {e}")
+            sys.exit(1)
+    else:
+        try:
+            success = manager.verify_backup(args.backup_file)
+            
+            if success:
+                print("\n✓ SUCCESS: Backup is valid")
+            else:
+                print("\n✗ ERROR: Backup verification failed")
+                sys.exit(1)
+                
+        except Exception as e:
+            print(f"\n✗ ERROR: Verification failed: {e}")
+            sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Manage master encryption key backups",
@@ -243,6 +286,10 @@ def main():
     # List backups
     subparsers.add_parser('list', help='List all available backups')
     
+    # Verify backup
+    parser_verify = subparsers.add_parser('verify', help='Verify a backup')
+    parser_verify.add_argument('backup_file', help='Path to backup file')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -255,6 +302,7 @@ def main():
         'create-split': create_split_backup,
         'create-plaintext': create_plaintext_backup,
         'list': list_backups,
+        'verify': verify_backup,
     }
     
     commands[args.command](args)
