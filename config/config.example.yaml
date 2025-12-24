@@ -94,7 +94,13 @@ backup:
   enabled: true
   storage_path: "data/backup/"
   encrypt_backups: true
+  cleanup_time: "03:00"
+  verification_time: "04:00"
+  verify_integrity: true
+  full_verification_enabled: true
+  checksum_verification_enabled: true
   compression: true # gzip compression
+
   retention:
     days: 90
     max_backups_per_secret: 10
