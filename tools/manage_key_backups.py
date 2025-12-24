@@ -241,6 +241,54 @@ def verify_backup(args):
             sys.exit(1)
 
 
+def restore_backup(args):
+    """Restore master key from backup"""
+    manager = MasterKeyBackupManager(
+        master_key_file=args.key_file,
+        backup_dir=args.backup_dir
+    )
+    
+    print("\n" + "="*70)
+    print("RESTORE MASTER KEY FROM BACKUP")
+    print("="*70)
+    print(f"\nBackup file: {args.backup_file}")
+    print("\n⚠️  WARNING: This will replace your current master key!")
+    print("The current key will be backed up before restoration.")
+    
+    response = input("\nContinue with restoration? (yes/no): ")
+    if response.lower() != 'yes':
+        print("Cancelled.")
+        return
+    
+    # Check if encrypted backup
+    if args.backup_file.endswith('.enc'):
+        passphrase = getpass.getpass("\nEnter passphrase: ")
+        
+        try:
+            success = manager.restore_from_encrypted_backup(
+                args.backup_file,
+                passphrase
+            )
+            
+            if success:
+                print("\n✓ SUCCESS: Master key restored from backup")
+                print("\nNext steps:")
+                print("  1. Restart the secret rotation application")
+                print("  2. Verify the application can decrypt existing secrets")
+                print("  3. Check application logs for any issues")
+            else:
+                print("\n✗ ERROR: Restoration failed")
+                sys.exit(1)
+                
+        except Exception as e:
+            print(f"\n✗ ERROR: Restoration failed: {e}")
+            sys.exit(1)
+    else:
+        print("\n✗ ERROR: Only encrypted backups supported for restoration via CLI")
+        print("For plaintext backups, manually copy the file to replace the master key.")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Manage master encryption key backups",
@@ -290,6 +338,10 @@ def main():
     parser_verify = subparsers.add_parser('verify', help='Verify a backup')
     parser_verify.add_argument('backup_file', help='Path to backup file')
     
+    # Restore from backup
+    parser_restore = subparsers.add_parser('restore', help='Restore from encrypted backup')
+    parser_restore.add_argument('backup_file', help='Path to backup file')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -303,6 +355,7 @@ def main():
         'create-plaintext': create_plaintext_backup,
         'list': list_backups,
         'verify': verify_backup,
+        'restore': restore_backup,
     }
     
     commands[args.command](args)
