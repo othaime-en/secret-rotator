@@ -4,16 +4,18 @@ import threading
 from typing import Callable
 from utils.logger import logger
 from config.settings import settings
-from backup_manager import BackupManager
+from backup_manager import BackupManager, BackupIntegrityChecker
 
 class RotationScheduler:
-    """Handle scheduled secret rotations"""
+    """Handle scheduled secret rotations and backup verification"""
     
     def __init__(self, rotation_function: Callable, backup_manager: BackupManager):
         self.rotation_function = rotation_function
         self.backup_manager = backup_manager
         self.running = False
         self.thread = None
+
+        self.integrity_checker = BackupIntegrityChecker(backup_manager)
     
     def setup_schedule(self, schedule_config: str):
         """ Set up rotation schedule """
