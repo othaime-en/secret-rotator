@@ -48,6 +48,18 @@ class RotationScheduler:
             schedule.every().day.at(verification_time).do(self._verify_backup_integrity)
             logger.info(f"Scheduled backup verification: daily at {verification_time}")
         
+        # Schedule weekly full backup verification (Sundays at 05:00)
+        full_verification_enabled = settings.get('backup.full_verification_enabled', True)
+        if full_verification_enabled:
+            schedule.every().sunday.at("05:00").do(self._verify_all_backups_full)
+            logger.info("Scheduled full backup verification: weekly on Sundays at 05:00")
+        
+        # Schedule checksum verification (every 6 hours)
+        checksum_verification_enabled = settings.get('backup.checksum_verification_enabled', True)
+        if checksum_verification_enabled:
+            schedule.every(6).hours.do(self._verify_backup_checksums)
+            logger.info("Scheduled checksum verification: every 6 hours")
+        
         logger.info(f"Scheduled rotation: {schedule_config}")
         logger.info(f"Scheduled backup cleanup: daily at {cleanup_time}")
     
@@ -98,6 +110,57 @@ class RotationScheduler:
             
         except Exception as e:
             logger.error(f"Error in scheduled backup verification: {e}")
+    
+    def _verify_all_backups_full(self):
+        """Run full backup verification (more thorough, weekly)"""
+        try:
+            logger.info("Starting scheduled FULL backup integrity verification")
+            
+            # Run full verification with decryption
+            report = self.integrity_checker.verify_all_backups()
+            
+            # Also verify checksums
+            checksum_report = self.integrity_checker.verify_backup_checksums()
+            
+            logger.info(
+                f"Full backup verification complete:\n"
+                f"  Integrity: {report['verified']}/{report['total_backups']} verified\n"
+                f"  Checksums: {checksum_report['checksum_matches']}/{checksum_report['backups_checked']} matched"
+            )
+            
+            # Generate health report
+            health = self.integrity_checker.get_backup_health_metrics()
+            logger.info(f"Backup system health: {health}")
+            
+            if health['status'] != 'healthy':
+                logger.warning(
+                    f"Backup system health is {health['status']} - "
+                    f"success rate: {health['success_rate']}%"
+                )
+            
+        except Exception as e:
+            logger.error(f"Error in scheduled full backup verification: {e}")
+    
+    def _verify_backup_checksums(self):
+        """Run quick checksum verification"""
+        try:
+            logger.info("Starting scheduled backup checksum verification")
+            report = self.integrity_checker.verify_backup_checksums()
+            
+            logger.info(
+                f"Checksum verification complete: "
+                f"{report['checksum_matches']} matches, "
+                f"{report['checksum_mismatches']} mismatches"
+            )
+            
+            if report['checksum_mismatches'] > 0:
+                logger.error(
+                    f"ALERT: {report['checksum_mismatches']} backup(s) "
+                    f"have checksum mismatches!"
+                )
+            
+        except Exception as e:
+            logger.error(f"Error in scheduled checksum verification: {e}")
     
     def start(self):
         """ Start the scheduler in a background thread"""
