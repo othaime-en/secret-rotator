@@ -289,6 +289,48 @@ def restore_backup(args):
         sys.exit(1)
 
 
+def restore_split_backup(args):
+    """Restore master key from split key shares"""
+    manager = MasterKeyBackupManager(
+        master_key_file=args.key_file,
+        backup_dir=args.backup_dir
+    )
+    
+    print("\n" + "="*70)
+    print("RESTORE FROM SPLIT KEY SHARES")
+    print("="*70)
+    print(f"\nShare files provided: {len(args.share_files)}")
+    
+    # Verify all share files exist
+    for share_file in args.share_files:
+        if not Path(share_file).exists():
+            print(f"\n✗ ERROR: Share file not found: {share_file}")
+            sys.exit(1)
+    
+    print("\n⚠️  WARNING: This will replace your current master key!")
+    
+    response = input("\nContinue with restoration? (yes/no): ")
+    if response.lower() != 'yes':
+        print("Cancelled.")
+        return
+    
+    try:
+        success = manager.restore_from_split_key(args.share_files)
+        
+        if success:
+            print("\n✓ SUCCESS: Master key restored from shares")
+            print("\nNext steps:")
+            print("  1. Restart the secret rotation application")
+            print("  2. Verify the application can decrypt existing secrets")
+        else:
+            print("\n✗ ERROR: Restoration failed")
+            sys.exit(1)
+            
+    except Exception as e:
+        print(f"\n✗ ERROR: Restoration failed: {e}")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Manage master encryption key backups",
@@ -342,6 +384,17 @@ def main():
     parser_restore = subparsers.add_parser('restore', help='Restore from encrypted backup')
     parser_restore.add_argument('backup_file', help='Path to backup file')
     
+    # Restore from split
+    parser_restore_split = subparsers.add_parser(
+        'restore-split',
+        help='Restore from split key shares'
+    )
+    parser_restore_split.add_argument(
+        'share_files',
+        nargs='+',
+        help='Paths to share files'
+    )
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -356,6 +409,7 @@ def main():
         'list': list_backups,
         'verify': verify_backup,
         'restore': restore_backup,
+        'restore-split': restore_split_backup,
     }
     
     commands[args.command](args)
