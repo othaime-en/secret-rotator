@@ -331,6 +331,26 @@ def restore_split_backup(args):
         sys.exit(1)
 
 
+def export_instructions(args):
+    """Export backup instructions document"""
+    manager = MasterKeyBackupManager(
+        master_key_file=args.key_file,
+        backup_dir=args.backup_dir
+    )
+    
+    try:
+        output_file = manager.export_backup_instructions(args.output)
+        print(f"\n✓ SUCCESS: Backup instructions exported to: {output_file}")
+        print("\nReview this document and update with your specific details:")
+        print("  - Emergency contact information")
+        print("  - Backup custodian names")
+        print("  - Storage locations")
+        
+    except Exception as e:
+        print(f"\n✗ ERROR: Failed to export instructions: {e}")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Manage master encryption key backups",
@@ -395,6 +415,17 @@ def main():
         help='Paths to share files'
     )
     
+    # Export instructions
+    parser_export = subparsers.add_parser(
+        'export-instructions',
+        help='Export backup and recovery instructions'
+    )
+    parser_export.add_argument(
+        '--output',
+        default='KEY_BACKUP_INSTRUCTIONS.txt',
+        help='Output file path'
+    )
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -410,6 +441,7 @@ def main():
         'verify': verify_backup,
         'restore': restore_backup,
         'restore-split': restore_split_backup,
+        'export-instructions': export_instructions
     }
     
     commands[args.command](args)
