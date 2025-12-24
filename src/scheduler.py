@@ -169,7 +169,7 @@ class RotationScheduler:
             logger.error(f"Error in scheduled checksum verification: {e}")
     
     def start(self):
-        """ Start the scheduler in a background thread"""
+        """Start the scheduler in a background thread"""
         if self.running:
             logger.warning("Scheduler already running")
             return
@@ -187,7 +187,20 @@ class RotationScheduler:
         logger.info("Rotation scheduler stopped")
     
     def _run_scheduler(self):
-        """ Internal scheduler loop"""
+        """Internal scheduler loop"""
         while self.running:
             schedule.run_pending()
             time.sleep(60)  # Check every minute
+    
+    def run_verification_now(self):
+        """Run backup verification immediately (for manual triggering)"""
+        logger.info("Running manual backup verification")
+        return self.integrity_checker.verify_all_backups()
+    
+    def get_verification_history(self, days: int = 30):
+        """Get backup verification history"""
+        return self.integrity_checker.get_verification_history(days)
+    
+    def get_backup_health(self):
+        """Get current backup health metrics"""
+        return self.integrity_checker.get_backup_health_metrics()
