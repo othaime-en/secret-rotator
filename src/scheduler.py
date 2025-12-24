@@ -37,10 +37,11 @@ class RotationScheduler:
                     schedule.every(interval).hours.do(self._run_rotation)
         
         # Schedule backup cleanup (daily at 03:00)
-        schedule.every().day.at("03:00").do(self._cleanup_backups)
+        cleanup_time = settings.get('backup.cleanup_time', "03:00")
+        schedule.every().day.at(cleanup_time).do(self._cleanup_backups)
         
         logger.info(f"Scheduled rotation: {schedule_config}")
-        logger.info("Scheduled backup cleanup: daily at 03:00")
+        logger.info(f"Scheduled backup cleanup: daily at {cleanup_time}")
     
     def _run_rotation(self):
         """Internal method to run rotation with error handling"""
@@ -79,8 +80,12 @@ class RotationScheduler:
     def _cleanup_backups(self):
         """Internal method to clean up old backups"""
         try:
-            days_to_keep = settings.get('rotation.backup_retention_days', 30)
-            self.backup_manager.cleanup_old_backups(days_to_keep)
-            logger.info(f"Scheduled backup cleanup completed, kept backups for {days_to_keep} days")
+            days_to_keep = settings.get('backup.retention.days', 90)
+            removed_count = self.backup_manager.cleanup_old_backups(days_to_keep)
+            logger.info(
+                f"Scheduled backup cleanup completed: "
+                f"removed {removed_count} old backups, "
+                f"kept backups for {days_to_keep} days"
+            )
         except Exception as e:
             logger.error(f"Error in scheduled backup cleanup: {e}")
