@@ -158,6 +158,46 @@ def create_plaintext_backup(args):
         sys.exit(1)
 
 
+def list_backups(args):
+    """List all available backups"""
+    manager = MasterKeyBackupManager(
+        master_key_file=args.key_file,
+        backup_dir=args.backup_dir
+    )
+    
+    print("\n" + "="*70)
+    print("AVAILABLE MASTER KEY BACKUPS")
+    print("="*70)
+    
+    backups = manager.list_backups()
+    
+    if not backups:
+        print("\nNo backups found.")
+        print(f"Backup directory: {args.backup_dir}")
+        return
+    
+    for i, backup in enumerate(backups, 1):
+        print(f"\n{i}. {backup['type'].upper()} BACKUP")
+        print(f"   Created: {backup.get('created_at', 'unknown')}")
+        
+        if backup['type'] == 'encrypted':
+            print(f"   File: {backup['file']}")
+            print(f"   Key ID: {backup.get('key_id', 'unknown')}")
+            print(f"   Status: {backup['status']}")
+            
+        elif backup['type'] == 'split_key':
+            print(f"   Threshold: {backup['threshold']} of {backup['total_shares']} shares")
+            print(f"   Available shares: {backup['available_shares']}")
+            print(f"   Key ID: {backup.get('key_id', 'unknown')}")
+            print(f"   Status: {backup['status']}")
+            if backup['status'] == 'incomplete':
+                print(f"   ⚠️  WARNING: Need {backup['threshold']} shares to restore, only have {backup['available_shares']}")
+            
+        elif backup['type'] == 'plaintext':
+            print(f"   File: {backup['file']}")
+            print(f"   ⚠️  WARNING: {backup.get('warning', 'unencrypted')}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Manage master encryption key backups",
@@ -200,6 +240,9 @@ def main():
     )
     parser_plain.add_argument('--name', help='Optional backup name')
     
+    # List backups
+    subparsers.add_parser('list', help='List all available backups')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -211,6 +254,7 @@ def main():
         'create-encrypted': create_encrypted_backup,
         'create-split': create_split_backup,
         'create-plaintext': create_plaintext_backup,
+        'list': list_backups,
     }
     
     commands[args.command](args)
