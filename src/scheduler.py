@@ -70,6 +70,12 @@ class RotationScheduler:
             results = self.rotation_function()
             successful = sum(1 for result in results.values() if result)
             logger.info(f"Scheduled rotation complete: {successful}/{len(results)} successful")
+            
+            # If there were failures, run backup verification to ensure backups are intact
+            if successful < len(results):
+                logger.info("Some rotations failed, verifying backup integrity")
+                self._verify_backup_integrity()
+                
         except Exception as e:
             logger.error(f"Error in scheduled rotation: {e}")
     
