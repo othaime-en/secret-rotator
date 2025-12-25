@@ -23,6 +23,13 @@ class RotationWebHandler(BaseHTTPRequestHandler):
             self._serve_backup_detail()
         elif self.path.startswith("/api/backups"):
             self._serve_backups()
+        # NEW: Backup health endpoints
+        elif self.path == "/api/backup-health":
+            self._serve_backup_health()
+        elif self.path == "/api/verification-history":
+            self._serve_verification_history()
+        elif self.path == "/api/run-verification":
+            self._run_verification_now()
         else:
             self._serve_404()
     
@@ -312,6 +319,49 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
             self._send_json({"error": "Backup not found"}, 404)
         except Exception as e:
             logger.error(f"Error serving backup detail: {e}")
+            self._send_json({"error": str(e)}, 500)
+    
+    def _serve_backup_health(self):
+        """Serve backup health metrics"""
+        try:
+            if hasattr(self.rotation_engine, 'scheduler') and self.rotation_engine.scheduler:
+                health = self.rotation_engine.scheduler.get_backup_health()
+                self._send_json(health)
+            else:
+                self._send_json({"error": "Scheduler not available"}, 503)
+        except Exception as e:
+            logger.error(f"Error serving backup health: {e}")
+            self._send_json({"error": str(e)}, 500)
+    
+    def _serve_verification_history(self):
+        """Serve backup verification history"""
+        try:
+            from urllib.parse import parse_qs, urlparse
+            
+            parsed_url = urlparse(self.path)
+            params = parse_qs(parsed_url.query)
+            days = int(params.get('days', ['7'])[0])
+            
+            if hasattr(self.rotation_engine, 'scheduler') and self.rotation_engine.scheduler:
+                history = self.rotation_engine.scheduler.get_verification_history(days)
+                self._send_json({"history": history, "days": days})
+            else:
+                self._send_json({"error": "Scheduler not available"}, 503)
+        except Exception as e:
+            logger.error(f"Error serving verification history: {e}")
+            self._send_json({"error": str(e)}, 500)
+    
+    def _run_verification_now(self):
+        """Trigger manual backup verification"""
+        try:
+            if hasattr(self.rotation_engine, 'scheduler') and self.rotation_engine.scheduler:
+                logger.info("Manual backup verification triggered via web interface")
+                report = self.rotation_engine.scheduler.run_verification_now()
+                self._send_json({"success": True, "report": report})
+            else:
+                self._send_json({"error": "Scheduler not available"}, 503)
+        except Exception as e:
+            logger.error(f"Error running verification: {e}")
             self._send_json({"error": str(e)}, 500)
     
     def _handle_rotation(self):
