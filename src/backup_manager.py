@@ -279,18 +279,13 @@ class BackupManager:
                 # No checksum stored, fall back to full verification
                 return self.verify_backup_integrity(backup_file), "no_checksum_stored"
             
-            # Temporarily remove checksum for calculation
+            # Remove checksum for calculation
             temp_data = backup_data.copy()
             temp_data.pop('checksum', None)
             
-            # Write temporary file without checksum
-            temp_path = backup_path.with_suffix('.tmp')
-            with open(temp_path, 'w') as f:
-                json.dump(temp_data, f, indent=2)
-            
-            calculated_checksum = self._calculate_backup_checksum(temp_path)
-            
-            temp_path.unlink()
+            # Calculate checksum on the JSON string (same as creation)
+            backup_json = json.dumps(temp_data, indent=2, sort_keys=True)
+            calculated_checksum = hashlib.sha256(backup_json.encode()).hexdigest()
             
             if calculated_checksum == stored_checksum:
                 return True, "checksum_valid"
@@ -303,8 +298,7 @@ class BackupManager:
                 
         except Exception as e:
             logger.error(f"Error verifying backup checksum: {e}")
-            return False, f"error: {str(e)}"
-        
+            return False, f"error: {str(e)}"  
 
 class BackupIntegrityChecker:
     """Verify backup integrity on a scheduled basis"""
