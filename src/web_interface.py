@@ -144,6 +144,37 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                     }
                 }
                 
+                function loadBackupHealth() {
+                    fetch('/api/backup-health')
+                        .then(response => response.json())
+                        .then(data => {
+                            const statusDiv = document.getElementById('health-status');
+                            
+                            let statusClass = 'info';
+                            if (data.status === 'healthy') statusClass = 'success';
+                            if (data.status === 'warning') statusClass = 'error';
+                            if (data.status === 'critical') statusClass = 'error';
+                            
+                            statusDiv.innerHTML = `
+                                <div class="status ${statusClass}">
+                                    <h3>Status: ${data.status.toUpperCase()}</h3>
+                                    <div style="margin-top: 10px;">
+                                        <strong>Success Rate:</strong> ${data.success_rate}%<br>
+                                        <strong>Total Backups:</strong> ${data.total_backups}<br>
+                                        <strong>Verified:</strong> ${data.verified}<br>
+                                        <strong>Failed:</strong> ${data.failed}<br>
+                                        <strong>Last Verification:</strong> ${new Date(data.last_verification).toLocaleString()}
+                                    </div>
+                                </div>
+                            `;
+                        })
+                        .catch(error => {
+                            console.error('Error loading backup health:', error);
+                            document.getElementById('health-status').innerHTML = 
+                                '<div class="status error">Error loading backup health</div>';
+                        });
+                }
+                
                 function loadJobs() {
                     fetch('/api/jobs')
                         .then(response => response.json())
