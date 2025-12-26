@@ -175,6 +175,43 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                         });
                 }
                 
+                function runVerificationNow() {
+                    if (!confirm('Run backup verification now? This may take a few minutes.')) {
+                        return;
+                    }
+                    
+                    document.getElementById('health-status').innerHTML = 
+                        '<div class="status info">Running verification...</div>';
+                    
+                    fetch('/api/run-verification')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                const report = data.report;
+                                document.getElementById('health-status').innerHTML = `
+                                    <div class="status success">
+                                        <h3>Verification Complete</h3>
+                                        <div style="margin-top: 10px;">
+                                            <strong>Total Backups:</strong> ${report.total_backups}<br>
+                                            <strong>Verified:</strong> ${report.verified}<br>
+                                            <strong>Failed:</strong> ${report.failed}<br>
+                                            ${report.failed > 0 ? '<br><strong style="color: red;">⚠️ Some backups failed verification!</strong>' : ''}
+                                        </div>
+                                    </div>
+                                `;
+                                loadBackupHealth();
+                            } else {
+                                document.getElementById('health-status').innerHTML = 
+                                    '<div class="status error">Verification failed</div>';
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error running verification:', error);
+                            document.getElementById('health-status').innerHTML = 
+                                '<div class="status error">Error running verification</div>';
+                        });
+                }
+                
                 function loadJobs() {
                     fetch('/api/jobs')
                         .then(response => response.json())
