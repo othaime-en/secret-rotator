@@ -86,6 +86,7 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                 <div class="tab-container">
                     <div class="tab active" onclick="switchTab('jobs')">Rotation Jobs</div>
                     <div class="tab" onclick="switchTab('backups')">Backups</div>
+                    <div class="tab" onclick="switchTab('health')">Backup Health</div>
                     <div class="tab" onclick="switchTab('logs')">Logs</div>
                 </div>
                 
@@ -104,6 +105,20 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                         <button onclick="document.getElementById('secretFilter').value=''; loadBackups();">Clear</button>
                     </div>
                     <div id="backups"></div>
+                </div>
+                
+                <div id="health-content" class="tab-content">
+                    <h2>Backup System Health</h2>
+                    
+                    <div id="health-status"></div>
+                    
+                    <div style="margin: 20px 0;">
+                        <button onclick="runVerificationNow()">Run Verification Now</button>
+                        <button onclick="loadVerificationHistory()">View History</button>
+                    </div>
+                    
+                    <h3>Recent Verification History</h3>
+                    <div id="verification-history"></div>
                 </div>
                 
                 <div id="logs-content" class="tab-content">
