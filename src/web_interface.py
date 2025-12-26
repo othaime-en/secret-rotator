@@ -23,6 +23,13 @@ class RotationWebHandler(BaseHTTPRequestHandler):
             self._serve_backup_detail()
         elif self.path.startswith("/api/backups"):
             self._serve_backups()
+        # NEW: Backup health endpoints
+        elif self.path == "/api/backup-health":
+            self._serve_backup_health()
+        elif self.path == "/api/verification-history":
+            self._serve_verification_history()
+        elif self.path == "/api/run-verification":
+            self._run_verification_now()
         else:
             self._serve_404()
     
@@ -79,6 +86,7 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                 <div class="tab-container">
                     <div class="tab active" onclick="switchTab('jobs')">Rotation Jobs</div>
                     <div class="tab" onclick="switchTab('backups')">Backups</div>
+                    <div class="tab" onclick="switchTab('health')">Backup Health</div>
                     <div class="tab" onclick="switchTab('logs')">Logs</div>
                 </div>
                 
@@ -97,6 +105,20 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                         <button onclick="document.getElementById('secretFilter').value=''; loadBackups();">Clear</button>
                     </div>
                     <div id="backups"></div>
+                </div>
+                
+                <div id="health-content" class="tab-content">
+                    <h2>Backup System Health</h2>
+                    
+                    <div id="health-status"></div>
+                    
+                    <div style="margin: 20px 0;">
+                        <button onclick="runVerificationNow()">Run Verification Now</button>
+                        <button onclick="loadVerificationHistory()">View History</button>
+                    </div>
+                    
+                    <h3>Recent Verification History</h3>
+                    <div id="verification-history"></div>
                 </div>
                 
                 <div id="logs-content" class="tab-content">
@@ -119,7 +141,117 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                     
                     if (tabName === 'backups') {
                         loadBackups();
+                    } else if (tabName === 'health') {
+                        loadBackupHealth();
+                        loadVerificationHistory();
                     }
+                }
+                
+                function loadBackupHealth() {
+                    fetch('/api/backup-health')
+                        .then(response => response.json())
+                        .then(data => {
+                            const statusDiv = document.getElementById('health-status');
+                            
+                            let statusClass = 'info';
+                            if (data.status === 'healthy') statusClass = 'success';
+                            if (data.status === 'warning') statusClass = 'error';
+                            if (data.status === 'critical') statusClass = 'error';
+                            
+                            statusDiv.innerHTML = `
+                                <div class="status ${statusClass}">
+                                    <h3>Status: ${data.status.toUpperCase()}</h3>
+                                    <div style="margin-top: 10px;">
+                                        <strong>Success Rate:</strong> ${data.success_rate}%<br>
+                                        <strong>Total Backups:</strong> ${data.total_backups}<br>
+                                        <strong>Verified:</strong> ${data.verified}<br>
+                                        <strong>Failed:</strong> ${data.failed}<br>
+                                        <strong>Last Verification:</strong> ${new Date(data.last_verification).toLocaleString()}
+                                    </div>
+                                </div>
+                            `;
+                        })
+                        .catch(error => {
+                            console.error('Error loading backup health:', error);
+                            document.getElementById('health-status').innerHTML = 
+                                '<div class="status error">Error loading backup health</div>';
+                        });
+                }
+                
+                function runVerificationNow() {
+                    if (!confirm('Run backup verification now? This may take a few minutes.')) {
+                        return;
+                    }
+                    
+                    document.getElementById('health-status').innerHTML = 
+                        '<div class="status info">Running verification...</div>';
+                    
+                    fetch('/api/run-verification')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                const report = data.report;
+                                document.getElementById('health-status').innerHTML = `
+                                    <div class="status success">
+                                        <h3>Verification Complete</h3>
+                                        <div style="margin-top: 10px;">
+                                            <strong>Total Backups:</strong> ${report.total_backups}<br>
+                                            <strong>Verified:</strong> ${report.verified}<br>
+                                            <strong>Failed:</strong> ${report.failed}<br>
+                                            ${report.failed > 0 ? '<br><strong style="color: red;">⚠️ Some backups failed verification!</strong>' : ''}
+                                        </div>
+                                    </div>
+                                `;
+                                loadBackupHealth();
+                            } else {
+                                document.getElementById('health-status').innerHTML = 
+                                    '<div class="status error">Verification failed</div>';
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error running verification:', error);
+                            document.getElementById('health-status').innerHTML = 
+                                '<div class="status error">Error running verification</div>';
+                        });
+                }
+                
+                function loadVerificationHistory() {
+                    fetch('/api/verification-history?days=7')
+                        .then(response => response.json())
+                        .then(data => {
+                            const historyDiv = document.getElementById('verification-history');
+                            
+                            if (data.history.length === 0) {
+                                historyDiv.innerHTML = '<div class="status info">No verification history available</div>';
+                                return;
+                            }
+                            
+                            let html = '<table style="width: 100%; border-collapse: collapse;">';
+                            html += '<tr style="background: #f5f5f5;"><th>Date</th><th>Total</th><th>Verified</th><th>Failed</th><th>Success Rate</th></tr>';
+                            
+                            data.history.forEach(report => {
+                                const successRate = ((report.verified / report.total_backups) * 100).toFixed(1);
+                                const statusColor = successRate >= 95 ? '#28a745' : '#dc3545';
+                                
+                                html += `
+                                    <tr style="border-bottom: 1px solid #ddd;">
+                                        <td style="padding: 8px;">${new Date(report.timestamp).toLocaleString()}</td>
+                                        <td style="padding: 8px;">${report.total_backups}</td>
+                                        <td style="padding: 8px;">${report.verified}</td>
+                                        <td style="padding: 8px;">${report.failed}</td>
+                                        <td style="padding: 8px; color: ${statusColor}; font-weight: bold;">${successRate}%</td>
+                                    </tr>
+                                `;
+                            });
+                            
+                            html += '</table>';
+                            historyDiv.innerHTML = html;
+                        })
+                        .catch(error => {
+                            console.error('Error loading verification history:', error);
+                            document.getElementById('verification-history').innerHTML = 
+                                '<div class="status error">Error loading history</div>';
+                        });
                 }
                 
                 function loadJobs() {
@@ -312,6 +444,49 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
             self._send_json({"error": "Backup not found"}, 404)
         except Exception as e:
             logger.error(f"Error serving backup detail: {e}")
+            self._send_json({"error": str(e)}, 500)
+    
+    def _serve_backup_health(self):
+        """Serve backup health metrics"""
+        try:
+            if hasattr(self.rotation_engine, 'scheduler') and self.rotation_engine.scheduler:
+                health = self.rotation_engine.scheduler.get_backup_health()
+                self._send_json(health)
+            else:
+                self._send_json({"error": "Scheduler not available"}, 503)
+        except Exception as e:
+            logger.error(f"Error serving backup health: {e}")
+            self._send_json({"error": str(e)}, 500)
+    
+    def _serve_verification_history(self):
+        """Serve backup verification history"""
+        try:
+            from urllib.parse import parse_qs, urlparse
+            
+            parsed_url = urlparse(self.path)
+            params = parse_qs(parsed_url.query)
+            days = int(params.get('days', ['7'])[0])
+            
+            if hasattr(self.rotation_engine, 'scheduler') and self.rotation_engine.scheduler:
+                history = self.rotation_engine.scheduler.get_verification_history(days)
+                self._send_json({"history": history, "days": days})
+            else:
+                self._send_json({"error": "Scheduler not available"}, 503)
+        except Exception as e:
+            logger.error(f"Error serving verification history: {e}")
+            self._send_json({"error": str(e)}, 500)
+    
+    def _run_verification_now(self):
+        """Trigger manual backup verification"""
+        try:
+            if hasattr(self.rotation_engine, 'scheduler') and self.rotation_engine.scheduler:
+                logger.info("Manual backup verification triggered via web interface")
+                report = self.rotation_engine.scheduler.run_verification_now()
+                self._send_json({"success": True, "report": report})
+            else:
+                self._send_json({"error": "Scheduler not available"}, 503)
+        except Exception as e:
+            logger.error(f"Error running verification: {e}")
             self._send_json({"error": str(e)}, 500)
     
     def _handle_rotation(self):
