@@ -231,15 +231,14 @@ class BackupManager:
                 raise
         
         try:
-            # Write backup
-            with open(backup_path, 'w') as f:
-                json.dump(backup_data, f, indent=2)
+            # Calculate checksum on the JSON string (without checksum field)
+            backup_json = json.dumps(backup_data, indent=2, sort_keys=True)
+            checksum = hashlib.sha256(backup_json.encode()).hexdigest()
             
-            # Calculate and add checksum
-            checksum = self._calculate_backup_checksum(backup_path)
+            # Add checksum to data
             backup_data['checksum'] = checksum
             
-            # Rewrite with checksum
+            # Write backup with checksum
             with open(backup_path, 'w') as f:
                 json.dump(backup_data, f, indent=2)
             
@@ -249,7 +248,7 @@ class BackupManager:
         except Exception as e:
             logger.error(f"Failed to create backup for {secret_id}: {e}")
             raise
-    
+
     def _calculate_backup_checksum(self, backup_path: Path) -> str:
         """Calculate SHA-256 checksum of backup file"""
         sha256 = hashlib.sha256()
