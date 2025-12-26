@@ -141,6 +141,9 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                     
                     if (tabName === 'backups') {
                         loadBackups();
+                    } else if (tabName === 'health') {
+                        loadBackupHealth();
+                        loadVerificationHistory();
                     }
                 }
                 
@@ -209,6 +212,45 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                             console.error('Error running verification:', error);
                             document.getElementById('health-status').innerHTML = 
                                 '<div class="status error">Error running verification</div>';
+                        });
+                }
+                
+                function loadVerificationHistory() {
+                    fetch('/api/verification-history?days=7')
+                        .then(response => response.json())
+                        .then(data => {
+                            const historyDiv = document.getElementById('verification-history');
+                            
+                            if (data.history.length === 0) {
+                                historyDiv.innerHTML = '<div class="status info">No verification history available</div>';
+                                return;
+                            }
+                            
+                            let html = '<table style="width: 100%; border-collapse: collapse;">';
+                            html += '<tr style="background: #f5f5f5;"><th>Date</th><th>Total</th><th>Verified</th><th>Failed</th><th>Success Rate</th></tr>';
+                            
+                            data.history.forEach(report => {
+                                const successRate = ((report.verified / report.total_backups) * 100).toFixed(1);
+                                const statusColor = successRate >= 95 ? '#28a745' : '#dc3545';
+                                
+                                html += `
+                                    <tr style="border-bottom: 1px solid #ddd;">
+                                        <td style="padding: 8px;">${new Date(report.timestamp).toLocaleString()}</td>
+                                        <td style="padding: 8px;">${report.total_backups}</td>
+                                        <td style="padding: 8px;">${report.verified}</td>
+                                        <td style="padding: 8px;">${report.failed}</td>
+                                        <td style="padding: 8px; color: ${statusColor}; font-weight: bold;">${successRate}%</td>
+                                    </tr>
+                                `;
+                            });
+                            
+                            html += '</table>';
+                            historyDiv.innerHTML = html;
+                        })
+                        .catch(error => {
+                            console.error('Error loading verification history:', error);
+                            document.getElementById('verification-history').innerHTML = 
+                                '<div class="status error">Error loading history</div>';
                         });
                 }
                 
