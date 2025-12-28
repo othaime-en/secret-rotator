@@ -427,30 +427,24 @@ class BackupIntegrityChecker:
             report["backups_checked"] += 1
             
             try:
-                current_checksum = self._calculate_file_checksum(backup_file)
+                # Use the backup_manager's verification method instead
+                is_valid, reason = self.backup_manager.verify_backup_with_checksum(backup_file)
                 
-                # Check if backup has stored checksum
-                with open(backup_file, 'r') as f:
-                    backup_data = json.load(f)
-                
-                stored_checksum = backup_data.get('checksum')
-                
-                if stored_checksum:
-                    if current_checksum == stored_checksum:
-                        report["checksum_matches"] += 1
-                    else:
-                        report["checksum_mismatches"] += 1
-                        logger.warning(
-                            f"Checksum mismatch for {backup_file}: "
-                            f"expected {stored_checksum}, got {current_checksum}"
-                        )
-                else:
+                if reason == "checksum_valid":
+                    report["checksum_matches"] += 1
+                elif reason == "checksum_mismatch":
+                    report["checksum_mismatches"] += 1
+                    logger.warning(f"Checksum mismatch for {backup_file}")
+                elif reason == "no_checksum_stored":
                     report["no_checksum"] += 1
-                    # Add checksum if missing
-                    backup_data['checksum'] = current_checksum
-                    with open(backup_file, 'w') as f:
-                        json.dump(backup_data, f, indent=2)
-                    logger.info(f"Added checksum to {backup_file}")
+                    logger.info(f"No checksum stored for {backup_file}")
+                else:
+                    # Other errors (file not found, etc.)
+                    report["errors"].append({
+                        "backup_file": backup_file,
+                        "error": reason
+                    })
+                    logger.error(f"Error checking checksum for {backup_file}: {reason}")
             
             except Exception as e:
                 report["errors"].append({
@@ -460,7 +454,7 @@ class BackupIntegrityChecker:
                 logger.error(f"Error checking checksum for {backup_file}: {e}")
         
         return report
-    
+
     def _calculate_file_checksum(self, file_path: str) -> str:
         """Calculate SHA-256 checksum of file"""
         sha256 = hashlib.sha256()
