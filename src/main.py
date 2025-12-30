@@ -1,6 +1,7 @@
 import sys
 import time
 import signal
+import argparse
 from pathlib import Path
 
 # Add src to path so we can import our modules
@@ -62,17 +63,21 @@ class SecretRotationApp:
         # Add rotation jobs from config
         self._setup_rotation_jobs()
         
-        # Set up scheduler
+        # Set up scheduler with backup manager
+        schedule_config = settings.get('rotation.schedule', 'daily')
         self.scheduler = RotationScheduler(
             rotation_function=self.engine.rotate_all_secrets,
             backup_manager=self.backup_manager
         )
-        schedule_config = settings.get('rotation.schedule', 'daily')
         self.scheduler.setup_schedule(schedule_config)
         
         # Set up web server
-        web_port = settings.get('web.port', 8080)
-        self.web_server = WebServer(self.engine, port=web_port)
+        web_enabled = settings.get('web.enabled', True)
+        if web_enabled:
+            web_port = settings.get('web.port', 8080)
+            self.web_server = WebServer(self.engine, port=web_port)
+            # Store scheduler reference in engine for web interface access
+            self.engine.scheduler = self.scheduler
         
         logger.info("Setup complete")
         self._print_security_status()
@@ -184,11 +189,13 @@ class SecretRotationApp:
         # Start scheduler
         self.scheduler.start()
         
-        # Start web server
-        self.web_server.start()
+        # Start web server if enabled
+        if self.web_server:
+            self.web_server.start()
+            logger.info(f"Web interface: http://{settings.get('web.host', 'localhost')}:{settings.get('web.port', 8080)}")
         
         logger.info("Secret Rotation System started")
-        logger.info(f"Web interface available at: http://localhost:{settings.get('web.port', 8080)}")
+        logger.info("Press Ctrl+C to stop")
         
         # Set up signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -228,10 +235,19 @@ class SecretRotationApp:
         logger.info("Running one-time secret rotation")
         results = self.engine.rotate_all_secrets()
         
-        print("\nRotation Results:")
+        print("\n" + "="*60)
+        print("ROTATION RESULTS")
+        print("="*60)
+        
+        successful = sum(1 for success in results.values() if success)
+        
         for job_name, success in results.items():
-            status = "SUCCESS" if success else "FAILED"
+            status = "✓ SUCCESS" if success else "✗ FAILED"
             print(f"  {job_name}: {status}")
+        
+        print("="*60)
+        print(f"Summary: {successful}/{len(results)} successful")
+        print("="*60)
         
         return results
     
@@ -244,6 +260,19 @@ class SecretRotationApp:
             self.setup()
         
         logger.info("Starting migration to encrypted storage")
+        print("\n" + "="*60)
+        print("MIGRATE TO ENCRYPTED STORAGE")
+        print("="*60)
+        print("\nThis will encrypt all plaintext secrets in your providers.")
+        print("Original secrets will be preserved if migration fails.")
+        
+        response = input("\nContinue? (yes/no): ")
+        if response.lower() != 'yes':
+            print("Migration cancelled.")
+            return
+        
+        migrated_count = 0
+        failed_count = 0
         
         for provider_name, provider in self.engine.providers.items():
             if hasattr(provider, 'migrate_to_encrypted'):
@@ -251,12 +280,16 @@ class SecretRotationApp:
                 success = provider.migrate_to_encrypted()
                 if success:
                     logger.info(f"Successfully migrated {provider_name}")
+                    migrated_count += 1
                 else:
                     logger.error(f"Failed to migrate {provider_name}")
+                    failed_count += 1
             else:
                 logger.warning(f"Provider {provider_name} does not support migration")
         
-        logger.info("Migration complete")
+        print("\n" + "="*60)
+        print(f"Migration complete: {migrated_count} providers migrated, {failed_count} failed")
+        print("="*60)
     
     def verify_encryption(self):
         """Verify that encryption is working correctly"""
@@ -264,6 +297,11 @@ class SecretRotationApp:
             self.setup()
         
         logger.info("Verifying encryption setup")
+        print("\n" + "="*60)
+        print("ENCRYPTION VERIFICATION")
+        print("="*60)
+        
+        all_passed = True
         
         # Test encryption manager
         if self.encryption_manager:
@@ -273,52 +311,319 @@ class SecretRotationApp:
                 decrypted = self.encryption_manager.decrypt(encrypted)
                 
                 if decrypted == test_value:
-                    logger.info("✓ Encryption manager working correctly")
+                    print("✓ Encryption manager: PASSED")
+                    logger.info("Encryption manager working correctly")
                 else:
-                    logger.error("✗ Encryption verification failed: decryption mismatch")
-                    return False
+                    print("✗ Encryption manager: FAILED (decryption mismatch)")
+                    logger.error("Encryption verification failed: decryption mismatch")
+                    all_passed = False
             except Exception as e:
-                logger.error(f"✗ Encryption verification failed: {e}")
-                return False
+                print(f"✗ Encryption manager: FAILED ({e})")
+                logger.error(f"Encryption verification failed: {e}")
+                all_passed = False
         else:
+            print("✗ Encryption manager: NOT INITIALIZED")
             logger.warning("Encryption manager not initialized")
-            return False
+            all_passed = False
         
         # Test provider encryption
         for provider_name, provider in self.engine.providers.items():
             if hasattr(provider, 'validate_connection'):
                 if provider.validate_connection():
-                    logger.info(f"✓ Provider {provider_name} encryption working")
+                    print(f"✓ Provider '{provider_name}': PASSED")
+                    logger.info(f"Provider {provider_name} encryption working")
                 else:
-                    logger.error(f"✗ Provider {provider_name} encryption check failed")
-                    return False
+                    print(f"✗ Provider '{provider_name}': FAILED")
+                    logger.error(f"Provider {provider_name} encryption check failed")
+                    all_passed = False
         
-        logger.info("All encryption checks passed")
-        return True
+        # Test backup encryption
+        if self.backup_manager and self.backup_manager.encrypt_backups:
+            try:
+                test_backup = self.backup_manager.create_backup(
+                    "test_verification",
+                    "old_test_value",
+                    "new_test_value"
+                )
+                backup_data = self.backup_manager.restore_backup(test_backup, decrypt=True)
+                
+                if backup_data['old_value'] == "old_test_value":
+                    print("✓ Backup encryption: PASSED")
+                    logger.info("Backup encryption working")
+                    # Clean up test backup
+                    Path(test_backup).unlink()
+                else:
+                    print("✗ Backup encryption: FAILED")
+                    all_passed = False
+            except Exception as e:
+                print(f"✗ Backup encryption: FAILED ({e})")
+                logger.error(f"Backup encryption check failed: {e}")
+                all_passed = False
+        
+        print("="*60)
+        if all_passed:
+            print("All encryption checks PASSED")
+            return True
+        else:
+            print("Some encryption checks FAILED")
+            return False
+    
+    def verify_backups(self):
+        """Run backup integrity verification"""
+        if not self.engine:
+            self.setup()
+        
+        if not self.scheduler:
+            logger.error("Scheduler not initialized")
+            return
+        
+        logger.info("Running backup integrity verification")
+        print("\n" + "="*60)
+        print("BACKUP INTEGRITY VERIFICATION")
+        print("="*60)
+        
+        report = self.scheduler.run_verification_now()
+        
+        print(f"\nTotal Backups: {report['total_backups']}")
+        print(f"Verified: {report['verified']}")
+        print(f"Failed: {report['failed']}")
+        
+        if report['failed'] > 0:
+            print(f"\n⚠️  WARNING: {report['failed']} backup(s) failed verification!")
+            print("Corrupted backups:")
+            for corrupted in report.get('corrupted', []):
+                print(f"  - {corrupted['backup_file']}")
+        else:
+            print("\n✓ All backups verified successfully")
+        
+        print("="*60)
+    
+    def rotate_master_key(self):
+        """Rotate the master encryption key"""
+        if not self.encryption_manager:
+            logger.error("Encryption not enabled")
+            print("ERROR: Encryption is not enabled. Cannot rotate master key.")
+            return
+        
+        print("\n" + "="*60)
+        print("MASTER KEY ROTATION")
+        print("="*60)
+        print("\n⚠️  WARNING: This is a critical operation!")
+        print("\nThis will:")
+        print("  1. Generate a new master encryption key")
+        print("  2. Re-encrypt ALL secrets with the new key")
+        print("  3. Backup the old key")
+        print("\nBefore proceeding:")
+        print("  - Create a backup of your current master key")
+        print("  - Ensure all backups are verified and accessible")
+        print("  - Run during a maintenance window")
+        
+        response = input("\nHave you created a backup of the master key? (yes/no): ")
+        if response.lower() != 'yes':
+            print("\nCreate a backup first:")
+            print("  python tools/manage_key_backups.py create-encrypted")
+            return
+        
+        response = input("\nContinue with master key rotation? (yes/no): ")
+        if response.lower() != 'yes':
+            print("Rotation cancelled.")
+            return
+        
+        # Define re-encryption callback
+        def re_encrypt_all_secrets(old_cipher, new_cipher):
+            """Re-encrypt all secrets with new key"""
+            try:
+                for provider_name, provider in self.engine.providers.items():
+                    if hasattr(provider, 'encryption_manager'):
+                        logger.info(f"Re-encrypting secrets in provider: {provider_name}")
+                        
+                        # Temporarily use old cipher to decrypt
+                        old_em = provider.encryption_manager
+                        provider.encryption_manager.cipher = old_cipher
+                        
+                        # Get all secrets (decrypted)
+                        import json
+                        with open(provider.file_path, 'r') as f:
+                            secrets = json.load(f)
+                        
+                        # Re-encrypt with new cipher
+                        provider.encryption_manager.cipher = new_cipher
+                        
+                        for secret_id in secrets.keys():
+                            # Decrypt with old key
+                            provider.encryption_manager.cipher = old_cipher
+                            decrypted_value = provider.get_secret(secret_id)
+                            
+                            # Encrypt with new key
+                            provider.encryption_manager.cipher = new_cipher
+                            provider.update_secret(secret_id, decrypted_value)
+                        
+                        logger.info(f"Re-encrypted {len(secrets)} secrets in {provider_name}")
+                
+                return True
+            except Exception as e:
+                logger.error(f"Re-encryption failed: {e}")
+                return False
+        
+        # Perform rotation
+        logger.info("Starting master key rotation...")
+        success = self.encryption_manager.rotate_master_key(
+            re_encrypt_callback=re_encrypt_all_secrets
+        )
+        
+        if success:
+            print("\n✓ SUCCESS: Master key rotated successfully")
+            print("\nNext steps:")
+            print("  1. Create a new backup of the master key")
+            print("  2. Update key backups in all locations")
+            print("  3. Restart the application")
+            print("  4. Verify encryption: python src/main.py --mode verify")
+        else:
+            print("\n✗ ERROR: Master key rotation failed")
+            print("Old key has been restored from backup.")
+    
+    def cleanup_old_backups(self):
+        """Manually trigger backup cleanup"""
+        if not self.backup_manager:
+            logger.error("Backup manager not initialized")
+            return
+        
+        days_to_keep = settings.get('backup.retention.days', 90)
+        
+        print("\n" + "="*60)
+        print("BACKUP CLEANUP")
+        print("="*60)
+        print(f"\nThis will remove backups older than {days_to_keep} days.")
+        
+        response = input("\nContinue? (yes/no): ")
+        if response.lower() != 'yes':
+            print("Cleanup cancelled.")
+            return
+        
+        removed = self.backup_manager.cleanup_old_backups(days_to_keep)
+        print(f"\n✓ Removed {removed} old backup(s)")
+    
+    def show_status(self):
+        """Show application status and health"""
+        if not self.engine:
+            self.setup()
+        
+        print("\n" + "="*60)
+        print("SECRET ROTATION SYSTEM STATUS")
+        print("="*60)
+        
+        # System info
+        print(f"\nProviders: {len(self.engine.providers)}")
+        for name in self.engine.providers.keys():
+            print(f"  - {name}")
+        
+        print(f"\nRotators: {len(self.engine.rotators)}")
+        for name in self.engine.rotators.keys():
+            print(f"  - {name}")
+        
+        print(f"\nRotation Jobs: {len(self.engine.rotation_jobs)}")
+        for job in self.engine.rotation_jobs:
+            print(f"  - {job['name']} ({job['secret_id']})")
+        
+        # Encryption status
+        if self.encryption_manager:
+            print(f"\nEncryption: ENABLED")
+        else:
+            print(f"\nEncryption: DISABLED")
+        
+        # Backup status
+        if self.backup_manager:
+            metadata = self.backup_manager.export_backup_metadata()
+            print(f"\nBackups: {metadata['total_backups']} total")
+            print(f"  Secrets with backups: {metadata['secrets_with_backups']}")
+            print(f"  Encryption: {'ENABLED' if metadata['encryption_enabled'] else 'DISABLED'}")
+        
+        # Scheduler status
+        if self.scheduler:
+            print(f"\nScheduler: {'RUNNING' if self.scheduler.running else 'STOPPED'}")
+            print(f"  Schedule: {settings.get('rotation.schedule', 'daily')}")
+        
+        print("="*60)
 
 
 def main():
     """Main entry point"""
-    import argparse
+    parser = argparse.ArgumentParser(
+        description='Secret Rotation System',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Start the daemon with scheduler and web interface
+  python src/main.py
+
+  # Run a single rotation manually
+  python src/main.py --mode once
+
+  # Verify encryption is working
+  python src/main.py --mode verify
+
+  # Show system status
+  python src/main.py --mode status
+
+  # Migrate existing plaintext secrets to encrypted
+  python src/main.py --mode migrate
+
+  # Verify backup integrity
+  python src/main.py --mode verify-backups
+
+  # Rotate master encryption key
+  python src/main.py --mode rotate-master-key
+
+  # Cleanup old backups
+  python src/main.py --mode cleanup-backups
+        """
+    )
     
-    parser = argparse.ArgumentParser(description='Secret Rotation System')
-    parser.add_argument('--mode', choices=['daemon', 'once', 'migrate', 'verify'], 
-                       default='daemon',
-                       help='Run mode: daemon (with scheduler), once (single rotation), '
-                            'migrate (convert to encrypted), verify (test encryption)')
+    parser.add_argument(
+        '--mode',
+        choices=[
+            'daemon',
+            'once',
+            'migrate',
+            'verify',
+            'verify-backups',
+            'rotate-master-key',
+            'cleanup-backups',
+            'status'
+        ],
+        default='daemon',
+        help='Run mode (default: daemon)'
+    )
     
     args = parser.parse_args()
     
     app = SecretRotationApp()
     
-    if args.mode == 'once':
-        app.run_once()
-    elif args.mode == 'migrate':
-        app.migrate_to_encrypted()
-    elif args.mode == 'verify':
-        app.verify_encryption()
-    else:
-        app.start()
+    try:
+        if args.mode == 'once':
+            app.run_once()
+        elif args.mode == 'migrate':
+            app.migrate_to_encrypted()
+        elif args.mode == 'verify':
+            success = app.verify_encryption()
+            sys.exit(0 if success else 1)
+        elif args.mode == 'verify-backups':
+            app.verify_backups()
+        elif args.mode == 'rotate-master-key':
+            app.rotate_master_key()
+        elif args.mode == 'cleanup-backups':
+            app.cleanup_old_backups()
+        elif args.mode == 'status':
+            app.show_status()
+        else:  # daemon mode
+            app.start()
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user")
+        sys.exit(0)
+    except Exception as e:
+        logger.error(f"Application error: {e}", exc_info=True)
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
