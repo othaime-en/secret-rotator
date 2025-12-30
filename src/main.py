@@ -628,8 +628,33 @@ Examples:
         help='Run mode (default: daemon)'
     )
     
+    parser.add_argument(
+        '--config',
+        help='Path to config file (default: config/config.yaml)'
+    )
+    
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Enable debug logging'
+    )
+    
     args = parser.parse_args()
     
+    # Override config path if specified
+    if args.config:
+        from config.settings import settings
+        settings.config_path = Path(args.config)
+        settings.config = settings.load_config()
+    
+    # Set debug logging if requested
+    if args.debug:
+        import logging
+        from utils.logger import logger
+        logger.setLevel(logging.DEBUG)
+        logger.info("Debug logging enabled")
+    
+    # Create and run app
     app = SecretRotationApp()
     
     try:
