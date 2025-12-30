@@ -39,6 +39,14 @@ class SecretRotationApp:
             key_file = settings.get('security.encryption.master_key_file', 'config/.master.key')
             self.encryption_manager = EncryptionManager(key_file=key_file)
             logger.info("Encryption initialized")
+            
+            # Check if master key needs rotation
+            rotate_days = settings.get('security.encryption.rotate_master_key_days', 90)
+            if self.encryption_manager.should_rotate_key(rotate_days):
+                logger.warning(
+                    f"Master key is older than {rotate_days} days and should be rotated. "
+                    "Run: python src/main.py --mode rotate-master-key"
+                )
         else:
             logger.warning("Encryption is DISABLED - secrets will be stored in plaintext!")
         
@@ -75,12 +83,14 @@ class SecretRotationApp:
         web_enabled = settings.get('web.enabled', True)
         if web_enabled:
             web_port = settings.get('web.port', 8080)
+            web_host = settings.get('web.host', 'localhost')
             self.web_server = WebServer(self.engine, port=web_port)
             # Store scheduler reference in engine for web interface access
             self.engine.scheduler = self.scheduler
         
         logger.info("Setup complete")
         self._print_security_status()
+        self._print_backup_health()
 
     def _setup_providers(self):
         """Set up secret providers from configuration"""
@@ -169,13 +179,33 @@ class SecretRotationApp:
         logger.info(f"Backup Encryption: {'ENABLED' if encrypt_backups else 'DISABLED'}")
         
         if encryption_enabled and self.encryption_manager:
+            key_info = self.encryption_manager.get_key_info()
+            logger.info(f"Master Key ID: {key_info.get('key_id', 'unknown')}")
+            logger.info(f"Key Age: {key_info.get('age_days', 'unknown')} days")
+            
             key_file = settings.get('security.encryption.master_key_file', 'config/.master.key')
-            key_path = Path(key_file)
-            if key_path.exists():
-                logger.info(f"Master Key: {key_file} (EXISTS)")
-                logger.warning("IMPORTANT: Backup this key file securely!")
-            else:
-                logger.info(f"Master Key: {key_file} (WILL BE GENERATED)")
+            logger.warning(f"IMPORTANT: Backup master key file: {key_file}")
+            logger.info("Use: python tools/manage_key_backups.py create-encrypted")
+        
+        logger.info("=" * 60)
+
+    def _print_backup_health(self):
+        """Print backup system health status"""
+        if not self.backup_manager:
+            return
+        
+        metadata = self.backup_manager.export_backup_metadata()
+        
+        logger.info("=" * 60)
+        logger.info("BACKUP SYSTEM STATUS")
+        logger.info("=" * 60)
+        logger.info(f"Total Backups: {metadata['total_backups']}")
+        logger.info(f"Secrets with Backups: {metadata['secrets_with_backups']}")
+        logger.info(f"Backup Directory: {metadata['backup_directory']}")
+        
+        if metadata['total_backups'] > 0:
+            logger.info(f"Oldest Backup: {metadata.get('oldest_backup', 'N/A')}")
+            logger.info(f"Newest Backup: {metadata.get('newest_backup', 'N/A')}")
         
         logger.info("=" * 60)
 
@@ -527,7 +557,10 @@ class SecretRotationApp:
         
         # Encryption status
         if self.encryption_manager:
+            key_info = self.encryption_manager.get_key_info()
             print(f"\nEncryption: ENABLED")
+            print(f"  Key ID: {key_info.get('key_id', 'unknown')}")
+            print(f"  Key Age: {key_info.get('age_days', 'unknown')} days")
         else:
             print(f"\nEncryption: DISABLED")
         
