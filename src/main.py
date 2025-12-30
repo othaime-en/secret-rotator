@@ -14,6 +14,7 @@ from scheduler import RotationScheduler
 from web_interface import WebServer
 from utils.logger import logger
 from encryption_manager import EncryptionManager
+from backup_manager import BackupManager
 
 
 class SecretRotationApp:
@@ -24,6 +25,7 @@ class SecretRotationApp:
         self.scheduler = None
         self.web_server = None
         self.encryption_manager = None
+        self.backup_manager = None
         self.running = False
 
     def setup(self):
@@ -33,93 +35,37 @@ class SecretRotationApp:
         # Initialize encryption manager if enabled
         encryption_enabled = settings.get('security.encryption.enabled', True)
         if encryption_enabled:
-            key_file = settings.get('security.encryption.key_file', 'config/.master.key')
+            key_file = settings.get('security.encryption.master_key_file', 'config/.master.key')
             self.encryption_manager = EncryptionManager(key_file=key_file)
             logger.info("Encryption initialized")
         else:
             logger.warning("Encryption is DISABLED - secrets will be stored in plaintext!")
         
-        # Initialize rotation engine
-        self.engine = RotationEngine()
-        
-        # Configure backup manager with encryption
+        # Initialize backup manager
         encrypt_backups = settings.get('backup.encrypt_backups', True)
-        backup_dir = settings.get('providers.file_storage.backup_path', 'data/backup')
-        
-        from backup_manager import BackupManager
-        self.engine.backup_manager = BackupManager(
+        backup_dir = settings.get('backup.storage_path', 'data/backup')
+        self.backup_manager = BackupManager(
             backup_dir=backup_dir,
             encrypt_backups=encrypt_backups
         )
         
-        # Set up providers with encryption settings
-        encrypt_secrets = settings.get('providers.file_storage.encrypt_secrets', True)
-        file_provider = FileSecretProvider(
-            name="file_storage",
-            config={
-                "file_path": settings.get('providers.file_storage.file_path', 'data/secrets.json'),
-                "encrypt_secrets": encrypt_secrets,
-                "encryption_key_file": settings.get('security.encryption.master_key_file', 'config/.master.key')
-            }
-        )
-        self.engine.register_provider(file_provider)
+        # Initialize rotation engine
+        self.engine = RotationEngine()
+        self.engine.backup_manager = self.backup_manager
         
-        # Validate provider connection (includes encryption test)
-        if file_provider.validate_connection():
-            logger.info("Provider connection validated (encryption working)")
-        else:
-            logger.error("Provider connection validation failed!")
+        # Set up providers with encryption settings
+        self._setup_providers()
         
         # Set up rotators
-        password_rotator = PasswordRotator(
-            name="password_gen",
-            config=settings.get('rotators.password_gen', {
-                "length": 16,
-                "use_symbols": True,
-                "use_numbers": True,
-                "use_uppercase": True,
-                "use_lowercase": True
-            })
-        )
-        self.engine.register_rotator(password_rotator)
+        self._setup_rotators()
         
         # Add rotation jobs from config
-        jobs = settings.get('jobs', [])
-        if jobs:
-            for job in jobs:
-                self.engine.add_rotation_job(job)
-            logger.info(f"Loaded {len(jobs)} rotation jobs from config")
-        else:
-            # Fallback to hardcoded jobs if no config
-            default_jobs = [
-                {
-                    "name": "database_password",
-                    "provider": "file_storage",
-                    "rotator": "password_gen",
-                    "secret_id": "db_password"
-                },
-                {
-                    "name": "api_key",
-                    "provider": "file_storage",
-                    "rotator": "password_gen",
-                    "secret_id": "api_key"
-                },
-                {
-                    "name": "service_token",
-                    "provider": "file_storage",
-                    "rotator": "password_gen", 
-                    "secret_id": "service_token"
-                }
-            ]
-            
-            for job in default_jobs:
-                self.engine.add_rotation_job(job)
-            logger.info(f"Using {len(default_jobs)} default rotation jobs")
+        self._setup_rotation_jobs()
         
         # Set up scheduler
         self.scheduler = RotationScheduler(
             rotation_function=self.engine.rotate_all_secrets,
-            backup_manager=self.engine.backup_manager
+            backup_manager=self.backup_manager
         )
         schedule_config = settings.get('rotation.schedule', 'daily')
         self.scheduler.setup_schedule(schedule_config)
@@ -131,6 +77,80 @@ class SecretRotationApp:
         logger.info("Setup complete")
         self._print_security_status()
 
+    def _setup_providers(self):
+        """Set up secret providers from configuration"""
+        providers_config = settings.get('providers', {})
+        
+        for provider_name, provider_config in providers_config.items():
+            provider_type = provider_config.get('type')
+            
+            if provider_type == 'file':
+                encrypt_secrets = settings.get('security.encryption.enabled', True)
+                file_provider = FileSecretProvider(
+                    name=provider_name,
+                    config={
+                        "file_path": provider_config.get('file_path', 'data/secrets.json'),
+                        "encrypt_secrets": encrypt_secrets,
+                        "encryption_key_file": settings.get(
+                            'security.encryption.master_key_file',
+                            'config/.master.key'
+                        )
+                    }
+                )
+                self.engine.register_provider(file_provider)
+                
+                # Validate provider connection
+                if file_provider.validate_connection():
+                    logger.info(f"Provider '{provider_name}' validated successfully")
+                else:
+                    logger.error(f"Provider '{provider_name}' validation failed!")
+            
+            # Add support for other provider types here (AWS, Azure, etc.)
+            elif provider_type == 'aws':
+                logger.warning(f"AWS provider '{provider_name}' not yet implemented")
+            else:
+                logger.warning(f"Unknown provider type '{provider_type}' for '{provider_name}'")
+
+    def _setup_rotators(self):
+        """Set up secret rotators from configuration"""
+        rotators_config = settings.get('rotators', {})
+        
+        for rotator_name, rotator_config in rotators_config.items():
+            rotator_type = rotator_config.get('type')
+            
+            if rotator_type == 'password':
+                password_rotator = PasswordRotator(
+                    name=rotator_name,
+                    config=rotator_config
+                )
+                self.engine.register_rotator(password_rotator)
+            
+            # Add support for other rotator types
+            elif rotator_type == 'api_key':
+                from rotators.advanced_rotators import APIKeyRotator
+                api_rotator = APIKeyRotator(name=rotator_name, config=rotator_config)
+                self.engine.register_rotator(api_rotator)
+            
+            elif rotator_type == 'jwt_secret':
+                from rotators.advanced_rotators import JWTSecretRotator
+                jwt_rotator = JWTSecretRotator(name=rotator_name, config=rotator_config)
+                self.engine.register_rotator(jwt_rotator)
+            
+            else:
+                logger.warning(f"Unknown rotator type '{rotator_type}' for '{rotator_name}'")
+
+    def _setup_rotation_jobs(self):
+        """Set up rotation jobs from configuration"""
+        jobs = settings.get('jobs', [])
+        
+        if jobs:
+            for job in jobs:
+                if self.engine.add_rotation_job(job):
+                    logger.debug(f"Added job: {job['name']}")
+            logger.info(f"Loaded {len(jobs)} rotation jobs from config")
+        else:
+            logger.warning("No rotation jobs configured. Add jobs to config/config.yaml")
+
     def _print_security_status(self):
         """Print security configuration status"""
         logger.info("=" * 60)
@@ -138,14 +158,12 @@ class SecretRotationApp:
         logger.info("=" * 60)
         
         encryption_enabled = settings.get('security.encryption.enabled', True)
-        encrypt_secrets = settings.get('providers.file_storage.encrypt_secrets', True)
         encrypt_backups = settings.get('backup.encrypt_backups', True)
         
         logger.info(f"Encryption System: {'ENABLED' if encryption_enabled else 'DISABLED'}")
-        logger.info(f"Secret Storage Encryption: {'ENABLED' if encrypt_secrets else 'DISABLED'}")
         logger.info(f"Backup Encryption: {'ENABLED' if encrypt_backups else 'DISABLED'}")
         
-        if encryption_enabled:
+        if encryption_enabled and self.encryption_manager:
             key_file = settings.get('security.encryption.master_key_file', 'config/.master.key')
             key_path = Path(key_file)
             if key_path.exists():
