@@ -21,3 +21,7 @@ htmlcov/
 # Master Key file
 *.key
 *.pem
+*.key.old
+*.pem.old
+*.key.json
+config/key_backups
