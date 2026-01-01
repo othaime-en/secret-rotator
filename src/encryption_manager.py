@@ -45,17 +45,21 @@ class EncryptionManager:
                 key_data = json.load(f)
             
             # Extract key and metadata
-            key = base64.b64decode(key_data["key"].encode())
+            key_str = key_data["key"]
             self.key_metadata = key_data.get("metadata", {})
             
-            # Verify key integrity
+            # Decode the base64 key string to bytes
+            key_bytes = base64.urlsafe_b64decode(key_str.encode())
+            
+            # Verify key integrity using the raw bytes
             expected_key_id = self.key_metadata.get("key_id")
             if expected_key_id:
-                actual_key_id = hashlib.sha256(key).hexdigest()[:16]
+                actual_key_id = hashlib.sha256(key_bytes).hexdigest()[:16]
                 if expected_key_id != actual_key_id:
                     raise ValueError("Master key integrity check failed")
             
-            return key
+            # Return the original base64-encoded key (what Fernet expects)
+            return key_str.encode()
             
         except json.JSONDecodeError:
             # Handle legacy key files (raw bytes without metadata)
