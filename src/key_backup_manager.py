@@ -193,10 +193,10 @@ class MasterKeyBackupManager:
             raise
     
     def create_split_key_backup(
-        self,
-        num_shares: int = 5,
-        threshold: int = 3
-    ) -> List[str]:
+    self,
+    num_shares: int = 5,
+    threshold: int = 3
+) -> List[str]:
         """
         Create a Shamir's Secret Sharing backup of the master key.
         
@@ -211,11 +211,11 @@ class MasterKeyBackupManager:
             List of share file paths
         """
         try:
-            from secretsharing import PlaintextToHexSecretSharer
+            from pyshamir import split
         except ImportError:
             logger.error(
-                "secretsharing library not installed. "
-                "Install with: pip install secretsharing"
+                "pyshamir library not installed. "
+                "Install with: pip install pyshamir"
             )
             raise
         
@@ -229,19 +229,21 @@ class MasterKeyBackupManager:
         with open(self.master_key_file, 'r') as f:
             key_data = json.load(f)
         
-        # Convert to hex string for splitting
+        # Convert to bytes for splitting
         key_json = json.dumps(key_data)
-        key_hex = key_json.encode().hex()
+        key_bytes = key_json.encode('utf-8')
         
-        # Split the key
-        shares = PlaintextToHexSecretSharer.split_secret(key_hex, threshold, num_shares)
-        
-        # Save each share
+        # Split the key and save each share
+        shares = split(key_bytes, num_shares, threshold)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         share_files = []
         
         for i, share in enumerate(shares, 1):
             share_file = self.backup_dir / f"master_key_share_{i}_of_{num_shares}_{timestamp}.share"
+            
+            # Convert share bytes to base64 for JSON storage
+            import base64
+            share_base64 = base64.b64encode(share).decode('utf-8')
             
             share_package = {
                 "version": 1,
@@ -249,7 +251,7 @@ class MasterKeyBackupManager:
                 "total_shares": num_shares,
                 "threshold": threshold,
                 "created_at": datetime.now().isoformat(),
-                "share_data": share,
+                "share_data": share_base64,
                 "key_id": key_data.get("metadata", {}).get("key_id")
             }
             
@@ -268,11 +270,7 @@ class MasterKeyBackupManager:
         
         return share_files
     
-    def restore_from_split_key(
-        self,
-        share_files: List[str],
-        verify_only: bool = False
-    ) -> bool:
+    def restore_from_split_key(self, share_files: List[str], verify_only: bool = False) -> bool:
         """
         Restore master key from Shamir shares.
         
@@ -284,16 +282,16 @@ class MasterKeyBackupManager:
             True if successful
         """
         try:
-            from secretsharing import PlaintextToHexSecretSharer
+            from pyshamir import combine
         except ImportError:
-            logger.error("secretsharing library not installed")
+            logger.error("pyshamir library not installed")
             raise
         
         if not share_files:
             raise ValueError("No share files provided")
         
         # Read all shares
-        shares = []
+        shares_bytes = []
         threshold = None
         key_id = None
         
@@ -304,7 +302,10 @@ class MasterKeyBackupManager:
             with open(share_file, 'r') as f:
                 share_package = json.load(f)
             
-            shares.append(share_package['share_data'])
+            # Convert base64 back to bytes
+            import base64
+            share_bytes = base64.b64decode(share_package['share_data'])
+            shares_bytes.append(share_bytes)
             
             if threshold is None:
                 threshold = share_package['threshold']
@@ -312,16 +313,16 @@ class MasterKeyBackupManager:
             if key_id is None:
                 key_id = share_package.get('key_id')
         
-        if len(shares) < threshold:
+        if len(shares_bytes) < threshold:
             raise ValueError(
-                f"Insufficient shares: need {threshold}, have {len(shares)}"
+                f"Insufficient shares: need {threshold}, have {len(shares_bytes)}"
             )
         
-        logger.info(f"Reconstructing key from {len(shares)} shares (threshold: {threshold})")
+        logger.info(f"Reconstructing key from {len(shares_bytes)} shares (threshold: {threshold})")
         
         # Reconstruct the key
-        reconstructed_hex = PlaintextToHexSecretSharer.recover_secret(shares)
-        reconstructed_json = bytes.fromhex(reconstructed_hex).decode()
+        reconstructed_bytes = combine(shares_bytes)
+        reconstructed_json = reconstructed_bytes.decode('utf-8')
         key_data = json.loads(reconstructed_json)
         
         # Verify key ID matches if available
