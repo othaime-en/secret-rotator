@@ -430,6 +430,9 @@ class SecretRotationApp:
     
     def rotate_master_key(self):
         """Rotate the master encryption key"""
+        if not self.engine:
+            self.setup()
+        
         if not self.encryption_manager:
             logger.error("Encryption not enabled")
             print("ERROR: Encryption is not enabled. Cannot rotate master key.")
@@ -514,6 +517,9 @@ class SecretRotationApp:
     
     def cleanup_old_backups(self):
         """Manually trigger backup cleanup"""
+        if not self.engine:
+            self.setup()
+        
         if not self.backup_manager:
             logger.error("Backup manager not initialized")
             return
