@@ -48,18 +48,18 @@ class EncryptionManager:
             key_str = key_data["key"]
             self.key_metadata = key_data.get("metadata", {})
             
-            # Decode the base64 key string to bytes
-            key_bytes = base64.urlsafe_b64decode(key_str.encode())
+            # Convert string back to bytes
+            key_bytes = key_str.encode('utf-8')
             
-            # Verify key integrity using the raw bytes
+            # Verify key integrity
             expected_key_id = self.key_metadata.get("key_id")
             if expected_key_id:
                 actual_key_id = hashlib.sha256(key_bytes).hexdigest()[:16]
                 if expected_key_id != actual_key_id:
                     raise ValueError("Master key integrity check failed")
             
-            # Return the original base64-encoded key (what Fernet expects)
-            return key_str.encode()
+            # Return the base64-encoded key bytes (what Fernet expects)
+            return key_bytes
             
         except json.JSONDecodeError:
             # Handle legacy key files (raw bytes without metadata)
@@ -80,19 +80,19 @@ class EncryptionManager:
     def _generate_and_save_key(self) -> bytes:
         """Generate a new encryption key and save it securely with metadata"""
         # Generate cryptographically secure random key
-        key = Fernet.generate_key()
+        key = Fernet.generate_key()  # Already base64-encoded bytes
         
-        # Create metadata
+        # Create metadata - use the key directly for checksum
         self.key_metadata = {
             "version": 1,
             "created_at": datetime.now().isoformat(),
             "algorithm": "Fernet",
-            "key_id": hashlib.sha256(key).hexdigest()[:16]
+            "key_id": hashlib.sha256(key).hexdigest()[:16]  # Hash the base64 bytes
         }
         
         # Package key with metadata
         key_data = {
-            "key": base64.b64encode(key).decode('utf-8'),
+            "key": key.decode('utf-8'),  # Just decode to string, don't double-encode
             "metadata": self.key_metadata
         }
         
@@ -327,7 +327,7 @@ class EncryptionManager:
             
             # Save new key with metadata
             key_data = {
-                "key": base64.b64encode(new_key).decode('utf-8'),
+                "key": new_key.decode('utf-8'),
                 "metadata": new_metadata
             }
             
