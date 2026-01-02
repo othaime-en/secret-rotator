@@ -24,4 +24,5 @@ htmlcov/
 *.key.old
 *.pem.old
 *.key.json
+*.key.backup
 config/key_backups
