@@ -71,6 +71,7 @@ def setup_logger():
     max_file_size = settings.get('logging.max_file_size', '10MB')
     backup_count = settings.get('logging.backup_count', 5)
     log_level = settings.get('logging.level', 'INFO')
+    separate_error_log = settings.get('logging.separate_error_log', True)
     
     # Parse file size
     max_bytes = parse_size(max_file_size)
@@ -85,6 +86,13 @@ def setup_logger():
     console_formatter = logging.Formatter(
         '%(asctime)s - %(levelname)s - %(message)s',
         datefmt='%H:%M:%S'
+    )
+    
+    error_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - '
+        '[%(module)s:%(funcName)s:%(lineno)d] - %(message)s\n'
+        'Exception: %(exc_info)s\n',
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
     
     # Create sensitive data filter
@@ -114,6 +122,15 @@ def setup_logger():
         console_handler.setFormatter(console_formatter)
         console_handler.addFilter(sensitive_filter)
         root_logger.addHandler(console_handler)
+    
+    # Error file handler (ERROR and CRITICAL only)
+    if separate_error_log:
+        error_file = log_file.replace('.log', '_errors.log')
+        error_handler = logging.FileHandler(error_file, encoding='utf-8')
+        error_handler.setLevel(logging.ERROR)
+        error_handler.setFormatter(error_formatter)
+        error_handler.addFilter(sensitive_filter)
+        root_logger.addHandler(error_handler)
     
     return logging.getLogger('secret-rotator')
 
