@@ -177,17 +177,23 @@ class LoggerManager:
         return handler
     
     def _create_console_handler(self, structured: bool) -> logging.Handler:
-        """Create console handler"""
+        """Create console handler with color support"""
         handler = logging.StreamHandler(sys.stdout)
         
         if structured:
             handler.setFormatter(StructuredFormatter())
         else:
             # Simpler format for console (more readable)
-            formatter = logging.Formatter(
-                '%(asctime)s - %(levelname)s - %(message)s',
-                datefmt='%H:%M:%S'
-            )
+            if self._supports_color():
+                formatter = ColoredFormatter(
+                    '%(asctime)s - %(levelname)s - %(message)s',
+                    datefmt='%H:%M:%S'
+                )
+            else:
+                formatter = logging.Formatter(
+                    '%(asctime)s - %(levelname)s - %(message)s',
+                    datefmt='%H:%M:%S'
+                )
             handler.setFormatter(formatter)
         
         return handler
@@ -240,6 +246,14 @@ class LoggerManager:
             # Default to 10MB if parsing fails completely
             return 10 * 1024 * 1024
     
+    def _supports_color(self) -> bool:
+        """Check if terminal supports colors"""
+        return (
+            hasattr(sys.stdout, 'isatty') and 
+            sys.stdout.isatty() and
+            os.environ.get('TERM') != 'dumb'
+        )
+    
     def get_logger(self, name: str) -> logging.Logger:
         """
         Get or create a logger with the given name.
@@ -248,6 +262,28 @@ class LoggerManager:
             self._loggers[name] = logging.getLogger(name)
         
         return self._loggers[name]
+
+
+class ColoredFormatter(logging.Formatter):
+    """Formatter with color support for console output"""
+    
+    COLORS = {
+        'DEBUG': '\033[36m',      # Cyan
+        'INFO': '\033[32m',       # Green
+        'WARNING': '\033[33m',    # Yellow
+        'ERROR': '\033[31m',      # Red
+        'CRITICAL': '\033[35m',   # Magenta
+        'RESET': '\033[0m'
+    }
+    
+    def format(self, record: logging.LogRecord) -> str:
+        levelname = record.levelname
+        if levelname in self.COLORS:
+            record.levelname = (
+                f"{self.COLORS[levelname]}{levelname}{self.COLORS['RESET']}"
+            )
+        
+        return super().format(record)
 
 
 # Initialize logger manager and get default logger
