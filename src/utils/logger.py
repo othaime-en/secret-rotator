@@ -1,6 +1,7 @@
 import logging
 import logging.handlers
 import os
+import sys
 from pathlib import Path
 from config.settings import settings
 
@@ -29,30 +30,45 @@ def setup_logger():
     console_enabled = settings.get('logging.console_enabled', True)
     max_file_size = settings.get('logging.max_file_size', '10MB')
     backup_count = settings.get('logging.backup_count', 5)
+    log_level = settings.get('logging.level', 'INFO')
     
     # Parse file size
     max_bytes = parse_size(max_file_size)
     
-    # Configure handlers list
-    handlers = [
-        logging.handlers.RotatingFileHandler(
-            log_file,
-            maxBytes=max_bytes,
-            backupCount=backup_count,
-            encoding='utf-8'
-        )
-    ]
-    
-    # Add console handler only if enabled
-    if console_enabled:
-        handlers.append(logging.StreamHandler())
-    
-    # Configure logging
-    logging.basicConfig(
-        level=getattr(logging, settings.get('logging.level', 'INFO')),
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=handlers
+    # Create formatters
+    file_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - '
+        '[%(module)s:%(funcName)s:%(lineno)d] - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
+    
+    console_formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%H:%M:%S'
+    )
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, log_level.upper()))
+    
+    # Remove existing handlers
+    root_logger.handlers.clear()
+    
+    # File handler with detailed format
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_file,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding='utf-8'
+    )
+    file_handler.setFormatter(file_formatter)
+    root_logger.addHandler(file_handler)
+    
+    # Console handler with simple format (if enabled)
+    if console_enabled:
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(console_formatter)
+        root_logger.addHandler(console_handler)
     
     return logging.getLogger('secret-rotator')
 
