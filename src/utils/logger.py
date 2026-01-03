@@ -3,21 +3,38 @@ import logging.handlers
 import os
 import sys
 import re
+import json
+from datetime import datetime
 from pathlib import Path
 from config.settings import settings
 
-def parse_size(size_str: str) -> int:
-    """Parse size string like '10MB' to bytes"""
-    size_str = size_str.upper().strip()
+
+class StructuredFormatter(logging.Formatter):
+    """
+    JSON formatter for structured logging.
+    Makes logs easily parseable by log aggregation tools (ELK, Splunk, etc.)
+    """
     
-    if size_str.endswith('GB'):
-        return int(float(size_str[:-2]) * 1024 * 1024 * 1024)
-    elif size_str.endswith('MB'):
-        return int(float(size_str[:-2]) * 1024 * 1024)
-    elif size_str.endswith('KB'):
-        return int(float(size_str[:-2]) * 1024)
-    else:
-        return int(size_str)
+    def format(self, record: logging.LogRecord) -> str:
+        log_data = {
+            'timestamp': datetime.utcnow().isoformat() + 'Z',
+            'level': record.levelname,
+            'logger': record.name,
+            'message': record.getMessage(),
+            'module': record.module,
+            'function': record.funcName,
+            'line': record.lineno,
+        }
+        
+        # Add exception info if present
+        if record.exc_info:
+            log_data['exception'] = self.formatException(record.exc_info)
+        
+        # Add custom fields from extra parameter
+        if hasattr(record, 'extra_fields'):
+            log_data.update(record.extra_fields)
+        
+        return json.dumps(log_data)
 
 
 class SensitiveDataFilter(logging.Filter):
@@ -58,6 +75,20 @@ class SensitiveDataFilter(logging.Filter):
         return msg
 
 
+def parse_size(size_str: str) -> int:
+    """Parse size string like '10MB' to bytes"""
+    size_str = size_str.upper().strip()
+    
+    if size_str.endswith('GB'):
+        return int(float(size_str[:-2]) * 1024 * 1024 * 1024)
+    elif size_str.endswith('MB'):
+        return int(float(size_str[:-2]) * 1024 * 1024)
+    elif size_str.endswith('KB'):
+        return int(float(size_str[:-2]) * 1024)
+    else:
+        return int(size_str)
+
+
 def setup_logger():
     """Set up logging configuration"""
     
@@ -72,28 +103,34 @@ def setup_logger():
     backup_count = settings.get('logging.backup_count', 5)
     log_level = settings.get('logging.level', 'INFO')
     separate_error_log = settings.get('logging.separate_error_log', True)
+    structured = settings.get('logging.structured', False)
     
     # Parse file size
     max_bytes = parse_size(max_file_size)
     
-    # Create formatters
-    file_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - '
-        '[%(module)s:%(funcName)s:%(lineno)d] - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    
-    console_formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%H:%M:%S'
-    )
-    
-    error_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - '
-        '[%(module)s:%(funcName)s:%(lineno)d] - %(message)s\n'
-        'Exception: %(exc_info)s\n',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    # Create formatters based on structured flag
+    if structured:
+        file_formatter = StructuredFormatter()
+        console_formatter = StructuredFormatter()
+        error_formatter = StructuredFormatter()
+    else:
+        file_formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - '
+            '[%(module)s:%(funcName)s:%(lineno)d] - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        
+        console_formatter = logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(message)s',
+            datefmt='%H:%M:%S'
+        )
+        
+        error_formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - '
+            '[%(module)s:%(funcName)s:%(lineno)d] - %(message)s\n'
+            'Exception: %(exc_info)s\n',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
     
     # Create sensitive data filter
     sensitive_filter = SensitiveDataFilter()
