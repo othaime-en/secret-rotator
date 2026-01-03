@@ -2,6 +2,7 @@ import logging
 import logging.handlers
 import os
 import sys
+import re
 from pathlib import Path
 from config.settings import settings
 
@@ -17,6 +18,45 @@ def parse_size(size_str: str) -> int:
         return int(float(size_str[:-2]) * 1024)
     else:
         return int(size_str)
+
+
+class SensitiveDataFilter(logging.Filter):
+    """
+    Filter to mask sensitive data in logs.
+    Prevents accidental logging of passwords, API keys, etc.
+    """
+    
+    SENSITIVE_PATTERNS = [
+        'password', 'passwd', 'pwd',
+        'api_key', 'apikey', 'token',
+        'secret', 'credential',
+        'authorization', 'auth'
+    ]
+    
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Mask sensitive data in message
+        message = record.getMessage().lower()
+        
+        for pattern in self.SENSITIVE_PATTERNS:
+            if pattern in message:
+                # Replace with masked version
+                record.msg = self._mask_sensitive_data(record.msg)
+        
+        return True
+    
+    def _mask_sensitive_data(self, msg: str) -> str:
+        """Mask sensitive data patterns in message"""
+        for pattern in self.SENSITIVE_PATTERNS:
+            if pattern in msg.lower():
+                # Pattern: key=value or key: value
+                regex = re.compile(
+                    f'{pattern}["\']?\\s*[:=]\\s*["\']?([^\\s,"\']+)',
+                    re.IGNORECASE
+                )
+                msg = regex.sub(f'{pattern}=****', msg)
+        
+        return msg
+
 
 def setup_logger():
     """Set up logging configuration"""
@@ -47,6 +87,9 @@ def setup_logger():
         datefmt='%H:%M:%S'
     )
     
+    # Create sensitive data filter
+    sensitive_filter = SensitiveDataFilter()
+    
     # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, log_level.upper()))
@@ -62,12 +105,14 @@ def setup_logger():
         encoding='utf-8'
     )
     file_handler.setFormatter(file_formatter)
+    file_handler.addFilter(sensitive_filter)
     root_logger.addHandler(file_handler)
     
     # Console handler with simple format (if enabled)
     if console_enabled:
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(console_formatter)
+        console_handler.addFilter(sensitive_filter)
         root_logger.addHandler(console_handler)
     
     return logging.getLogger('secret-rotator')
