@@ -10,7 +10,11 @@ import re
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any
+from contextvars import ContextVar
 from config.settings import settings
+
+# Context variable for tracking request/operation IDs
+_request_context: ContextVar[Dict[str, Any]] = ContextVar('request_context', default={})
 
 
 class StructuredFormatter(logging.Formatter):
@@ -37,6 +41,11 @@ class StructuredFormatter(logging.Formatter):
         # Add custom fields from extra parameter
         if hasattr(record, 'extra_fields'):
             log_data.update(record.extra_fields)
+        
+        # Add context (request ID, user ID, etc.)
+        context = _request_context.get()
+        if context:
+            log_data['context'] = context
         
         return json.dumps(log_data)
 
@@ -67,8 +76,11 @@ class SensitiveDataFilter(logging.Filter):
     
     def _mask_sensitive_data(self, msg: str) -> str:
         """Mask sensitive data patterns in message"""
+        # Simple masking - in production, use regex for more sophisticated masking
         for pattern in self.SENSITIVE_PATTERNS:
             if pattern in msg.lower():
+                # Find and mask the value after the pattern
+                import re
                 # Pattern: key=value or key: value
                 regex = re.compile(
                     f'{pattern}["\']?\\s*[:=]\\s*["\']?([^\\s,"\']+)',
@@ -77,6 +89,23 @@ class SensitiveDataFilter(logging.Filter):
                 msg = regex.sub(f'{pattern}=****', msg)
         
         return msg
+
+
+class LoggerAdapter(logging.LoggerAdapter):
+    """
+    Custom adapter that adds context to all log messages.
+    Useful for tracking requests, operations, or user sessions.
+    """
+    
+    def process(self, msg, kwargs):
+        # Add context to extra fields
+        context = _request_context.get()
+        if context:
+            if 'extra' not in kwargs:
+                kwargs['extra'] = {}
+            kwargs['extra']['extra_fields'] = context
+        
+        return msg, kwargs
 
 
 class LoggerManager:
@@ -254,14 +283,15 @@ class LoggerManager:
             os.environ.get('TERM') != 'dumb'
         )
     
-    def get_logger(self, name: str) -> logging.Logger:
+    def get_logger(self, name: str) -> LoggerAdapter:
         """
         Get or create a logger with the given name.
+        Returns a LoggerAdapter for context support.
         """
         if name not in self._loggers:
             self._loggers[name] = logging.getLogger(name)
         
-        return self._loggers[name]
+        return LoggerAdapter(self._loggers[name], {})
 
 
 class ColoredFormatter(logging.Formatter):
@@ -284,6 +314,27 @@ class ColoredFormatter(logging.Formatter):
             )
         
         return super().format(record)
+
+
+# Context manager for operation tracking
+class LogContext:
+    """
+    Context manager for adding context to logs within a scope.
+    """
+    
+    def __init__(self, **context):
+        self.context = context
+        self.token = None
+    
+    def __enter__(self):
+        current = _request_context.get().copy()
+        current.update(self.context)
+        self.token = _request_context.set(current)
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.token:
+            _request_context.reset(self.token)
 
 
 # Initialize logger manager and get default logger
