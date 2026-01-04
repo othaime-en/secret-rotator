@@ -6,7 +6,6 @@ import logging.handlers
 import json
 import os
 import sys
-import re
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -320,6 +319,10 @@ class ColoredFormatter(logging.Formatter):
 class LogContext:
     """
     Context manager for adding context to logs within a scope.
+    
+    Example:
+        with LogContext(request_id="req-123", user_id="user-456"):
+            logger.info("Processing request")  # Will include context
     """
     
     def __init__(self, **context):
@@ -335,6 +338,24 @@ class LogContext:
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.token:
             _request_context.reset(self.token)
+
+
+# Convenience functions
+def set_log_level(level: str):
+    """Dynamically change log level at runtime"""
+    logging.getLogger().setLevel(getattr(logging, level.upper()))
+
+
+def add_context(**kwargs):
+    """Add context that will be included in all subsequent logs"""
+    current = _request_context.get().copy()
+    current.update(kwargs)
+    _request_context.set(current)
+
+
+def clear_context():
+    """Clear all context"""
+    _request_context.set({})
 
 
 # Initialize logger manager and get default logger
