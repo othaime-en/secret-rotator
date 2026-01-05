@@ -9,10 +9,46 @@ rotation:
   backup_old_secrets: true
 
 logging:
-  level: "INFO" # DEBUG, INFO, WARNING, ERROR
+  level: "INFO" #DEBUG, INFO, WARNING, ERROR, CRITICAL
   file: "logs/rotation.log"
-  max_file_size: "10MB"
-  backup_count: 5
+  console_enabled: true # Console output: Set to false in production
+
+  # Use structured (JSON) logging for easier parsing
+  # Recommended for production with log aggregation tools
+  structured: true # Set to true if using ELK, Splunk, etc.
+
+  max_file_size: "10MB" # Rotate when file reaches this size
+  backup_count: 5 # Keep this many old log files
+  separate_error_log: true # Separate error log file (ERROR and CRITICAL only)
+
+  # Log format customization (when structured=false)
+  format:
+    file: "%(asctime)s - %(name)s - %(levelname)s - [%(module)s:%(funcName)s:%(lineno)d] - %(message)s"
+    console: "%(asctime)s - %(levelname)s - %(message)s"
+
+  lazy_evaluation: true # Use lazy string formatting
+  mask_sensitive_data: true # Automatically mask passwords, keys, etc.
+
+# Environment-specific overrides
+environments:
+  development:
+    logging:
+      level: "DEBUG"
+      console_enabled: true
+      structured: false
+
+  production:
+    logging:
+      level: "INFO"
+      console_enabled: false # DISABLE console in production
+      structured: true
+      separate_error_log: true
+
+  testing:
+    logging:
+      level: "WARNING"
+      console_enabled: false
+      file: "logs/test.log"
 
 web:
   enabled: true
