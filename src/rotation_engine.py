@@ -66,7 +66,7 @@ class RotationEngine:
             if settings.get('rotation.backup_old_secrets', True):
                 try:
                     new_secret_temp = rotator.generate_new_secret()  # Generate early for backup metadata
-                    backup_path = self.backup_manager.create_backup(secret_id, current_secret, new_secret_temp)
+                    backup_path = self.backup_manager.create_backup_with_checksum(secret_id, current_secret, new_secret_temp)
                     logger.info(f"Backup created at {backup_path}")
                 except Exception as e:
                     logger.error(f"Backup failed for {job_name}, aborting rotation: {e}")
