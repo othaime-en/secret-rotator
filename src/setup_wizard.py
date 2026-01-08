@@ -60,5 +60,44 @@ def create_directories(config_dir, data_dir, log_dir):
         os.chmod(directory, 0o700)  # Restrictive permissions
         print(f"  ✓ {directory}")
 
+def create_config(config_dir, data_dir, log_dir):
+    """Create default configuration"""
+    config_file = config_dir / 'config.yaml'
+    
+    if config_file.exists():
+        response = input(f"\n⚠️  Configuration already exists at {config_file}\n   Overwrite? (yes/no): ")
+        if response.lower() != 'yes':
+            print("Keeping existing configuration")
+            return config_file
+    
+    print("\n📝 Creating configuration...")
+    
+    # Interactive configuration
+    print("\nRotation Schedule:")
+    print("  1. Daily (recommended)")
+    print("  2. Weekly")
+    print("  3. Every 12 hours")
+    print("  4. Custom")
+    
+    choice = input("Select schedule [1]: ").strip() or "1"
+    schedule_map = {
+        "1": "daily",
+        "2": "weekly",
+        "3": "every_12_hours",
+        "4": input("  Enter custom schedule (e.g., every_30_minutes): ")
+    }
+    schedule = schedule_map.get(choice, "daily")
+    
+    # Create and write configuration
+    config = {}
+    
+    with open(config_file, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    
+    os.chmod(config_file, 0o600)  # Restrictive permissions
+    print(f"  ✓ Configuration saved to {config_file}")
+    
+    return config_file
+
 if __name__ == '__main__':
     pass
