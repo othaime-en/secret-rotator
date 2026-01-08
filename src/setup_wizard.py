@@ -44,5 +44,21 @@ def get_log_dir():
             return Path(xdg_state) / 'secret-rotator' / 'logs'
         return Path.home() / '.local' / 'state' / 'secret-rotator' / 'logs'
 
+def create_directories(config_dir, data_dir, log_dir):
+    """Create necessary directories"""
+    print("\n📁 Creating directories...")
+    
+    directories = [
+        config_dir,
+        data_dir,
+        data_dir / 'backup',
+        log_dir
+    ]
+    
+    for directory in directories:
+        directory.mkdir(parents=True, exist_ok=True)
+        os.chmod(directory, 0o700)  # Restrictive permissions
+        print(f"  ✓ {directory}")
+
 if __name__ == '__main__':
     pass
