@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "secret-rotator"
+version = "1.0.0"
+description = "Automated secret rotation system with encryption and backup management"
+readme = "README.md"
+authors = [{ name = "othaimeen", email = "othaimeen97@gmail.com" }]
+license = { text = "MIT" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+]
+keywords = ["security", "secrets", "rotation", "encryption", "automation"]
+requires-python = ">=3.9"
+dependencies = ["cryptography>=46.0.0", "PyYAML>=6.0.0", "schedule>=1.2.0"]
+
+[project.scripts]
+secret-rotator = "secret_rotator.cli:main"
+secret-rotator-setup = "secret_rotator.setup_wizard:main"
+secret-rotator-backup = "secret_rotator.tools.manage_key_backups:main"
+
+[tool.setuptools]
+packages = [
+    "secret_rotator",
+    "secret_rotator.providers",
+    "secret_rotator.rotators",
+    "secret_rotator.config",
+    "secret_rotator.utils",
+    "secret_rotator.tools",
+]
+
+[tool.setuptools.package-dir]
+secret_rotator = "src"
