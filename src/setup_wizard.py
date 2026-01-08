@@ -88,9 +88,78 @@ def create_config(config_dir, data_dir, log_dir):
     }
     schedule = schedule_map.get(choice, "daily")
     
-    # Create and write configuration
-    config = {}
+    # Create configuration
+    config = {
+        'rotation': {
+            'schedule': schedule,
+            'retry_attempts': 3,
+            'timeout': 30,
+            'backup_old_secrets': True
+        },
+        'logging': {
+            'level': 'INFO',
+            'file': str(log_dir / 'rotation.log'),
+            'console_enabled': True,
+            'structured': False,
+            'max_file_size': '10MB',
+            'backup_count': 5,
+            'separate_error_log': True
+        },
+        'web': {
+            'enabled': True,
+            'port': 8080,
+            'host': 'localhost'
+        },
+        'providers': {
+            'file_storage': {
+                'type': 'file',
+                'file_path': str(data_dir / 'secrets.json'),
+                'backup_path': str(data_dir / 'backup')
+            }
+        },
+        'rotators': {
+            'password_gen': {
+                'type': 'password',
+                'length': 16,
+                'use_symbols': True,
+                'use_numbers': True,
+                'use_uppercase': True,
+                'use_lowercase': True,
+                'exclude_ambiguous': True
+            }
+        },
+        'security': {
+            'encryption': {
+                'enabled': True,
+                'master_key_file': str(config_dir / '.master.key'),
+                'rotate_master_key_days': 90
+            }
+        },
+        'backup': {
+            'enabled': True,
+            'storage_path': str(data_dir / 'backup'),
+            'encrypt_backups': True,
+            'cleanup_time': '03:00',
+            'verification_time': '04:00',
+            'verify_integrity': True,
+            'retention': {
+                'days': 90,
+                'max_backups_per_secret': 10
+            }
+        },
+        'jobs': [
+            {
+                'name': 'example_password',
+                'provider': 'file_storage',
+                'rotator': 'password_gen',
+                'secret_id': 'example_secret',
+                'schedule': 'weekly',
+                'notification': False
+            }
+        ]
+    }
     
+    # Write configuration
     with open(config_file, 'w') as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
     
