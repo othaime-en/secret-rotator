@@ -238,5 +238,48 @@ def print_summary(config_dir, data_dir, log_dir, config_file):
     
     print("\n" + "="*70)
 
+def main():
+    """Main setup wizard"""
+    print("="*70)
+    print("SECRET ROTATION SYSTEM - SETUP WIZARD")
+    print("="*70)
+    print("\nThis wizard will set up Secret Rotation System on your machine.")
+    print("It will create configuration files and necessary directories.")
+    
+    # Determine directories
+    config_dir = get_config_dir()
+    data_dir = get_data_dir()
+    log_dir = get_log_dir()
+    
+    print(f"\nInstallation locations:")
+    print(f"  Config: {config_dir}")
+    print(f"  Data:   {data_dir}")
+    print(f"  Logs:   {log_dir}")
+    
+    response = input("\nContinue? (yes/no): ")
+    if response.lower() != 'yes':
+        print("Setup cancelled")
+        sys.exit(0)
+    
+    try:
+        # Create directories
+        create_directories(config_dir, data_dir, log_dir)
+        
+        # Create configuration
+        config_file = create_config(config_dir, data_dir, log_dir)
+        
+        # Setup encryption
+        setup_encryption(config_dir)
+        
+        # Print summary
+        print_summary(config_dir, data_dir, log_dir, config_file)
+        
+    except KeyboardInterrupt:
+        print("\n\nSetup interrupted")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n✗ Setup failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
 if __name__ == '__main__':
-    pass
+    main()
