@@ -27,6 +27,29 @@ keywords = ["security", "secrets", "rotation", "encryption", "automation"]
 requires-python = ">=3.9"
 dependencies = ["cryptography>=46.0.0", "PyYAML>=6.0.0", "schedule>=1.2.0"]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+databases = [
+    "psycopg2-binary>=2.9.0",
+    "pymongo>=4.15.0",
+    "mysql-connector-python>=8.0.0",
+]
+advanced = ["PyJWT>=2.10.0", "pyshamir>=1.0.4", "Requests>=2.32.0"]
+all = ["secret-rotator[dev,databases,advanced]"]
+
+[project.urls]
+Homepage = "https://github.com/othaime-en/secret-rotator"
+Documentation = "https://github.com/othaime-en/secret-rotator#readme"
+Repository = "https://github.com/othaime-en/secret-rotator"
+Issues = "https://github.com/othaime-en/secret-rotator/issues"
+Changelog = "https://github.com/othaime-en/secret-rotator/blob/main/CHANGELOG.md"
+
 [project.scripts]
 secret-rotator = "secret_rotator.cli:main"
 secret-rotator-setup = "secret_rotator.setup_wizard:main"
@@ -44,3 +67,21 @@ packages = [
 
 [tool.setuptools.package-dir]
 secret_rotator = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --cov=src --cov-report=html --cov-report=term"
+
+[tool.black]
+line-length = 100
+target-version = ['py39']
+include = '\.pyi?$'
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
