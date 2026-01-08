@@ -168,5 +168,38 @@ def create_config(config_dir, data_dir, log_dir):
     
     return config_file
 
+def setup_encryption(config_dir):
+    """Set up encryption and generate master key"""
+    print("\n🔐 Setting up encryption...")
+    
+    master_key_file = config_dir / '.master.key'
+    
+    if master_key_file.exists():
+        response = input(f"\n⚠️  Master key already exists\n   Generate new key? (yes/no): ")
+        if response.lower() != 'yes':
+            print("Keeping existing master key")
+            return
+        
+        # Backup existing key
+        backup_file = master_key_file.with_suffix('.key.backup')
+        shutil.copy2(master_key_file, backup_file)
+        print(f"  ✓ Backed up existing key to {backup_file}")
+    
+    # Import encryption manager to generate key
+    try:
+        from encryption_manager import EncryptionManager
+        
+        # This will automatically generate a new key if it doesn't exist
+        em = EncryptionManager(key_file=str(master_key_file))
+        
+        os.chmod(master_key_file, 0o600)
+        print(f"  ✓ Master encryption key generated: {master_key_file}")
+        print("\n  ⚠️  CRITICAL: Backup this key immediately!")
+        print(f"     Run: secret-rotator-backup create-encrypted")
+        
+    except Exception as e:
+        print(f"  ✗ Error generating master key: {e}")
+        sys.exit(1)
+
 if __name__ == '__main__':
     pass
