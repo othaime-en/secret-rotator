@@ -201,5 +201,42 @@ def setup_encryption(config_dir):
         print(f"  ✗ Error generating master key: {e}")
         sys.exit(1)
 
+def print_summary(config_dir, data_dir, log_dir, config_file):
+    """Print setup summary and next steps"""
+    print("\n" + "="*70)
+    print("✓ SETUP COMPLETE")
+    print("="*70)
+    
+    print("\nDirectories created:")
+    print(f"  Config:  {config_dir}")
+    print(f"  Data:    {data_dir}")
+    print(f"  Logs:    {log_dir}")
+    
+    print(f"\nConfiguration: {config_file}")
+    
+    print("\n" + "="*70)
+    print("NEXT STEPS")
+    print("="*70)
+    
+    print("\n1. BACKUP YOUR MASTER KEY (Critical!)")
+    print("   Run: secret-rotator-backup create-encrypted")
+    print("   Store the passphrase in a password manager")
+    
+    print("\n2. Edit configuration if needed:")
+    print(f"   {config_file}")
+    
+    print("\n3. Add your rotation jobs to the 'jobs' section")
+    
+    print("\n4. Verify setup:")
+    print("   secret-rotator --mode verify")
+    
+    print("\n5. Start the application:")
+    print("   secret-rotator")
+    
+    print("\n6. Access web interface:")
+    print("   http://localhost:8080")
+    
+    print("\n" + "="*70)
+
 if __name__ == '__main__':
     pass
