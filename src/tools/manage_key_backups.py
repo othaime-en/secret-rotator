@@ -15,7 +15,7 @@ import getpass
 from pathlib import Path
 
 # Add src to path
-sys.path.append(str(Path(__file__).parent.parent / "src"))
+sys.path.append(str(Path(__file__).parent.parent))
 
 from key_backup_manager import MasterKeyBackupManager
 from utils.logger import logger
