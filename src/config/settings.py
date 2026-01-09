@@ -25,7 +25,7 @@ class Settings:
         # 6. Package installation directory (for pip-installed package)
         lambda: Settings._get_package_config_path(),
         
-        # 7. Source directory (for development) - lowest priority
+        # 7. Source directory (for development)
         lambda: Path(__file__).parent.parent.parent / "config" / "config.yaml",
     ]
     
@@ -33,12 +33,16 @@ class Settings:
     def _get_package_config_path():
         """Get config path from installed package"""
         try:
+            # When installed via pip, the package will be in site-packages
             import secret_rotator
             package_dir = Path(secret_rotator.__file__).parent
+            
+            # Check if there's a config in the package data
             config_path = package_dir / "config" / "config.yaml"
             if config_path.exists():
                 return config_path
         except ImportError:
+            # Not installed as package, running from source
             pass
         return None
     
@@ -61,10 +65,81 @@ class Settings:
             except Exception:
                 continue
         
-        # Fallback: use source directory (will be handled in next major change)
-        default_path = Path(__file__).parent.parent.parent / "config" / "config.yaml"
-        print(f"No config found, using default: {default_path}")
-        return default_path
+        # If no config found, create default in user directory
+        user_config = Path.home() / ".config" / "secret-rotator" / "config.yaml"
+        user_config.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Try to copy example config
+        example_locations = [
+            Path(__file__).parent.parent.parent / "config" / "config.example.yaml",  # From source
+            Path.cwd() / "config" / "config.example.yaml",  # Current dir
+        ]
+        
+        for example_config in example_locations:
+            if example_config.exists():
+                import shutil
+                shutil.copy(example_config, user_config)
+                print(f"Created default config: {user_config}")
+                break
+        else:
+            # Create minimal config if example not found
+            self._create_minimal_config(user_config)
+        
+        return user_config
+    
+    def _create_minimal_config(self, config_path: Path):
+        """Create a minimal working config"""
+        minimal_config = {
+            'rotation': {
+                'schedule': 'daily',
+                'retry_attempts': 3,
+                'timeout': 30,
+                'backup_old_secrets': True
+            },
+            'logging': {
+                'level': 'INFO',
+                'file': 'logs/rotation.log',
+                'console_enabled': True
+            },
+            'web': {
+                'enabled': True,
+                'port': 8080,
+                'host': 'localhost'
+            },
+            'providers': {
+                'file_storage': {
+                    'type': 'file',
+                    'file_path': str(Path.home() / ".local" / "share" / "secret-rotator" / "secrets.json")
+                }
+            },
+            'rotators': {
+                'password_gen': {
+                    'type': 'password',
+                    'length': 16,
+                    'use_symbols': True,
+                    'use_numbers': True,
+                    'use_uppercase': True,
+                    'use_lowercase': True
+                }
+            },
+            'security': {
+                'encryption': {
+                    'enabled': True,
+                    'master_key_file': str(Path.home() / ".config" / "secret-rotator" / ".master.key")
+                }
+            },
+            'backup': {
+                'enabled': True,
+                'storage_path': str(Path.home() / ".local" / "share" / "secret-rotator" / "backup"),
+                'encrypt_backups': True
+            },
+            'jobs': []
+        }
+        
+        with open(config_path, 'w') as f:
+            yaml.dump(minimal_config, f, default_flow_style=False)
+        
+        print(f"Created minimal config: {config_path}")
     
     def load_config(self):
         """Load configuration from YAML file"""
@@ -83,8 +158,9 @@ class Settings:
         keys = key.split('.')
         value = self.config
         for k in keys:
-            value = value.get(k, {})
-            if not isinstance(value, dict) and k != keys[-1]:
+            if isinstance(value, dict):
+                value = value.get(k, {})
+            else:
                 return default
         return value if value != {} else default
     
