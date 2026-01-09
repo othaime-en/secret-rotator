@@ -6,19 +6,41 @@ from typing import Optional
 class Settings:
     """Configuration management with support for multiple config locations"""
     
-    # Search paths for config file (in order of priority)
     CONFIG_SEARCH_PATHS = [
-        # 1. Environment variable
+        # 1. Environment variable (highest priority)
         lambda: os.getenv('SECRET_ROTATOR_CONFIG'),
-        # 2. Current directory
-        lambda: "config/config.yaml",
-        # 3. User home directory
+        
+        # 2. Current working directory
+        lambda: Path.cwd() / "config" / "config.yaml",
+        
+        # 3. User home directory (standard for installed packages)
         lambda: Path.home() / ".config" / "secret-rotator" / "config.yaml",
-        # 4. System config directory (Linux)
-        lambda: "/etc/secret-rotator/config.yaml",
-        # 5. Application directory
+        
+        # 4. Windows AppData
+        lambda: Path(os.getenv('APPDATA', '')) / "secret-rotator" / "config.yaml" if os.name == 'nt' else None,
+        
+        # 5. System config directory (Linux/macOS)
+        lambda: Path("/etc/secret-rotator/config.yaml"),
+        
+        # 6. Package installation directory (for pip-installed package)
+        lambda: Settings._get_package_config_path(),
+        
+        # 7. Source directory (for development) - lowest priority
         lambda: Path(__file__).parent.parent.parent / "config" / "config.yaml",
     ]
+    
+    @staticmethod
+    def _get_package_config_path():
+        """Get config path from installed package"""
+        try:
+            import secret_rotator
+            package_dir = Path(secret_rotator.__file__).parent
+            config_path = package_dir / "config" / "config.yaml"
+            if config_path.exists():
+                return config_path
+        except ImportError:
+            pass
+        return None
     
     def __init__(self, config_path: Optional[str] = None):
         if config_path:
@@ -39,7 +61,7 @@ class Settings:
             except Exception:
                 continue
         
-        # If no config found, use default location
+        # Fallback: use source directory (will be handled in next major change)
         default_path = Path(__file__).parent.parent.parent / "config" / "config.yaml"
         print(f"No config found, using default: {default_path}")
         return default_path
