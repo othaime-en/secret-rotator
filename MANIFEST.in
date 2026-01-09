@@ -1,0 +1,12 @@
+# MANIFEST.in - Include non-Python files in package
+include README.md
+include LICENSE.md
+include requirements.txt
+recursive-include config *.yaml
+recursive-exclude config config.yaml
+recursive-exclude config *.key
+recursive-exclude tests *
+recursive-exclude data *
+recursive-exclude logs *
+global-exclude __pycache__
+global-exclude *.py[co]
