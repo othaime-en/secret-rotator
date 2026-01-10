@@ -4,13 +4,14 @@ from urllib.parse import parse_qs, urlparse, unquote
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from secret_rotator.utils.logger import logger
 
+
 class RotationWebHandler(BaseHTTPRequestHandler):
     """Simple web interface for rotation system"""
-    
+
     def __init__(self, rotation_engine, *args, **kwargs):
         self.rotation_engine = rotation_engine
         super().__init__(*args, **kwargs)
-    
+
     def do_GET(self):
         """Handle GET requests"""
         if self.path == "/":
@@ -32,7 +33,7 @@ class RotationWebHandler(BaseHTTPRequestHandler):
             self._run_verification_now()
         else:
             self._serve_404()
-    
+
     def do_POST(self):
         """Handle POST requests"""
         if self.path == "/api/rotate":
@@ -41,7 +42,7 @@ class RotationWebHandler(BaseHTTPRequestHandler):
             self._handle_restore()
         else:
             self._serve_404()
-    
+
     def _serve_dashboard(self):
         """Serve main dashboard"""
         html = """
@@ -396,60 +397,62 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
         </body>
         </html>
         """
-        
+
         self.send_response(200)
-        self.send_header('Content-type', 'text/html')
+        self.send_header("Content-type", "text/html")
         self.end_headers()
         self.wfile.write(html.encode())
-    
+
     def _serve_status(self):
         """Serve system status"""
         status = {
             "status": "running",
             "providers": len(self.rotation_engine.providers),
             "rotators": len(self.rotation_engine.rotators),
-            "jobs": len(self.rotation_engine.rotation_jobs)
+            "jobs": len(self.rotation_engine.rotation_jobs),
         }
         self._send_json(status)
-    
+
     def _serve_jobs(self):
         """Serve job configurations"""
         jobs_data = {"jobs": self.rotation_engine.rotation_jobs}
         self._send_json(jobs_data)
-    
+
     def _serve_backups(self):
         """Serve list of backups"""
         try:
             parsed_url = urlparse(self.path)
             params = parse_qs(parsed_url.query)
-            secret_id = params.get('secret_id', [None])[0]
-            
+            secret_id = params.get("secret_id", [None])[0]
+
             backups = self.rotation_engine.backup_manager.list_backups(secret_id)
             self._send_json({"backups": backups})
         except Exception as e:
             logger.error(f"Error serving backups: {e}")
             self._send_json({"error": str(e)}, 500)
-    
+
     def _serve_backup_detail(self):
         """Serve detailed backup information"""
         try:
-            encoded_path = self.path.split('/api/backups/')[1]
+            encoded_path = self.path.split("/api/backups/")[1]
             backup_file = unquote(encoded_path)
-            
+
             logger.info(f"Attempting to load backup from: {backup_file}")
             backup_data = self.rotation_engine.backup_manager.restore_backup(backup_file)
             self._send_json(backup_data)
         except FileNotFoundError:
-            logger.warning(f"Backup file not found: {backup_file if 'backup_file' in locals() else 'unknown'}")
+            logger.warning(
+                f"Backup file not found: {backup_file if 'backup_file' in locals() else 'unknown'}"
+            )
             self._send_json({"error": "Backup not found"}, 404)
         except Exception as e:
             logger.error(f"Error serving backup detail: {e}")
             self._send_json({"error": str(e)}, 500)
-    
+
     def _serve_backup_health(self):
         """Serve backup health metrics"""
         try:
-            if hasattr(self.rotation_engine, 'scheduler') and self.rotation_engine.scheduler:
+            if hasattr(self.rotation_engine, "scheduler") and self.rotation_engine.scheduler:
                 health = self.rotation_engine.scheduler.get_backup_health()
                 self._send_json(health)
             else:
@@ -457,17 +460,17 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
         except Exception as e:
             logger.error(f"Error serving backup health: {e}")
             self._send_json({"error": str(e)}, 500)
-    
+
     def _serve_verification_history(self):
         """Serve backup verification history"""
         try:
             from urllib.parse import parse_qs, urlparse
-            
+
             parsed_url = urlparse(self.path)
             params = parse_qs(parsed_url.query)
-            days = int(params.get('days', ['7'])[0])
-            
-            if hasattr(self.rotation_engine, 'scheduler') and self.rotation_engine.scheduler:
+            days = int(params.get("days", ["7"])[0])
+
+            if hasattr(self.rotation_engine, "scheduler") and self.rotation_engine.scheduler:
                 history = self.rotation_engine.scheduler.get_verification_history(days)
                 self._send_json({"history": history, "days": days})
             else:
@@ -475,11 +478,11 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
         except Exception as e:
             logger.error(f"Error serving verification history: {e}")
             self._send_json({"error": str(e)}, 500)
-    
+
     def _run_verification_now(self):
         """Trigger manual backup verification"""
         try:
-            if hasattr(self.rotation_engine, 'scheduler') and self.rotation_engine.scheduler:
+            if hasattr(self.rotation_engine, "scheduler") and self.rotation_engine.scheduler:
                 logger.info("Manual backup verification triggered via web interface")
                 report = self.rotation_engine.scheduler.run_verification_now()
                 self._send_json({"success": True, "report": report})
@@ -488,7 +491,7 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
         except Exception as e:
             logger.error(f"Error running verification: {e}")
             self._send_json({"error": str(e)}, 500)
-    
+
     def _handle_rotation(self):
         """Handle rotation request"""
         try:
@@ -497,79 +500,79 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
         except Exception as e:
             logger.error(f"Error during rotation: {e}")
             self._send_json({"error": str(e)}, 500)
-    
+
     def _handle_restore(self):
         """Handle backup restoration request"""
         try:
-            content_length = int(self.headers['Content-Length'])
+            content_length = int(self.headers["Content-Length"])
             post_data = self.rfile.read(content_length)
-            data = json.loads(post_data.decode('utf-8'))
-            
-            backup_file = data.get('backup_file')
+            data = json.loads(post_data.decode("utf-8"))
+
+            backup_file = data.get("backup_file")
             if not backup_file:
                 self._send_json({"success": False, "error": "backup_file required"}, 400)
                 return
-            
+
             logger.info(f"Restoring backup from: {backup_file}")
-            
+
             backup_data = self.rotation_engine.backup_manager.restore_backup(backup_file)
-            secret_id = backup_data['secret_id']
-            old_value = backup_data['old_value']
-            
+            secret_id = backup_data["secret_id"]
+            old_value = backup_data["old_value"]
+
             provider = list(self.rotation_engine.providers.values())[0]
-            
+
             success = provider.update_secret(secret_id, old_value)
-            
+
             if success:
                 logger.info(f"Successfully restored backup for {secret_id} from {backup_file}")
-                self._send_json({
-                    "success": True,
-                    "secret_id": secret_id,
-                    "message": f"Restored backup for {secret_id}"
-                })
+                self._send_json(
+                    {
+                        "success": True,
+                        "secret_id": secret_id,
+                        "message": f"Restored backup for {secret_id}",
+                    }
+                )
             else:
-                self._send_json({
-                    "success": False,
-                    "error": "Failed to update secret"
-                }, 500)
-                
+                self._send_json({"success": False, "error": "Failed to update secret"}, 500)
+
         except FileNotFoundError:
             self._send_json({"success": False, "error": "Backup file not found"}, 404)
         except Exception as e:
             logger.error(f"Error during restoration: {e}")
             self._send_json({"success": False, "error": str(e)}, 500)
-    
+
     def _send_json(self, data, status=200):
         """Send JSON response"""
         self.send_response(status)
-        self.send_header('Content-type', 'application/json')
+        self.send_header("Content-type", "application/json")
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
-    
+
     def _serve_404(self):
         """Serve 404 error"""
         self.send_response(404)
-        self.send_header('Content-type', 'text/html')
+        self.send_header("Content-type", "text/html")
         self.end_headers()
-        self.wfile.write(b'<h1>404 Not Found</h1>')
-    
+        self.wfile.write(b"<h1>404 Not Found</h1>")
+
     def log_message(self, format, *args):
         """Override to use our logger instead of printing"""
         logger.info(f"Web request: {format % args}")
 
+
 class WebServer:
     """Main web server class to manage the HTTP server"""
-    
+
     def __init__(self, rotation_engine, port=8080):
         self.rotation_engine = rotation_engine
         self.port = port
         self.server = None
         self.thread = None
-    
+
     def start(self):
-        """Start the web server in a separate thread""" 
+        """Start the web server in a separate thread"""
         handler = lambda *args, **kwargs: RotationWebHandler(self.rotation_engine, *args, **kwargs)
-        self.server = HTTPServer(('localhost', self.port), handler)
+        self.server = HTTPServer(("localhost", self.port), handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         logger.info(f"Web server started on http://localhost:{self.port}")

@@ -9,180 +9,174 @@ from cryptography.fernet import Fernet
 from secret_rotator.providers.file_provider import FileSecretProvider
 from secret_rotator.encryption_manager import EncryptionManager
 
+
 class TestFileProviderWithEncryption(unittest.TestCase):
-    
+
     def setUp(self):
         """Set up test fixtures"""
-        self.temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-        self.temp_file.write('{}')
+        self.temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        self.temp_file.write("{}")
         self.temp_file.close()
 
         # Create temporary key file with a real key
-        self.temp_key_file = tempfile.NamedTemporaryFile(mode='wb',suffix='.key',delete=False)
-        
+        self.temp_key_file = tempfile.NamedTemporaryFile(mode="wb", suffix=".key", delete=False)
+
         # Generate a valid Fernet key for testing
         test_key = Fernet.generate_key()
         self.temp_key_file.write(test_key)
         self.temp_key_file.close()
-        
+
         # Set restrictive permissions on key file (like the real system does)
         os.chmod(self.temp_key_file.name, 0o600)
-        
+
         self.config = {
             "file_path": self.temp_file.name,
             "encrypt_secrets": True,
-            "encryption_key_file": self.temp_key_file.name
+            "encryption_key_file": self.temp_key_file.name,
         }
         self.provider = FileSecretProvider("test_provider", self.config)
-    
+
     def tearDown(self):
         """Clean up test fixtures"""
         os.unlink(self.temp_file.name)
         if os.path.exists(self.temp_key_file.name):
             os.unlink(self.temp_key_file.name)
-       
+
     def test_update_and_get_secret_encrypted(self):
         """Test storing and retrieving encrypted secret"""
         secret_id = "test_secret"
         secret_value = "my_secret_password"
-        
+
         # Store the secret (should be encrypted)
         success = self.provider.update_secret(secret_id, secret_value)
         self.assertTrue(success)
-        
+
         # Retrieve the secret (should be decrypted)
         retrieved_value = self.provider.get_secret(secret_id)
         self.assertEqual(retrieved_value, secret_value)
-        
+
         # Verify it's actually encrypted in the file
-        with open(self.temp_file.name, 'r') as f:
+        with open(self.temp_file.name, "r") as f:
             file_contents = json.load(f)
             stored_value = file_contents[secret_id]
             # Encrypted value should not match plaintext
             self.assertNotEqual(stored_value, secret_value)
             # Should be base64 encoded (contains only alphanumeric + =)
-            self.assertTrue(all(c.isalnum() or c in '=+/' for c in stored_value))
-    
+            self.assertTrue(all(c.isalnum() or c in "=+/" for c in stored_value))
+
     def test_get_nonexistent_secret(self):
         """Test retrieving non-existent secret"""
         value = self.provider.get_secret("nonexistent")
         self.assertEqual(value, "")
-    
+
     def test_multiple_secrets_encrypted(self):
         """Test storing multiple encrypted secrets"""
         secrets = {
             "db_password": "database_pass_123",
             "api_key": "api_key_abc_xyz",
-            "token": "secure_token_789"
+            "token": "secure_token_789",
         }
-        
+
         # Store all secrets
         for secret_id, secret_value in secrets.items():
             success = self.provider.update_secret(secret_id, secret_value)
             self.assertTrue(success)
-        
+
         # Retrieve and verify all secrets
         for secret_id, expected_value in secrets.items():
             retrieved_value = self.provider.get_secret(secret_id)
             self.assertEqual(retrieved_value, expected_value)
-    
+
     def test_validate_connection_with_encryption(self):
         """Test connection validation includes encryption check"""
         self.assertTrue(self.provider.validate_connection())
-    
+
     def test_encryption_disabled(self):
         """Test provider works without encryption"""
         # Create provider without encryption
-        config = {
-            "file_path": self.temp_file.name,
-            "encrypt_secrets": False
-        }
+        config = {"file_path": self.temp_file.name, "encrypt_secrets": False}
         provider = FileSecretProvider("plain_provider", config)
-        
+
         # Store and retrieve
         provider.update_secret("test", "plaintext_value")
         retrieved = provider.get_secret("test")
         self.assertEqual(retrieved, "plaintext_value")
-        
+
         # Verify it's stored as plaintext
-        with open(self.temp_file.name, 'r') as f:
+        with open(self.temp_file.name, "r") as f:
             file_contents = json.load(f)
             self.assertEqual(file_contents["test"], "plaintext_value")
-    
+
     def test_migrate_to_encrypted(self):
         """Test migrating plaintext secrets to encrypted"""
         # Start with plaintext secrets
-        plaintext_secrets = {
-            "secret1": "value1",
-            "secret2": "value2",
-            "secret3": "value3"
-        }
-        
-        with open(self.temp_file.name, 'w') as f:
+        plaintext_secrets = {"secret1": "value1", "secret2": "value2", "secret3": "value3"}
+
+        with open(self.temp_file.name, "w") as f:
             json.dump(plaintext_secrets, f)
-        
+
         # Create provider with encryption enabled
         provider = FileSecretProvider("test_provider", self.config)
-        
+
         # Run migration
         success = provider.migrate_to_encrypted()
         self.assertTrue(success)
-        
+
         # Verify secrets are now encrypted
-        with open(self.temp_file.name, 'r') as f:
+        with open(self.temp_file.name, "r") as f:
             file_contents = json.load(f)
             for secret_id in plaintext_secrets:
                 stored_value = file_contents[secret_id]
                 # Should be encrypted (not matching plaintext)
                 self.assertNotEqual(stored_value, plaintext_secrets[secret_id])
-        
+
         # Verify secrets can still be retrieved correctly
         for secret_id, expected_value in plaintext_secrets.items():
             retrieved = provider.get_secret(secret_id)
             self.assertEqual(retrieved, expected_value)
-    
+
     def test_migration_idempotent(self):
         """Test that running migration twice doesn't break anything"""
         # Setup with plaintext
-        with open(self.temp_file.name, 'w') as f:
+        with open(self.temp_file.name, "w") as f:
             json.dump({"test": "value"}, f)
-        
+
         provider = FileSecretProvider("test_provider", self.config)
-        
+
         # Run migration twice
         provider.migrate_to_encrypted()
         provider.migrate_to_encrypted()
-        
+
         # Should still work
         retrieved = provider.get_secret("test")
         self.assertEqual(retrieved, "value")
-    
+
     def test_update_overwrites_encrypted_secret(self):
         """Test updating an already encrypted secret"""
         secret_id = "test_secret"
-        
+
         # Store first value
         self.provider.update_secret(secret_id, "first_value")
         self.assertEqual(self.provider.get_secret(secret_id), "first_value")
-        
+
         # Update with second value
         self.provider.update_secret(secret_id, "second_value")
         self.assertEqual(self.provider.get_secret(secret_id), "second_value")
-        
+
         # Verify only one entry in file
-        with open(self.temp_file.name, 'r') as f:
+        with open(self.temp_file.name, "r") as f:
             file_contents = json.load(f)
             self.assertEqual(len(file_contents), 1)
             self.assertIn(secret_id, file_contents)
-    
+
     def test_empty_secret_value(self):
         """Test handling of empty secret values"""
         success = self.provider.update_secret("empty_secret", "")
         self.assertTrue(success)
-        
+
         retrieved = self.provider.get_secret("empty_secret")
         self.assertEqual(retrieved, "")
-    
+
     def test_special_characters_in_secret(self):
         """Test secrets with special characters are encrypted/decrypted correctly"""
         special_secrets = {
@@ -191,131 +185,124 @@ class TestFileProviderWithEncryption(unittest.TestCase):
             "special3": "multi\nline\nsecret",
             "special4": '{"json": "value"}',
         }
-        
+
         for secret_id, secret_value in special_secrets.items():
             self.provider.update_secret(secret_id, secret_value)
             retrieved = self.provider.get_secret(secret_id)
             self.assertEqual(retrieved, secret_value)
 
+
 class TestFileProviderPlaintext(unittest.TestCase):
     """Tests for provider without encryption (backward compatibility)"""
-    
+
     def setUp(self):
         """Set up test fixtures without encryption"""
-        self.temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+        self.temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
         self.temp_file.write('{"test_secret": "test_value"}')
         self.temp_file.close()
-        
-        self.config = {
-            "file_path": self.temp_file.name,
-            "encrypt_secrets": False
-        }
+
+        self.config = {"file_path": self.temp_file.name, "encrypt_secrets": False}
         self.provider = FileSecretProvider("test_provider", self.config)
-    
+
     def tearDown(self):
         """Clean up test fixtures"""
         os.unlink(self.temp_file.name)
-    
+
     def test_get_secret_plaintext(self):
         """Test retrieving secret without encryption"""
         value = self.provider.get_secret("test_secret")
         self.assertEqual(value, "test_value")
-    
+
     def test_update_secret_plaintext(self):
         """Test updating secret without encryption"""
         success = self.provider.update_secret("test_secret", "new_value")
         self.assertTrue(success)
-        
+
         # Verify the update
         value = self.provider.get_secret("test_secret")
         self.assertEqual(value, "new_value")
-        
+
         # Verify it's stored as plaintext
-        with open(self.temp_file.name, 'r') as f:
+        with open(self.temp_file.name, "r") as f:
             file_contents = json.load(f)
             self.assertEqual(file_contents["test_secret"], "new_value")
-    
+
     def test_validate_connection_plaintext(self):
         """Test connection validation without encryption"""
         self.assertTrue(self.provider.validate_connection())
 
+
 class TestFileProviderErrorHandling(unittest.TestCase):
     """Test error handling scenarios"""
-    
+
     def setUp(self):
         """Set up test fixtures"""
-        self.temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-        self.temp_file.write('{}')
+        self.temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        self.temp_file.write("{}")
         self.temp_file.close()
 
         # Create temporary key file with a real key
-        self.temp_key_file = tempfile.NamedTemporaryFile(mode='wb',suffix='.key',delete=False)
-        
+        self.temp_key_file = tempfile.NamedTemporaryFile(mode="wb", suffix=".key", delete=False)
+
         # Generate a valid Fernet key for testing
         test_key = Fernet.generate_key()
         self.temp_key_file.write(test_key)
         self.temp_key_file.close()
-        
+
         # Set restrictive permissions on key file (like the real system does)
         os.chmod(self.temp_key_file.name, 0o600)
 
-    
     def tearDown(self):
         """Clean up test fixtures"""
         if os.path.exists(self.temp_file.name):
             os.unlink(self.temp_file.name)
         if os.path.exists(self.temp_key_file.name):
             os.unlink(self.temp_key_file.name)
-        
-    
+
     def test_corrupted_json_file(self):
         """Test handling of corrupted JSON file"""
         # Write invalid JSON
-        with open(self.temp_file.name, 'w') as f:
-            f.write('invalid json content {[}')
-        
+        with open(self.temp_file.name, "w") as f:
+            f.write("invalid json content {[}")
+
         config = {
             "file_path": self.temp_file.name,
             "encrypt_secrets": True,
-            "encryption_key_file": self.temp_key_file.name
+            "encryption_key_file": self.temp_key_file.name,
         }
         provider = FileSecretProvider("test_provider", config)
-        
+
         # Should return empty string instead of crashing
         value = provider.get_secret("any_secret")
         self.assertEqual(value, "")
-    
+
     def test_file_permission_error(self):
         """Test handling of file permission errors"""
         # Make file read-only
         os.chmod(self.temp_file.name, 0o444)
-        
-        config = {
-            "file_path": self.temp_file.name,
-            "encrypt_secrets": False
-        }
+
+        config = {"file_path": self.temp_file.name, "encrypt_secrets": False}
         provider = FileSecretProvider("test_provider", config)
-        
+
         # Update should fail gracefully
         success = provider.update_secret("test", "value")
         self.assertFalse(success)
-        
+
         # Restore permissions for cleanup
         os.chmod(self.temp_file.name, 0o644)
-    
+
     def test_migration_without_encryption_manager(self):
         """Test migration fails gracefully without encryption manager"""
         config = {
             "file_path": self.temp_file.name,
-            "encrypt_secrets": False  # No encryption manager
+            "encrypt_secrets": False,  # No encryption manager
         }
         provider = FileSecretProvider("test_provider", config)
-        
+
         # Migration should fail
         success = provider.migrate_to_encrypted()
         self.assertFalse(success)
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

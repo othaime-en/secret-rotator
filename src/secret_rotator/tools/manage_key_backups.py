@@ -20,14 +20,11 @@ from secret_rotator.utils.logger import logger
 
 def create_encrypted_backup(args):
     """Create an encrypted backup of the master key"""
-    manager = MasterKeyBackupManager(
-        master_key_file=args.key_file,
-        backup_dir=args.backup_dir
-    )
-    
-    print("\n" + "="*70)
+    manager = MasterKeyBackupManager(master_key_file=args.key_file, backup_dir=args.backup_dir)
+
+    print("\n" + "=" * 70)
     print("CREATE ENCRYPTED MASTER KEY BACKUP")
-    print("="*70)
+    print("=" * 70)
     print("\nThis will create an encrypted backup of your master encryption key.")
     print("You will be prompted to enter a strong passphrase.")
     print("\nIMPORTANT:")
@@ -36,37 +33,36 @@ def create_encrypted_backup(args):
     print("  - Store the passphrase in a secure password manager")
     print("  - Without this passphrase, the backup CANNOT be recovered")
     print()
-    
+
     # Get passphrase
     while True:
         passphrase = getpass.getpass("Enter passphrase: ")
         passphrase_confirm = getpass.getpass("Confirm passphrase: ")
-        
+
         if passphrase != passphrase_confirm:
             print("ERROR: Passphrases do not match. Try again.\n")
             continue
-        
+
         if len(passphrase) < 20:
             print("WARNING: Passphrase should be at least 20 characters.")
             response = input("Continue anyway? (yes/no): ")
-            if response.lower() != 'yes':
+            if response.lower() != "yes":
                 continue
-        
+
         break
-    
+
     try:
         backup_file = manager.create_encrypted_key_backup(
-            passphrase=passphrase,
-            backup_name=args.name
+            passphrase=passphrase, backup_name=args.name
         )
-        
+
         print(f"\n✓ SUCCESS: Encrypted backup created")
         print(f"  Location: {backup_file}")
         print(f"\nNext steps:")
         print(f"  1. Store the passphrase in a secure password manager")
         print(f"  2. Copy the backup file to a secure remote location")
         print(f"  3. Test restoration: python {sys.argv[0]} verify {backup_file}")
-        
+
     except Exception as e:
         print(f"\n✗ ERROR: Failed to create backup: {e}")
         sys.exit(1)
@@ -74,14 +70,11 @@ def create_encrypted_backup(args):
 
 def create_split_backup(args):
     """Create a split key backup using Shamir's Secret Sharing"""
-    manager = MasterKeyBackupManager(
-        master_key_file=args.key_file,
-        backup_dir=args.backup_dir
-    )
-    
-    print("\n" + "="*70)
+    manager = MasterKeyBackupManager(master_key_file=args.key_file, backup_dir=args.backup_dir)
+
+    print("\n" + "=" * 70)
     print("CREATE SPLIT KEY BACKUP (Shamir's Secret Sharing)")
-    print("="*70)
+    print("=" * 70)
     print(f"\nThis will split your master key into {args.shares} shares.")
     print(f"Any {args.threshold} of these shares can reconstruct the key.")
     print("\nIMPORTANT:")
@@ -89,23 +82,22 @@ def create_split_backup(args):
     print(f"  - No single location will have the complete key")
     print(f"  - You need {args.threshold} shares to recover the key")
     print()
-    
+
     response = input(f"Create {args.shares} shares (threshold {args.threshold})? (yes/no): ")
-    if response.lower() != 'yes':
+    if response.lower() != "yes":
         print("Cancelled.")
         return
-    
+
     try:
         share_files = manager.create_split_key_backup(
-            num_shares=args.shares,
-            threshold=args.threshold
+            num_shares=args.shares, threshold=args.threshold
         )
-        
+
         print(f"\n✓ SUCCESS: Created {len(share_files)} key shares")
         print(f"\nShare files:")
         for i, share_file in enumerate(share_files, 1):
             print(f"  {i}. {share_file}")
-        
+
         print(f"\nNext steps:")
         print(f"  1. Distribute shares to {args.shares} different secure locations:")
         print(f"     - Physical safes in different buildings")
@@ -114,7 +106,7 @@ def create_split_backup(args):
         print(f"  2. Document who has each share")
         print(f"  3. Test restoration with {args.threshold} shares:")
         print(f"     python {sys.argv[0]} restore-split share1.share share2.share ...")
-        
+
     except Exception as e:
         print(f"\n✗ ERROR: Failed to create split backup: {e}")
         sys.exit(1)
@@ -122,34 +114,31 @@ def create_split_backup(args):
 
 def create_plaintext_backup(args):
     """Create a plaintext backup (for immediate physical storage)"""
-    manager = MasterKeyBackupManager(
-        master_key_file=args.key_file,
-        backup_dir=args.backup_dir
-    )
-    
-    print("\n" + "="*70)
+    manager = MasterKeyBackupManager(master_key_file=args.key_file, backup_dir=args.backup_dir)
+
+    print("\n" + "=" * 70)
     print("CREATE PLAINTEXT MASTER KEY BACKUP")
-    print("="*70)
+    print("=" * 70)
     print("\n⚠️  WARNING: This creates an UNENCRYPTED backup!")
     print("\nThis backup type should ONLY be used if:")
     print("  - You will immediately store it in a physical safe/vault")
     print("  - You cannot use encrypted or split-key backups")
     print("\nConsider using encrypted or split-key backups instead.")
     print()
-    
+
     response = input("Are you sure you want to create an unencrypted backup? (yes/no): ")
-    if response.lower() != 'yes':
+    if response.lower() != "yes":
         print("Cancelled. Consider using: create-encrypted or create-split")
         return
-    
+
     try:
         backup_file = manager.create_plaintext_backup(backup_name=args.name)
-        
+
         print(f"\n✓ SUCCESS: Plaintext backup created")
         print(f"  Location: {backup_file}")
         print(f"\n⚠️  CRITICAL: This file is UNENCRYPTED!")
         print(f"  Store it in a physically secure location immediately!")
-        
+
     except Exception as e:
         print(f"\n✗ ERROR: Failed to create backup: {e}")
         sys.exit(1)
@@ -157,82 +146,78 @@ def create_plaintext_backup(args):
 
 def list_backups(args):
     """List all available backups"""
-    manager = MasterKeyBackupManager(
-        master_key_file=args.key_file,
-        backup_dir=args.backup_dir
-    )
-    
-    print("\n" + "="*70)
+    manager = MasterKeyBackupManager(master_key_file=args.key_file, backup_dir=args.backup_dir)
+
+    print("\n" + "=" * 70)
     print("AVAILABLE MASTER KEY BACKUPS")
-    print("="*70)
-    
+    print("=" * 70)
+
     backups = manager.list_backups()
-    
+
     if not backups:
         print("\nNo backups found.")
         print(f"Backup directory: {args.backup_dir}")
         return
-    
+
     for i, backup in enumerate(backups, 1):
         print(f"\n{i}. {backup['type'].upper()} BACKUP")
         print(f"   Created: {backup.get('created_at', 'unknown')}")
-        
-        if backup['type'] == 'encrypted':
+
+        if backup["type"] == "encrypted":
             print(f"   File: {backup['file']}")
             print(f"   Key ID: {backup.get('key_id', 'unknown')}")
             print(f"   Status: {backup['status']}")
-            
-        elif backup['type'] == 'split_key':
+
+        elif backup["type"] == "split_key":
             print(f"   Threshold: {backup['threshold']} of {backup['total_shares']} shares")
             print(f"   Available shares: {backup['available_shares']}")
             print(f"   Key ID: {backup.get('key_id', 'unknown')}")
             print(f"   Status: {backup['status']}")
-            if backup['status'] == 'incomplete':
-                print(f"   ⚠️  WARNING: Need {backup['threshold']} shares to restore, only have {backup['available_shares']}")
-            
-        elif backup['type'] == 'plaintext':
+            if backup["status"] == "incomplete":
+                print(
+                    f"   ⚠️  WARNING: Need {backup['threshold']} shares to restore, only have {backup['available_shares']}"
+                )
+
+        elif backup["type"] == "plaintext":
             print(f"   File: {backup['file']}")
             print(f"   ⚠️  WARNING: {backup.get('warning', 'unencrypted')}")
 
 
 def verify_backup(args):
     """Verify a backup can be restored"""
-    manager = MasterKeyBackupManager(
-        master_key_file=args.key_file,
-        backup_dir=args.backup_dir
-    )
-    
-    print("\n" + "="*70)
+    manager = MasterKeyBackupManager(master_key_file=args.key_file, backup_dir=args.backup_dir)
+
+    print("\n" + "=" * 70)
     print("VERIFY BACKUP")
-    print("="*70)
+    print("=" * 70)
     print(f"\nVerifying: {args.backup_file}")
-    
+
     # Check if encrypted backup
-    if args.backup_file.endswith('.enc'):
+    if args.backup_file.endswith(".enc"):
         passphrase = getpass.getpass("\nEnter passphrase: ")
-        
+
         try:
             success = manager.verify_backup(args.backup_file, passphrase)
-            
+
             if success:
                 print("\n✓ SUCCESS: Backup is valid and can be restored")
             else:
                 print("\n✗ ERROR: Backup verification failed")
                 sys.exit(1)
-                
+
         except Exception as e:
             print(f"\n✗ ERROR: Verification failed: {e}")
             sys.exit(1)
     else:
         try:
             success = manager.verify_backup(args.backup_file)
-            
+
             if success:
                 print("\n✓ SUCCESS: Backup is valid")
             else:
                 print("\n✗ ERROR: Backup verification failed")
                 sys.exit(1)
-                
+
         except Exception as e:
             print(f"\n✗ ERROR: Verification failed: {e}")
             sys.exit(1)
@@ -240,33 +225,27 @@ def verify_backup(args):
 
 def restore_backup(args):
     """Restore master key from backup"""
-    manager = MasterKeyBackupManager(
-        master_key_file=args.key_file,
-        backup_dir=args.backup_dir
-    )
-    
-    print("\n" + "="*70)
+    manager = MasterKeyBackupManager(master_key_file=args.key_file, backup_dir=args.backup_dir)
+
+    print("\n" + "=" * 70)
     print("RESTORE MASTER KEY FROM BACKUP")
-    print("="*70)
+    print("=" * 70)
     print(f"\nBackup file: {args.backup_file}")
     print("\n⚠️  WARNING: This will replace your current master key!")
     print("The current key will be backed up before restoration.")
-    
+
     response = input("\nContinue with restoration? (yes/no): ")
-    if response.lower() != 'yes':
+    if response.lower() != "yes":
         print("Cancelled.")
         return
-    
+
     # Check if encrypted backup
-    if args.backup_file.endswith('.enc'):
+    if args.backup_file.endswith(".enc"):
         passphrase = getpass.getpass("\nEnter passphrase: ")
-        
+
         try:
-            success = manager.restore_from_encrypted_backup(
-                args.backup_file,
-                passphrase
-            )
-            
+            success = manager.restore_from_encrypted_backup(args.backup_file, passphrase)
+
             if success:
                 print("\n✓ SUCCESS: Master key restored from backup")
                 print("\nNext steps:")
@@ -276,7 +255,7 @@ def restore_backup(args):
             else:
                 print("\n✗ ERROR: Restoration failed")
                 sys.exit(1)
-                
+
         except Exception as e:
             print(f"\n✗ ERROR: Restoration failed: {e}")
             sys.exit(1)
@@ -288,32 +267,29 @@ def restore_backup(args):
 
 def restore_split_backup(args):
     """Restore master key from split key shares"""
-    manager = MasterKeyBackupManager(
-        master_key_file=args.key_file,
-        backup_dir=args.backup_dir
-    )
-    
-    print("\n" + "="*70)
+    manager = MasterKeyBackupManager(master_key_file=args.key_file, backup_dir=args.backup_dir)
+
+    print("\n" + "=" * 70)
     print("RESTORE FROM SPLIT KEY SHARES")
-    print("="*70)
+    print("=" * 70)
     print(f"\nShare files provided: {len(args.share_files)}")
-    
+
     # Verify all share files exist
     for share_file in args.share_files:
         if not Path(share_file).exists():
             print(f"\n✗ ERROR: Share file not found: {share_file}")
             sys.exit(1)
-    
+
     print("\n⚠️  WARNING: This will replace your current master key!")
-    
+
     response = input("\nContinue with restoration? (yes/no): ")
-    if response.lower() != 'yes':
+    if response.lower() != "yes":
         print("Cancelled.")
         return
-    
+
     try:
         success = manager.restore_from_split_key(args.share_files)
-        
+
         if success:
             print("\n✓ SUCCESS: Master key restored from shares")
             print("\nNext steps:")
@@ -322,7 +298,7 @@ def restore_split_backup(args):
         else:
             print("\n✗ ERROR: Restoration failed")
             sys.exit(1)
-            
+
     except Exception as e:
         print(f"\n✗ ERROR: Restoration failed: {e}")
         sys.exit(1)
@@ -330,11 +306,8 @@ def restore_split_backup(args):
 
 def export_instructions(args):
     """Export backup instructions document"""
-    manager = MasterKeyBackupManager(
-        master_key_file=args.key_file,
-        backup_dir=args.backup_dir
-    )
-    
+    manager = MasterKeyBackupManager(master_key_file=args.key_file, backup_dir=args.backup_dir)
+
     try:
         output_file = manager.export_backup_instructions(args.output)
         print(f"\n✓ SUCCESS: Backup instructions exported to: {output_file}")
@@ -342,7 +315,7 @@ def export_instructions(args):
         print("  - Emergency contact information")
         print("  - Backup custodian names")
         print("  - Storage locations")
-        
+
     except Exception as e:
         print(f"\n✗ ERROR: Failed to export instructions: {e}")
         sys.exit(1)
@@ -351,98 +324,89 @@ def export_instructions(args):
 def main():
     parser = argparse.ArgumentParser(
         description="Manage master encryption key backups",
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    
+
     parser.add_argument(
-        '--key-file',
-        default='config/.master.key',
-        help='Path to master key file (default: config/.master.key)'
+        "--key-file",
+        default="config/.master.key",
+        help="Path to master key file (default: config/.master.key)",
     )
-    
+
     parser.add_argument(
-        '--backup-dir',
-        default='config/key_backups',
-        help='Backup directory (default: config/key_backups)'
+        "--backup-dir",
+        default="config/key_backups",
+        help="Backup directory (default: config/key_backups)",
     )
-    
-    subparsers = parser.add_subparsers(dest='command', help='Command to execute')
-    
+
+    subparsers = parser.add_subparsers(dest="command", help="Command to execute")
+
     # Create encrypted backup
     parser_encrypted = subparsers.add_parser(
-        'create-encrypted',
-        help='Create encrypted backup with passphrase'
+        "create-encrypted", help="Create encrypted backup with passphrase"
     )
-    parser_encrypted.add_argument('--name', help='Optional backup name')
-    
+    parser_encrypted.add_argument("--name", help="Optional backup name")
+
     # Create split key backup
     parser_split = subparsers.add_parser(
-        'create-split',
-        help='Create split key backup (Shamir Secret Sharing)'
+        "create-split", help="Create split key backup (Shamir Secret Sharing)"
     )
-    parser_split.add_argument('--shares', type=int, default=5, help='Number of shares (default: 5)')
-    parser_split.add_argument('--threshold', type=int, default=3, help='Threshold to reconstruct (default: 3)')
-    
+    parser_split.add_argument("--shares", type=int, default=5, help="Number of shares (default: 5)")
+    parser_split.add_argument(
+        "--threshold", type=int, default=3, help="Threshold to reconstruct (default: 3)"
+    )
+
     # Create plaintext backup
     parser_plain = subparsers.add_parser(
-        'create-plaintext',
-        help='Create unencrypted backup (not recommended)'
+        "create-plaintext", help="Create unencrypted backup (not recommended)"
     )
-    parser_plain.add_argument('--name', help='Optional backup name')
-    
+    parser_plain.add_argument("--name", help="Optional backup name")
+
     # List backups
-    subparsers.add_parser('list', help='List all available backups')
-    
+    subparsers.add_parser("list", help="List all available backups")
+
     # Verify backup
-    parser_verify = subparsers.add_parser('verify', help='Verify a backup')
-    parser_verify.add_argument('backup_file', help='Path to backup file')
-    
+    parser_verify = subparsers.add_parser("verify", help="Verify a backup")
+    parser_verify.add_argument("backup_file", help="Path to backup file")
+
     # Restore from backup
-    parser_restore = subparsers.add_parser('restore', help='Restore from encrypted backup')
-    parser_restore.add_argument('backup_file', help='Path to backup file')
-    
+    parser_restore = subparsers.add_parser("restore", help="Restore from encrypted backup")
+    parser_restore.add_argument("backup_file", help="Path to backup file")
+
     # Restore from split
     parser_restore_split = subparsers.add_parser(
-        'restore-split',
-        help='Restore from split key shares'
+        "restore-split", help="Restore from split key shares"
     )
-    parser_restore_split.add_argument(
-        'share_files',
-        nargs='+',
-        help='Paths to share files'
-    )
-    
+    parser_restore_split.add_argument("share_files", nargs="+", help="Paths to share files")
+
     # Export instructions
     parser_export = subparsers.add_parser(
-        'export-instructions',
-        help='Export backup and recovery instructions'
+        "export-instructions", help="Export backup and recovery instructions"
     )
     parser_export.add_argument(
-        '--output',
-        default='KEY_BACKUP_INSTRUCTIONS.txt',
-        help='Output file path'
+        "--output", default="KEY_BACKUP_INSTRUCTIONS.txt", help="Output file path"
     )
-    
+
     args = parser.parse_args()
-    
+
     if not args.command:
         parser.print_help()
         sys.exit(1)
-    
+
     # Execute command
     commands = {
-        'create-encrypted': create_encrypted_backup,
-        'create-split': create_split_backup,
-        'create-plaintext': create_plaintext_backup,
-        'list': list_backups,
-        'verify': verify_backup,
-        'restore': restore_backup,
-        'restore-split': restore_split_backup,
-        'export-instructions': export_instructions
+        "create-encrypted": create_encrypted_backup,
+        "create-split": create_split_backup,
+        "create-plaintext": create_plaintext_backup,
+        "list": list_backups,
+        "verify": verify_backup,
+        "restore": restore_backup,
+        "restore-split": restore_split_backup,
+        "export-instructions": export_instructions,
     }
-    
+
     commands[args.command](args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
