@@ -6,8 +6,6 @@ import time
 import os
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
 from secret_rotator.backup_manager import BackupManager
 
 

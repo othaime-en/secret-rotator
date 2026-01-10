@@ -4,8 +4,6 @@ import sys
 from pathlib import Path
 import yaml
 
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
 from secret_rotator.config.settings import Settings
 
 class TestSettings(unittest.TestCase):

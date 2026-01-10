@@ -4,8 +4,6 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
 from secret_rotator.rotators.password_rotator import PasswordRotator
 from secret_rotator.providers.file_provider import FileSecretProvider
 

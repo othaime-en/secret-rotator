@@ -4,8 +4,6 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
 from secret_rotator.rotation_engine import RotationEngine
 from secret_rotator.providers.file_provider import FileSecretProvider
 from secret_rotator.rotators.password_rotator import PasswordRotator

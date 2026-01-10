@@ -6,8 +6,6 @@ import sys
 from pathlib import Path
 from cryptography.fernet import Fernet
 
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
 from secret_rotator.providers.file_provider import FileSecretProvider
 from secret_rotator.encryption_manager import EncryptionManager
 

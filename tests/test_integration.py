@@ -5,9 +5,6 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 from cryptography.fernet import Fernet
-
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
 from secret_rotator.rotation_engine import RotationEngine
 from secret_rotator.backup_manager import BackupManager
 from secret_rotator.providers.file_provider import FileSecretProvider
