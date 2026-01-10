@@ -8,10 +8,10 @@ from cryptography.fernet import Fernet
 
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
-from rotation_engine import RotationEngine
-from backup_manager import BackupManager
-from providers.file_provider import FileSecretProvider
-from rotators.password_rotator import PasswordRotator
+from secret_rotator.rotation_engine import RotationEngine
+from secret_rotator.backup_manager import BackupManager
+from secret_rotator.providers.file_provider import FileSecretProvider
+from secret_rotator.rotators.password_rotator import PasswordRotator
 
 
 class TestIntegrationWithEncryption(unittest.TestCase):

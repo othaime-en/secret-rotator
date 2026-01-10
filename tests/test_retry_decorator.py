@@ -8,7 +8,7 @@ class TestRetryDecorator(unittest.TestCase):
     
     def test_retry_success_first_attempt(self):
         """Test function succeeds on first attempt"""
-        from utils.retry import retry_with_backoff
+        from secret_rotator.utils.retry import retry_with_backoff
         
         call_count = 0
         
@@ -24,7 +24,7 @@ class TestRetryDecorator(unittest.TestCase):
     
     def test_retry_success_after_failures(self):
         """Test function succeeds after some failures"""
-        from utils.retry import retry_with_backoff
+        from secret_rotator.utils.retry import retry_with_backoff
         
         call_count = 0
         
@@ -42,7 +42,7 @@ class TestRetryDecorator(unittest.TestCase):
     
     def test_retry_max_attempts_exceeded(self):
         """Test function fails after max attempts"""
-        from utils.retry import retry_with_backoff
+        from secret_rotator.utils.retry import retry_with_backoff
         
         call_count = 0
         
@@ -59,7 +59,7 @@ class TestRetryDecorator(unittest.TestCase):
     
     def test_retry_specific_exceptions(self):
         """Test retry only catches specified exceptions"""
-        from utils.retry import retry_with_backoff
+        from secret_rotator.utils.retry import retry_with_backoff
         
         @retry_with_backoff(max_attempts=3, exceptions=(ConnectionError,))
         def wrong_exception_function():

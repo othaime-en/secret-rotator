@@ -5,7 +5,7 @@ from pathlib import Path
 # Add src to path
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
-from rotators.password_rotator import PasswordRotator
+from secret_rotator.rotators.password_rotator import PasswordRotator
 
 class TestPasswordRotatorDeterministic(unittest.TestCase):
     """Test that password generation is deterministic and always valid"""

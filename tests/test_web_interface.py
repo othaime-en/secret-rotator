@@ -6,15 +6,15 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
-from rotators.password_rotator import PasswordRotator
-from providers.file_provider import FileSecretProvider
+from secret_rotator.rotators.password_rotator import PasswordRotator
+from secret_rotator.providers.file_provider import FileSecretProvider
 
 class TestWebInterface(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        from web_interface import WebServer
-        from rotation_engine import RotationEngine
+        from secret_rotator.web_interface import WebServer
+        from secret_rotator.rotation_engine import RotationEngine
         
         self.engine = RotationEngine()
         

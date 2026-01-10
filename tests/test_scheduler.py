@@ -10,8 +10,8 @@ class TestRotationScheduler(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        from scheduler import RotationScheduler
-        from backup_manager import BackupManager
+        from secret_rotator.scheduler import RotationScheduler
+        from secret_rotator.backup_manager import BackupManager
         
         self.rotation_called = False
         

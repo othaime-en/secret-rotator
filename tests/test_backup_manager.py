@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
-from backup_manager import BackupManager
+from secret_rotator.backup_manager import BackupManager
 
 
 class TestBackupManagerWithEncryption(unittest.TestCase):
