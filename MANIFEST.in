@@ -9,11 +9,12 @@ include config/config.example.yaml
 # Include requirements
 include requirements.txt
 
-# Exclude development and test files
+# Exclude development, internal, and test files
 exclude .gitignore
 exclude .github/*
 recursive-exclude tests *
 recursive-exclude .github *
+recursive-exclude internal *
 
 # Exclude generated and temporary files
 global-exclude __pycache__
