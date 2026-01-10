@@ -4,9 +4,6 @@ import signal
 import argparse
 from pathlib import Path
 
-# Add src to path so we can import our modules
-sys.path.append(str(Path(__file__).parent))
-
 from secret_rotator.config.settings import settings
 from secret_rotator.providers.file_provider import FileSecretProvider
 from secret_rotator.rotators.password_rotator import PasswordRotator
