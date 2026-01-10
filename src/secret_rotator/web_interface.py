@@ -81,22 +81,22 @@ class RotationWebHandler(BaseHTTPRequestHandler):
         <body>
             <div class="container">
                 <h1>Secret Rotation Dashboard</h1>
-                
+
                 <div id="status"></div>
-                
+
                 <div class="tab-container">
                     <div class="tab active" onclick="switchTab('jobs')">Rotation Jobs</div>
                     <div class="tab" onclick="switchTab('backups')">Backups</div>
                     <div class="tab" onclick="switchTab('health')">Backup Health</div>
                     <div class="tab" onclick="switchTab('logs')">Logs</div>
                 </div>
-                
+
                 <div id="jobs-content" class="tab-content active">
                     <h2>Rotation Jobs</h2>
                     <div id="jobs"></div>
                     <button onclick="rotateAll()">Rotate All Secrets</button>
                 </div>
-                
+
                 <div id="backups-content" class="tab-content">
                     <h2>Backup History</h2>
                     <div style="margin-bottom: 15px;">
@@ -107,27 +107,27 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                     </div>
                     <div id="backups"></div>
                 </div>
-                
+
                 <div id="health-content" class="tab-content">
                     <h2>Backup System Health</h2>
-                    
+
                     <div id="health-status"></div>
-                    
+
                     <div style="margin: 20px 0;">
                         <button onclick="runVerificationNow()">Run Verification Now</button>
                         <button onclick="loadVerificationHistory()">View History</button>
                     </div>
-                    
+
                     <h3>Recent Verification History</h3>
                     <div id="verification-history"></div>
                 </div>
-                
+
                 <div id="logs-content" class="tab-content">
                     <h2>Recent Activity Logs</h2>
                     <div id="logs"></div>
                 </div>
             </div>
-            
+
             <script>
                 function switchTab(tabName) {
                     document.querySelectorAll('.tab-content').forEach(content => {
@@ -136,10 +136,10 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                     document.querySelectorAll('.tab').forEach(tab => {
                         tab.classList.remove('active');
                     });
-                    
+
                     document.getElementById(tabName + '-content').classList.add('active');
                     event.target.classList.add('active');
-                    
+
                     if (tabName === 'backups') {
                         loadBackups();
                     } else if (tabName === 'health') {
@@ -147,18 +147,18 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                         loadVerificationHistory();
                     }
                 }
-                
+
                 function loadBackupHealth() {
                     fetch('/api/backup-health')
                         .then(response => response.json())
                         .then(data => {
                             const statusDiv = document.getElementById('health-status');
-                            
+
                             let statusClass = 'info';
                             if (data.status === 'healthy') statusClass = 'success';
                             if (data.status === 'warning') statusClass = 'error';
                             if (data.status === 'critical') statusClass = 'error';
-                            
+
                             statusDiv.innerHTML = `
                                 <div class="status ${statusClass}">
                                     <h3>Status: ${data.status.toUpperCase()}</h3>
@@ -174,19 +174,19 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                         })
                         .catch(error => {
                             console.error('Error loading backup health:', error);
-                            document.getElementById('health-status').innerHTML = 
+                            document.getElementById('health-status').innerHTML =
                                 '<div class="status error">Error loading backup health</div>';
                         });
                 }
-                
+
                 function runVerificationNow() {
                     if (!confirm('Run backup verification now? This may take a few minutes.')) {
                         return;
                     }
-                    
-                    document.getElementById('health-status').innerHTML = 
+
+                    document.getElementById('health-status').innerHTML =
                         '<div class="status info">Running verification...</div>';
-                    
+
                     fetch('/api/run-verification')
                         .then(response => response.json())
                         .then(data => {
@@ -205,35 +205,35 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                                 `;
                                 loadBackupHealth();
                             } else {
-                                document.getElementById('health-status').innerHTML = 
+                                document.getElementById('health-status').innerHTML =
                                     '<div class="status error">Verification failed</div>';
                             }
                         })
                         .catch(error => {
                             console.error('Error running verification:', error);
-                            document.getElementById('health-status').innerHTML = 
+                            document.getElementById('health-status').innerHTML =
                                 '<div class="status error">Error running verification</div>';
                         });
                 }
-                
+
                 function loadVerificationHistory() {
                     fetch('/api/verification-history?days=7')
                         .then(response => response.json())
                         .then(data => {
                             const historyDiv = document.getElementById('verification-history');
-                            
+
                             if (data.history.length === 0) {
                                 historyDiv.innerHTML = '<div class="status info">No verification history available</div>';
                                 return;
                             }
-                            
+
                             let html = '<table style="width: 100%; border-collapse: collapse;">';
                             html += '<tr style="background: #f5f5f5;"><th>Date</th><th>Total</th><th>Verified</th><th>Failed</th><th>Success Rate</th></tr>';
-                            
+
                             data.history.forEach(report => {
                                 const successRate = ((report.verified / report.total_backups) * 100).toFixed(1);
                                 const statusColor = successRate >= 95 ? '#28a745' : '#dc3545';
-                                
+
                                 html += `
                                     <tr style="border-bottom: 1px solid #ddd;">
                                         <td style="padding: 8px;">${new Date(report.timestamp).toLocaleString()}</td>
@@ -244,23 +244,23 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                                     </tr>
                                 `;
                             });
-                            
+
                             html += '</table>';
                             historyDiv.innerHTML = html;
                         })
                         .catch(error => {
                             console.error('Error loading verification history:', error);
-                            document.getElementById('verification-history').innerHTML = 
+                            document.getElementById('verification-history').innerHTML =
                                 '<div class="status error">Error loading history</div>';
                         });
                 }
-                
+
                 function loadJobs() {
                     fetch('/api/jobs')
                         .then(response => response.json())
                         .then(data => {
                             const jobsDiv = document.getElementById('jobs');
-                            jobsDiv.innerHTML = data.jobs.map(job => 
+                            jobsDiv.innerHTML = data.jobs.map(job =>
                                 `<div class="job">
                                     <strong>${job.name}</strong><br>
                                     Provider: ${job.provider} | Rotator: ${job.rotator}<br>
@@ -272,11 +272,11 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                             console.error('Error loading jobs:', error);
                         });
                 }
-                
+
                 function loadBackups() {
                     const secretFilter = document.getElementById('secretFilter').value;
                     const url = secretFilter ? `/api/backups?secret_id=${encodeURIComponent(secretFilter)}` : '/api/backups';
-                    
+
                     fetch(url)
                         .then(response => response.json())
                         .then(data => {
@@ -285,7 +285,7 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                                 backupsDiv.innerHTML = '<div class="status info">No backups found.</div>';
                                 return;
                             }
-                            
+
                             backupsDiv.innerHTML = data.backups.map(backup => {
                                 const encodedPath = encodeURIComponent(backup.backup_file);
                                 return `<div class="backup">
@@ -308,7 +308,7 @@ class RotationWebHandler(BaseHTTPRequestHandler):
                             document.getElementById('backups').innerHTML = '<div class="status error">Error loading backups</div>';
                         });
                 }
-                
+
                 function viewBackup(encodedBackupFile) {
                     fetch(`/api/backups/${encodedBackupFile}`)
                         .then(response => response.json())
@@ -326,16 +326,16 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
                             console.error(error);
                         });
                 }
-                
+
                 function confirmRestore(backupFile, secretId) {
                     if (confirm(`Are you sure you want to restore the backup for "${secretId}"?\\n\\nThis will replace the current secret value with the old value from the backup.`)) {
                         restoreBackup(backupFile);
                     }
                 }
-                
+
                 function restoreBackup(backupFile) {
                     document.getElementById('status').innerHTML = '<div class="status info">Restoring backup...</div>';
-                    
+
                     fetch('/api/restore', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -344,53 +344,53 @@ New Value: ${data.new_value.substring(0, 20)}... (truncated)
                         .then(response => response.json())
                         .then(data => {
                             if (data.success) {
-                                document.getElementById('status').innerHTML = 
+                                document.getElementById('status').innerHTML =
                                     `<div class="status success">Successfully restored backup for ${data.secret_id}</div>`;
                                 addLog(`Restored backup for ${data.secret_id}`);
                                 loadBackups();
                             } else {
-                                document.getElementById('status').innerHTML = 
+                                document.getElementById('status').innerHTML =
                                     `<div class="status error">Failed to restore backup: ${data.error}</div>`;
                             }
                         })
                         .catch(error => {
-                            document.getElementById('status').innerHTML = 
+                            document.getElementById('status').innerHTML =
                                 '<div class="status error">Error during restoration</div>';
                             console.error(error);
                         });
                 }
-                
+
                 function rotateAll() {
                     document.getElementById('status').innerHTML = '<div class="status info">Rotation in progress...</div>';
-                    
+
                     fetch('/api/rotate', { method: 'POST' })
                         .then(response => response.json())
                         .then(data => {
                             const successful = Object.values(data.results).filter(r => r).length;
                             const total = Object.keys(data.results).length;
                             const statusClass = successful === total ? 'success' : 'error';
-                            
-                            document.getElementById('status').innerHTML = 
+
+                            document.getElementById('status').innerHTML =
                                 `<div class="status ${statusClass}">Rotation complete: ${successful}/${total} successful</div>`;
-                            
+
                             const logs = Object.entries(data.results)
                                 .map(([job, success]) => `[${new Date().toLocaleTimeString()}] ${job}: ${success ? 'SUCCESS' : 'FAILED'}`)
                                 .join('\\n');
                             addLog(logs);
                         })
                         .catch(error => {
-                            document.getElementById('status').innerHTML = 
+                            document.getElementById('status').innerHTML =
                                 '<div class="status error">Error during rotation</div>';
                             console.error(error);
                         });
                 }
-                
+
                 function addLog(message) {
                     const logsDiv = document.getElementById('logs');
                     const timestamp = new Date().toLocaleTimeString();
                     logsDiv.innerHTML = `[${timestamp}] ${message}\\n` + logsDiv.innerHTML;
                 }
-                
+
                 loadJobs();
                 addLog('Dashboard loaded');
             </script>
