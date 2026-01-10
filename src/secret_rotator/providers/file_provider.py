@@ -139,7 +139,7 @@ class FileSecretProvider(SecretProvider):
                     # Already encrypted, keep as is
                     migrated_secrets[secret_id] = value
                     logger.debug(f"Secret {secret_id} already encrypted")
-                except:
+                except BaseException:
                     # Not encrypted, encrypt it now
                     encrypted_value = self.encryption_manager.encrypt(value)
                     migrated_secrets[secret_id] = encrypted_value

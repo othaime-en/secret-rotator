@@ -220,7 +220,7 @@ class EncryptionManager:
                 created_at = datetime.fromisoformat(self.key_metadata["created_at"])
                 age = datetime.now() - created_at
                 info["age_days"] = age.days
-            except:
+            except BaseException:
                 info["age_days"] = None
 
         return info

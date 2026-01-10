@@ -252,7 +252,7 @@ class SecretAccessAudit:
                     if event_time > cutoff:
                         if secret_id is None or event["secret_id"] == secret_id:
                             events.append(event)
-                except:
+                except BaseException:
                     continue
 
         return events

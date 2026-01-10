@@ -286,7 +286,7 @@ class SSHKeyRotator(SecretRotator):
         try:
             key_pair = json.loads(secret)
             return "private_key" in key_pair and "public_key" in key_pair
-        except:
+        except BaseException:
             return False
 
 
@@ -374,7 +374,7 @@ class CertificateRotator(SecretRotator):
         try:
             cert_data = json.loads(secret)
             return "certificate" in cert_data and "private_key" in cert_data
-        except:
+        except BaseException:
             return False
 
 
