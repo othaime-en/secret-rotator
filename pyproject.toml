@@ -34,6 +34,8 @@ dev = [
     "black>=23.0.0",
     "flake8>=6.0.0",
     "mypy>=1.0.0",
+    "build>=1.0.0",
+    "twine>=4.0.0",
 ]
 databases = [
     "psycopg2-binary>=2.9.0",
@@ -56,24 +58,18 @@ secret-rotator-setup = "secret_rotator.setup_wizard:main"
 secret-rotator-backup = "secret_rotator.tools.manage_key_backups:main"
 
 [tool.setuptools]
-packages = [
-    "secret_rotator",
-    "secret_rotator.providers",
-    "secret_rotator.rotators",
-    "secret_rotator.config",
-    "secret_rotator.utils",
-    "secret_rotator.tools",
-]
+# Package discovery - finds all packages under src/
+packages = { find = { where = ["src"] } }
 
-[tool.setuptools.package-dir]
-secret_rotator = "src"
+[tool.setuptools.package-data]
+secret_rotator = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-addopts = "-v --cov=src --cov-report=html --cov-report=term"
+addopts = "-v --cov=secret_rotator --cov-report=html --cov-report=term"
 
 [tool.black]
 line-length = 100
