@@ -14,9 +14,6 @@ import argparse
 import getpass
 from pathlib import Path
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent.parent))
-
 from secret_rotator.key_backup_manager import MasterKeyBackupManager
 from secret_rotator.utils.logger import logger
 
