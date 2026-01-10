@@ -70,7 +70,7 @@ class TestIntegrationWithEncryption(unittest.TestCase):
         if os.path.exists(self.temp_key_file.name):
             os.unlink(self.temp_key_file.name)
     
-    @patch('rotation_engine.settings')
+    @patch('secret_rotator.rotation_engine.settings')
     def test_complete_encrypted_rotation_workflow(self, mock_settings):
         """Test complete rotation workflow with encryption and backup"""
         mock_settings.get.return_value = True
@@ -116,7 +116,7 @@ class TestIntegrationWithEncryption(unittest.TestCase):
             # Should be encrypted (not equal to plaintext)
             self.assertNotEqual(stored_value, new_password)
     
-    @patch('rotation_engine.settings')
+    @patch('secret_rotator.rotation_engine.settings')
     def test_encrypted_rotation_and_restore_workflow(self, mock_settings):
         """Test rotation followed by restore from encrypted backup"""
         mock_settings.get.return_value = True
@@ -160,7 +160,7 @@ class TestIntegrationWithEncryption(unittest.TestCase):
             stored_value = file_contents["db_password"]
             self.assertNotEqual(stored_value, restored_password)
     
-    @patch('rotation_engine.settings')
+    @patch('secret_rotator.rotation_engine.settings')
     def test_multiple_encrypted_secrets_rotation(self, mock_settings):
         """Test rotating multiple encrypted secrets"""
         mock_settings.get.return_value = True
@@ -217,7 +217,7 @@ class TestIntegrationWithEncryption(unittest.TestCase):
         self.assertTrue(db_backups[0]['encrypted'])
         self.assertTrue(api_backups[0]['encrypted'])
     
-    @patch('rotation_engine.settings')
+    @patch('secret_rotator.rotation_engine.settings')
     def test_rotation_failure_handling_with_encryption(self, mock_settings):
         """Test that one failure doesn't stop other rotations"""
         mock_settings.get.return_value = True
@@ -255,7 +255,7 @@ class TestIntegrationWithEncryption(unittest.TestCase):
         self.assertEqual(len(db_backups), 1)
         self.assertEqual(len(api_backups), 0)
     
-    @patch('rotation_engine.settings')
+    @patch('secret_rotator.rotation_engine.settings')
     def test_sequential_encrypted_rotations_create_multiple_backups(self, mock_settings):
         """Test that multiple rotations create separate encrypted backups"""
         mock_settings.get.return_value = True
@@ -305,7 +305,7 @@ class TestIntegrationWithEncryption(unittest.TestCase):
         # New values should be different
         self.assertNotEqual(backup_data_0['new_value'], backup_data_1['new_value'])
     
-    @patch('rotation_engine.settings')
+    @patch('secret_rotator.rotation_engine.settings')
     def test_end_to_end_with_encryption_validation(self, mock_settings):
         """Test complete end-to-end workflow with encryption validation"""
         mock_settings.get.return_value = True
@@ -352,7 +352,7 @@ class TestIntegrationWithEncryption(unittest.TestCase):
         # Verify the old value is the initial value we set
         self.assertEqual(backup_data['old_value'], "initial_db_password")
     
-    @patch('rotation_engine.settings')
+    @patch('secret_rotator.rotation_engine.settings')
     def test_encryption_consistency_across_components(self, mock_settings):
         """Test that encryption is consistent across all components"""
         mock_settings.get.return_value = True
@@ -441,7 +441,7 @@ class TestIntegrationPlaintextMode(unittest.TestCase):
         if Path(self.temp_backup_dir).exists():
             shutil.rmtree(self.temp_backup_dir)
     
-    @patch('rotation_engine.settings')
+    @patch('secret_rotator.rotation_engine.settings')
     def test_plaintext_rotation_workflow(self, mock_settings):
         """Test rotation works in plaintext mode (backward compatibility)"""
         mock_settings.get.return_value = True

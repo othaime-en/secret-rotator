@@ -80,7 +80,7 @@ class TestRotationEngine(unittest.TestCase):
         self.assertFalse(result)
         self.assertEqual(len(self.engine.rotation_jobs), 0)
     
-    @patch('rotation_engine.settings')
+    @patch('secret_rotator.rotation_engine.settings')
     def test_rotate_secret_success(self, mock_settings):
         """Test successful secret rotation"""
         mock_settings.get.return_value = True
@@ -124,7 +124,7 @@ class TestRotationEngine(unittest.TestCase):
         result = self.engine.rotate_secret(job_config)
         self.assertFalse(result)
     
-    @patch('rotation_engine.settings')
+    @patch('secret_rotator.rotation_engine.settings')
     def test_rotate_all_secrets(self, mock_settings):
         """Test rotating all configured secrets"""
         mock_settings.get.return_value = True
