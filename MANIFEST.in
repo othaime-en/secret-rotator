@@ -1,12 +1,29 @@
-# MANIFEST.in - Include non-Python files in package
+# Include documentation and license
 include README.md
 include LICENSE.md
+include CHANGELOG.md
+
+# Include example configuration
+include config/config.example.yaml
+
+# Include requirements
 include requirements.txt
-recursive-include config *.yaml
-recursive-exclude config config.yaml
-recursive-exclude config *.key
+
+# Exclude development and test files
+exclude .gitignore
+exclude .github/*
 recursive-exclude tests *
-recursive-exclude data *
-recursive-exclude logs *
+recursive-exclude .github *
+
+# Exclude generated and temporary files
 global-exclude __pycache__
 global-exclude *.py[co]
+global-exclude *.log
+global-exclude .DS_Store
+
+# Exclude config files that contain secrets
+exclude config/config.yaml
+exclude config/.master.key
+recursive-exclude config *.key
+recursive-exclude data *
+recursive-exclude logs *
