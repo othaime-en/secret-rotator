@@ -26,3 +26,33 @@ htmlcov/
 *.key.json
 *.key.backup
 config/key_backups
+
+
+# Python build and distribution
+build/
+dist/
+*.egg-info/
+*.egg
+*.whl
+*.dist-info/
+
+# Python compilation
+*.so
+*.o
+*.a
+*.dylib
+
+# pytest and testing
+.pytest_cache/
+.tox/
+.hypothesis/
+test_env/
+*venv/
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
