@@ -187,7 +187,7 @@ def setup_encryption(config_dir):
     
     # Import encryption manager to generate key
     try:
-        from encryption_manager import EncryptionManager
+        from secret_rotator.encryption_manager import EncryptionManager
         
         # This will automatically generate a new key if it doesn't exist
         em = EncryptionManager(key_file=str(master_key_file))

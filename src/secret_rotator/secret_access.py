@@ -7,8 +7,8 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from pathlib import Path
-from utils.logger import logger
-from encryption_manager import EncryptionManager, SecretMasker
+from secret_rotator.utils.logger import logger
+from secret_rotator.encryption_manager import EncryptionManager, SecretMasker
 
 
 class SecretAccessPolicy:

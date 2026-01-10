@@ -10,7 +10,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any
 from contextvars import ContextVar
-from config.settings import settings
+from secret_rotator.config.settings import settings
 
 # Context variable for tracking request/operation IDs
 _request_context: ContextVar[Dict[str, Any]] = ContextVar('request_context', default={})

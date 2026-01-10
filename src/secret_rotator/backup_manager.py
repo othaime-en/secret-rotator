@@ -4,8 +4,8 @@ import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
-from utils.logger import logger
-from encryption_manager import EncryptionManager, SecretMasker
+from secret_rotator.utils.logger import logger
+from secret_rotator.encryption_manager import EncryptionManager, SecretMasker
 
 class BackupManager:
     """Handle backup and recovery of secrets with encryption support"""

@@ -14,7 +14,7 @@ import secrets
 from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime
-from utils.logger import logger
+from secret_rotator.utils.logger import logger
 from datetime import datetime, timedelta
 
 

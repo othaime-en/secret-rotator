@@ -1,8 +1,8 @@
 import secrets
 import string
 from typing import Dict, Any, List
-from .base import SecretRotator
-from utils.logger import logger
+from secret_rotator.rotators.base import SecretRotator
+from secret_rotator.utils.logger import logger
 
 class PasswordRotator(SecretRotator):
     """Generate random passwords with guaranteed character type inclusion"""

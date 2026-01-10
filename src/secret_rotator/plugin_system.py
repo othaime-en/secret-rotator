@@ -7,7 +7,7 @@ import inspect
 from pathlib import Path
 from typing import Dict, Type, List, Any
 from abc import ABC
-from utils.logger import logger
+from secret_rotator.utils.logger import logger
 
 
 class PluginRegistry:
@@ -128,8 +128,8 @@ class PluginLoader:
                 return False
 
             # Check if it inherits from the appropriate base class
-            from providers.base import SecretProvider
-            from rotators.base import SecretRotator
+            from secret_rotator.providers.base import SecretProvider
+            from secret_rotator.rotators.base import SecretRotator
 
             if plugin_type == "providers":
                 return issubclass(obj, SecretProvider) and obj != SecretProvider
@@ -145,7 +145,7 @@ class PluginLoader:
     Example custom secret provider plugin.
     Copy this file and modify it to create your own provider.
     """
-    from providers.base import SecretProvider
+    from secret_rotator.providers.base import SecretProvider
     from typing import Dict, Any
 
     class CustomDatabaseProvider(SecretProvider):

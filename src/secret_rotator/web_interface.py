@@ -2,7 +2,7 @@ import json
 import threading
 from urllib.parse import parse_qs, urlparse, unquote
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from utils.logger import logger
+from secret_rotator.utils.logger import logger
 
 class RotationWebHandler(BaseHTTPRequestHandler):
     """Simple web interface for rotation system"""

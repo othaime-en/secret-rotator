@@ -2,9 +2,9 @@ import schedule
 import time
 import threading
 from typing import Callable
-from utils.logger import logger
-from config.settings import settings
-from backup_manager import BackupManager, BackupIntegrityChecker
+from secret_rotator.utils.logger import logger
+from secret_rotator.config.settings import settings
+from secret_rotator.backup_manager import BackupManager, BackupIntegrityChecker
 
 class RotationScheduler:
     """Handle scheduled secret rotations and backup verification"""

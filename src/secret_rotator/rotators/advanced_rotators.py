@@ -5,8 +5,8 @@ import secrets
 import string
 import json
 from typing import Dict, Any
-from .base import SecretRotator
-from utils.logger import logger
+from secret_rotator.rotators.base import SecretRotator
+from secret_rotator.utils.logger import logger
 
 class DatabasePasswordRotator(SecretRotator):
     """

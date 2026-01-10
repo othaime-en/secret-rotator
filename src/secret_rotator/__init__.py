@@ -5,7 +5,7 @@ A comprehensive system for automated secret rotation with encryption,
 backup management, and extensible provider/rotator architecture.
 """
 
-from .version import __version__, VERSION
+from secret_rotator.version import __version__, VERSION
 
 __all__ = [
     "__version__",

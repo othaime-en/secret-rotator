@@ -15,7 +15,7 @@ if str(src_dir) not in sys.path:
 def main():
     """Main CLI entry point"""
     # Import here to avoid issues during setup
-    from main import main as app_main
+    from secret_rotator.main import main as app_main
     
     try:
         app_main()

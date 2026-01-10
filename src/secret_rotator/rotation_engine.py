@@ -1,11 +1,11 @@
 import time
 from typing import Dict, List, Any
-from providers.base import SecretProvider
-from rotators.base import SecretRotator
-from utils.logger import logger
-from utils.retry import retry_with_backoff
-from backup_manager import BackupManager
-from config.settings import settings
+from secret_rotator.providers.base import SecretProvider
+from secret_rotator.rotators.base import SecretRotator
+from secret_rotator.utils.logger import logger
+from secret_rotator.utils.retry import retry_with_backoff
+from secret_rotator.backup_manager import BackupManager
+from secret_rotator.config.settings import settings
 
 class RotationEngine:
     """This is the main engine that orchestrates secret rotation"""

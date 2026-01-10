@@ -1,7 +1,7 @@
 import time
 import functools
 from typing import Callable, Any, Type, Tuple
-from .logger import logger
+from secret_rotator.utils.logger import logger
 
 def retry_with_backoff(
     max_attempts: int = 3,

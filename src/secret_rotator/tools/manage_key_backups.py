@@ -17,8 +17,8 @@ from pathlib import Path
 # Add src to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from key_backup_manager import MasterKeyBackupManager
-from utils.logger import logger
+from secret_rotator.key_backup_manager import MasterKeyBackupManager
+from secret_rotator.utils.logger import logger
 
 
 def create_encrypted_backup(args):

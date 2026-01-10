@@ -7,15 +7,15 @@ from pathlib import Path
 # Add src to path so we can import our modules
 sys.path.append(str(Path(__file__).parent))
 
-from config.settings import settings
-from providers.file_provider import FileSecretProvider
-from rotators.password_rotator import PasswordRotator
-from rotation_engine import RotationEngine
-from scheduler import RotationScheduler
-from web_interface import WebServer
-from utils.logger import logger
-from encryption_manager import EncryptionManager
-from backup_manager import BackupManager
+from secret_rotator.config.settings import settings
+from secret_rotator.providers.file_provider import FileSecretProvider
+from secret_rotator.rotators.password_rotator import PasswordRotator
+from secret_rotator.rotation_engine import RotationEngine
+from secret_rotator.scheduler import RotationScheduler
+from secret_rotator.web_interface import WebServer
+from secret_rotator.utils.logger import logger
+from secret_rotator.encryption_manager import EncryptionManager
+from secret_rotator.backup_manager import BackupManager
 
 
 class SecretRotationApp:
@@ -142,12 +142,12 @@ class SecretRotationApp:
             
             # Add support for other rotator types
             elif rotator_type == 'api_key':
-                from rotators.advanced_rotators import APIKeyRotator
+                from secret_rotator.rotators.advanced_rotators import APIKeyRotator
                 api_rotator = APIKeyRotator(name=rotator_name, config=rotator_config)
                 self.engine.register_rotator(api_rotator)
             
             elif rotator_type == 'jwt_secret':
-                from rotators.advanced_rotators import JWTSecretRotator
+                from secret_rotator.rotators.advanced_rotators import JWTSecretRotator
                 jwt_rotator = JWTSecretRotator(name=rotator_name, config=rotator_config)
                 self.engine.register_rotator(jwt_rotator)
             
@@ -649,14 +649,14 @@ Examples:
     
     # Override config path if specified
     if args.config:
-        from config.settings import settings
+        from secret_rotator.config.settings import settings
         settings.config_path = Path(args.config)
         settings.config = settings.load_config()
     
     # Set debug logging if requested
     if args.debug:
         import logging
-        from utils.logger import logger
+        from secret_rotator.utils.logger import logger
         logger.setLevel(logging.DEBUG)
         logger.info("Debug logging enabled")
     

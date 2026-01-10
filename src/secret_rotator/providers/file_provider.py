@@ -2,10 +2,10 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional
-from .base import SecretProvider
-from utils.logger import logger
-from utils.retry import retry_with_backoff
-from encryption_manager import EncryptionManager
+from secret_rotator.providers.base import SecretProvider
+from secret_rotator.utils.logger import logger
+from secret_rotator.utils.retry import retry_with_backoff
+from secret_rotator.encryption_manager import EncryptionManager
 
 class FileSecretProvider(SecretProvider):
     """File-based secret storage with encryption support"""

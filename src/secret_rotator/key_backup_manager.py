@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 import base64
-from utils.logger import logger
+from secret_rotator.utils.logger import logger
 
 
 class MasterKeyBackupManager:
@@ -529,11 +529,11 @@ AVAILABLE BACKUP TYPES
    - Can be stored in cloud storage
    - Requires strong passphrase (20+ characters)
    
-   Create: python -c "from key_backup_manager import MasterKeyBackupManager; \\
+   Create: python -c "from secret_rotator.key_backup_manager import MasterKeyBackupManager; \\
                       mgr = MasterKeyBackupManager(); \\
                       mgr.create_encrypted_key_backup('YOUR_STRONG_PASSPHRASE')"
    
-   Restore: python -c "from key_backup_manager import MasterKeyBackupManager; \\
+   Restore: python -c "from secret_rotator.key_backup_manager import MasterKeyBackupManager; \\
                        mgr = MasterKeyBackupManager(); \\
                        mgr.restore_from_encrypted_backup('backup_file.enc', 'YOUR_PASSPHRASE')"
 
@@ -542,11 +542,11 @@ AVAILABLE BACKUP TYPES
    - Any K of N shares can reconstruct the key
    - No single person/location has complete key
    
-   Create: python -c "from key_backup_manager import MasterKeyBackupManager; \\
+   Create: python -c "from secret_rotator.key_backup_manager import MasterKeyBackupManager; \\
                       mgr = MasterKeyBackupManager(); \\
                       mgr.create_split_key_backup(num_shares=5, threshold=3)"
    
-   Restore: python -c "from key_backup_manager import MasterKeyBackupManager; \\
+   Restore: python -c "from secret_rotator.key_backup_manager import MasterKeyBackupManager; \\
                        mgr = MasterKeyBackupManager(); \\
                        mgr.restore_from_split_key(['share1.share', 'share2.share', 'share3.share'])"
 
@@ -555,7 +555,7 @@ AVAILABLE BACKUP TYPES
    - MUST be stored in physically secure location (safe, vault)
    - Should be used only as last resort
    
-   Create: python -c "from key_backup_manager import MasterKeyBackupManager; \\
+   Create: python -c "from secret_rotator.key_backup_manager import MasterKeyBackupManager; \\
                       mgr = MasterKeyBackupManager(); \\
                       mgr.create_plaintext_backup()"
 
