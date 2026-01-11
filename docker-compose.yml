@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  secret-rotator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: secret-rotator:1.0.0
+    container_name: secret-rotator
+    
+    restart: unless-stopped
+    
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    
+    environment:
+      - SECRET_ROTATOR_CONFIG=/app/config/config.yaml
+      - PYTHONUNBUFFERED=1
+      - TZ=UTC
