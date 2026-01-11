@@ -42,7 +42,7 @@ class SecretRotationApp:
             if self.encryption_manager.should_rotate_key(rotate_days):
                 logger.warning(
                     f"Master key is older than {rotate_days} days and should be rotated. "
-                    "Run: python src/main.py --mode rotate-master-key"
+                    "Run: secret-rotator --mode rotate-master-key"
                 )
         else:
             logger.warning("Encryption is DISABLED - secrets will be stored in plaintext!")
@@ -497,7 +497,7 @@ class SecretRotationApp:
             print("  1. Create a new backup of the master key")
             print("  2. Update key backups in all locations")
             print("  3. Restart the application")
-            print("  4. Verify encryption: python src/main.py --mode verify")
+            print("  4. Verify encryption: secret-rotator --mode verify")
         else:
             print("\n✗ ERROR: Master key rotation failed")
             print("Old key has been restored from backup.")
@@ -580,28 +580,28 @@ def main():
         epilog="""
 Examples:
   # Start the daemon with scheduler and web interface
-  python src/main.py
+  secret-rotator
 
   # Run a single rotation manually
-  python src/main.py --mode once
+  secret-rotator --mode once
 
   # Verify encryption is working
-  python src/main.py --mode verify
+  secret-rotator --mode verify
 
   # Show system status
-  python src/main.py --mode status
+  secret-rotator --mode status
 
   # Migrate existing plaintext secrets to encrypted
-  python src/main.py --mode migrate
+  secret-rotator --mode migrate
 
   # Verify backup integrity
-  python src/main.py --mode verify-backups
+  secret-rotator --mode verify-backups
 
   # Rotate master encryption key
-  python src/main.py --mode rotate-master-key
+  secret-rotator --mode rotate-master-key
 
   # Cleanup old backups
-  python src/main.py --mode cleanup-backups
+  secret-rotator --mode cleanup-backups
         """,
     )
 

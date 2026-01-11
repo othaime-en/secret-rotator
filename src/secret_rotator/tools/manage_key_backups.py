@@ -3,11 +3,11 @@
 Master Key Backup Management CLI Tool
 
 Usage:
-    python tools/manage_key_backups.py create-encrypted
-    python tools/manage_key_backups.py create-split --shares 5 --threshold 3
-    python tools/manage_key_backups.py list
-    python tools/manage_key_backups.py verify backup.enc
-    python tools/manage_key_backups.py restore backup.enc
+    secret-rotator-backup create-encrypted
+    secret-rotator-backup create-split --shares 5 --threshold 3
+    secret-rotator-backup list
+    secret-rotator-backup verify backup.enc
+    secret-rotator-backup restore backup.enc
 """
 import sys
 import argparse
