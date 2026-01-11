@@ -99,8 +99,8 @@ class MasterKeyBackupManager:
 
         logger.info(f"Created encrypted key backup: {backup_file}")
         logger.warning(
-            f"IMPORTANT: Store the passphrase securely. "
-            f"Without it, this backup cannot be recovered!"
+            "IMPORTANT: Store the passphrase securely. "
+            "Without it, this backup cannot be recovered!"
         )
 
         return str(backup_file)
@@ -176,7 +176,7 @@ class MasterKeyBackupManager:
 
             os.chmod(self.master_key_file, 0o600)
 
-            logger.info(f"Successfully restored master key from backup")
+            logger.info("Successfully restored master key from backup")
             logger.warning(
                 "IMPORTANT: You may need to restart the application for changes to take effect"
             )

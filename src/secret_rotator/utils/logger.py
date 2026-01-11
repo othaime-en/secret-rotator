@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from contextvars import ContextVar
 from secret_rotator.config.settings import settings
 

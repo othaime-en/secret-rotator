@@ -1,6 +1,6 @@
 import secrets
 import string
-from typing import Dict, Any, List
+from typing import Dict, Any
 from secret_rotator.rotators.base import SecretRotator
 from secret_rotator.utils.logger import logger
 

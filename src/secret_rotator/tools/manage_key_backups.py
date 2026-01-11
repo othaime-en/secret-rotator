@@ -15,7 +15,6 @@ import getpass
 from pathlib import Path
 
 from secret_rotator.key_backup_manager import MasterKeyBackupManager
-from secret_rotator.utils.logger import logger
 
 
 def create_encrypted_backup(args):
@@ -56,11 +55,11 @@ def create_encrypted_backup(args):
             passphrase=passphrase, backup_name=args.name
         )
 
-        print(f"\n✓ SUCCESS: Encrypted backup created")
+        print("\n✓ SUCCESS: Encrypted backup created")
         print(f"  Location: {backup_file}")
-        print(f"\nNext steps:")
-        print(f"  1. Store the passphrase in a secure password manager")
-        print(f"  2. Copy the backup file to a secure remote location")
+        print("\nNext steps:")
+        print("  1. Store the passphrase in a secure password manager")
+        print("  2. Copy the backup file to a secure remote location")
         print(f"  3. Test restoration: python {sys.argv[0]} verify {backup_file}")
 
     except Exception as e:
@@ -79,7 +78,7 @@ def create_split_backup(args):
     print(f"Any {args.threshold} of these shares can reconstruct the key.")
     print("\nIMPORTANT:")
     print(f"  - Distribute the {args.shares} shares to different secure locations")
-    print(f"  - No single location will have the complete key")
+    print("  - No single location will have the complete key")
     print(f"  - You need {args.threshold} shares to recover the key")
     print()
 
@@ -94,16 +93,16 @@ def create_split_backup(args):
         )
 
         print(f"\n✓ SUCCESS: Created {len(share_files)} key shares")
-        print(f"\nShare files:")
+        print("\nShare files:")
         for i, share_file in enumerate(share_files, 1):
             print(f"  {i}. {share_file}")
 
-        print(f"\nNext steps:")
+        print("\nNext steps:")
         print(f"  1. Distribute shares to {args.shares} different secure locations:")
-        print(f"     - Physical safes in different buildings")
-        print(f"     - Trusted individuals")
-        print(f"     - Different cloud storage accounts")
-        print(f"  2. Document who has each share")
+        print("     - Physical safes in different buildings")
+        print("     - Trusted individuals")
+        print("     - Different cloud storage accounts")
+        print("   2. Document who has each share")
         print(f"  3. Test restoration with {args.threshold} shares:")
         print(f"     python {sys.argv[0]} restore-split share1.share share2.share ...")
 
@@ -134,10 +133,10 @@ def create_plaintext_backup(args):
     try:
         backup_file = manager.create_plaintext_backup(backup_name=args.name)
 
-        print(f"\n✓ SUCCESS: Plaintext backup created")
+        print("\n✓ SUCCESS: Plaintext backup created")
         print(f"  Location: {backup_file}")
-        print(f"\n⚠️  CRITICAL: This file is UNENCRYPTED!")
-        print(f"  Store it in a physically secure location immediately!")
+        print("\n⚠️  CRITICAL: This file is UNENCRYPTED!")
+        print("  Store it in a physically secure location immediately!")
 
     except Exception as e:
         print(f"\n✗ ERROR: Failed to create backup: {e}")

@@ -551,11 +551,11 @@ class SecretRotationApp:
         # Encryption status
         if self.encryption_manager:
             key_info = self.encryption_manager.get_key_info()
-            print(f"\nEncryption: ENABLED")
+            print("\nEncryption: ENABLED")
             print(f"  Key ID: {key_info.get('key_id', 'unknown')}")
             print(f"  Key Age: {key_info.get('age_days', 'unknown')} days")
         else:
-            print(f"\nEncryption: DISABLED")
+            print("\nEncryption: DISABLED")
 
         # Backup status
         if self.backup_manager:

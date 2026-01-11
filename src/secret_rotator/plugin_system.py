@@ -7,7 +7,6 @@ import importlib
 import inspect
 from pathlib import Path
 from typing import Dict, Type, List, Any
-from abc import ABC
 from secret_rotator.utils.logger import logger
 
 

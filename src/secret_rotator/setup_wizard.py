@@ -8,7 +8,6 @@ import sys
 import yaml
 import shutil
 from pathlib import Path
-from getpass import getpass
 
 
 def get_config_dir():
@@ -171,7 +170,7 @@ def setup_encryption(config_dir):
     master_key_file = config_dir / ".master.key"
 
     if master_key_file.exists():
-        response = input(f"\n⚠️  Master key already exists\n   Generate new key? (yes/no): ")
+        response = input("\n⚠️  Master key already exists\n   Generate new key? (yes/no): ")
         if response.lower() != "yes":
             print("Keeping existing master key")
             return
@@ -191,7 +190,7 @@ def setup_encryption(config_dir):
         os.chmod(master_key_file, 0o600)
         print(f"  ✓ Master encryption key generated: {master_key_file}")
         print("\n  ⚠️  CRITICAL: Backup this key immediately!")
-        print(f"     Run: secret-rotator-backup create-encrypted")
+        print("     Run: secret-rotator-backup create-encrypted")
 
     except Exception as e:
         print(f"  ✗ Error generating master key: {e}")
@@ -249,7 +248,7 @@ def main():
     data_dir = get_data_dir()
     log_dir = get_log_dir()
 
-    print(f"\nInstallation locations:")
+    print("\nInstallation locations:")
     print(f"  Config: {config_dir}")
     print(f"  Data:   {data_dir}")
     print(f"  Logs:   {log_dir}")
