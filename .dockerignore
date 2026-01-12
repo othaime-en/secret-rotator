@@ -67,7 +67,6 @@ data/backup/
 internal/
 
 # Docker files (don't need in image)
-docker/
 Dockerfile*
 docker-compose*.yml
 .dockerignore
