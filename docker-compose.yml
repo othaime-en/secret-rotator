@@ -18,3 +18,25 @@ services:
       - SECRET_ROTATOR_CONFIG=/app/config/config.yaml
       - PYTHONUNBUFFERED=1
       - TZ=UTC
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_STRUCTURED=${LOG_STRUCTURED:-true}
+    
+    volumes:
+      - ./config:/app/config:ro
+      - secret-rotator-data:/app/data
+      - secret-rotator-logs:/app/logs
+
+volumes:
+  secret-rotator-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}
+  
+  secret-rotator-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${LOGS_DIR:-./logs}
