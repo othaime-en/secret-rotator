@@ -1,3 +1,4 @@
+# Multi-stage Dockerfile for Secret Rotator
 # Stage 1: Builder - Install dependencies and build wheels
 FROM python:3.11-slim AS builder
 
@@ -28,7 +29,10 @@ COPY src/ ./src/
 COPY config/config.example.yaml ./config/
 
 # Install the package
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir .
+
+# Verify installation in builder
+RUN python -c "import secret_rotator; print(f'Builder: secret_rotator {secret_rotator.__version__} installed')"
 
 # Stage 2: Runtime - Minimal production image
 FROM python:3.11-slim AS runtime
@@ -53,8 +57,7 @@ WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 
 # Copy application code
-COPY --from=builder /build/src /app/src
-COPY --from=builder /build/config/config.example.yaml /app/config/
+COPY --from=builder /build/config/config.example.yaml /app/config/config.example.yaml
 
 # Set up directory structure with proper permissions
 RUN mkdir -p /app/config /app/data /app/data/backup /app/logs && \
