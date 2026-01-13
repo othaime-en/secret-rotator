@@ -47,6 +47,27 @@ cd secret-rotator
 pip install -e .
 ```
 
+### Using Docker
+
+```bash
+# Clone the repository
+git clone https://github.com/othaime-en/secret-rotator.git
+cd secret-rotator
+
+# Copy and configure environment variables
+cp .env.example .env
+# Edit .env with your settings
+
+# Build and run with Docker Compose
+docker-compose up -d
+```
+
+For development with hot-reload:
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
 ## Quick Start
 
 ### Initial Setup
