@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  secret-rotator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: secret-rotator:1.0.0
+    container_name: secret-rotator
+    
+    # Restart policy for production reliability
+    restart: unless-stopped
+    
+    # Port mapping
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    
+    # Environment variables
+    environment:
+      - SECRET_ROTATOR_CONFIG=/app/config/config.yaml
+      - PYTHONUNBUFFERED=1
+      - TZ=UTC
+      # Logging configuration
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_STRUCTURED=${LOG_STRUCTURED:-true}
+    
+    # Volume mounts for persistent data
+    volumes:
+      # Configuration (read-only in production)
+      - ./config:/app/config:ro
+      # Data directory (secrets and backups) - read-write
+      - secret-rotator-data:/app/data
+      # Logs directory - read-write
+      - secret-rotator-logs:/app/logs
+    
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Network
+    networks:
+      - secret-rotator-network
+
+# Named volumes for data persistence
+volumes:
+  secret-rotator-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}
+  
+  secret-rotator-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${LOGS_DIR:-./logs}
+
+# Dedicated network
+networks:
+  secret-rotator-network:
+    driver: bridge

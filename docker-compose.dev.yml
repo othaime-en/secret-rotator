@@ -1,0 +1,44 @@
+version: '3.8'
+
+# Development override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  secret-rotator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    
+    # Use local code for development (hot reload)
+    volumes:
+      # Mount source code for development
+      - ./src:/app/src:ro
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # Mount tests for running in container
+      - ./tests:/app/tests:ro
+    
+    # Development environment variables
+    environment:
+      - SECRET_ROTATOR_CONFIG=/app/config/config.yaml
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=DEBUG
+      - LOG_STRUCTURED=false
+      - PYTHONDONTWRITEBYTECODE=1
+    
+    # Enable debugging
+    ports:
+      - "8080:8080"
+      - "5678:5678"  # Python debugger port
+    
+    # Override command for development
+    command: secret-rotator --debug
+    
+    # No resource limits in development
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
