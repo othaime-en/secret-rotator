@@ -26,7 +26,7 @@ class MasterKeyBackupManager:
     """
     Manage backup and recovery of master encryption keys.
     Implements multiple backup strategies for disaster recovery.
-    
+
     ARCHITECTURE NOTE:
     - Master key file: config/.master.key (read-only in production)
     - Key backups: data/key_backups/ (separate writable volume)
@@ -35,18 +35,18 @@ class MasterKeyBackupManager:
     """
 
     def __init__(
-        self, 
-        master_key_file: str = "config/.master.key", 
-        backup_dir: str = "data/key_backups"  # CHANGED: From config/key_backups
+        self,
+        master_key_file: str = "config/.master.key",
+        backup_dir: str = "data/key_backups",  # CHANGED: From config/key_backups
     ):
         """
         Initialize the backup manager.
-        
+
         Args:
             master_key_file: Path to the master encryption key (read-only)
             backup_dir: Directory for storing key backups (writable)
                        Default: data/key_backups (separate from config)
-        
+
         Security Notes:
             - Master key file should be in read-only config directory
             - Backup directory should be in writable data volume
@@ -54,7 +54,7 @@ class MasterKeyBackupManager:
         """
         self.master_key_file = Path(master_key_file)
         self.backup_dir = Path(backup_dir)
-        
+
         # Create backup directory if it doesn't exist
         # NOTE: This will fail gracefully if parent directory is read-only
         try:
@@ -84,7 +84,7 @@ class MasterKeyBackupManager:
 
         Returns:
             Path to the encrypted backup file
-            
+
         Security Notes:
             - Backup is encrypted with PBKDF2 key derivation (600k iterations)
             - Passphrase should be 20+ characters
@@ -245,7 +245,7 @@ class MasterKeyBackupManager:
 
         Returns:
             List of share file paths
-            
+
         Security Notes:
             - Shares should be distributed to different secure locations
             - No single share can reconstruct the key
@@ -411,7 +411,7 @@ class MasterKeyBackupManager:
 
         Returns:
             Path to the backup file
-            
+
         Security Notes:
             - This creates an UNENCRYPTED copy of your master key
             - Use ONLY if you will immediately store it in a physical safe/vault
