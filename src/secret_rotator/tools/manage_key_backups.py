@@ -8,6 +8,11 @@ Usage:
     secret-rotator-backup list
     secret-rotator-backup verify backup.enc
     secret-rotator-backup restore backup.enc
+
+ARCHITECTURE NOTE:
+- Master key: config/.master.key (read-only)
+- Backups: data/key_backups/ (writable volume)
+- This separation maintains security isolation
 """
 import sys
 import argparse
@@ -31,6 +36,10 @@ def create_encrypted_backup(args):
     print("  - Include uppercase, lowercase, numbers, and symbols")
     print("  - Store the passphrase in a secure password manager")
     print("  - Without this passphrase, the backup CANNOT be recovered")
+    print("\nBEST PRACTICE:")
+    print("  - After creating the backup, copy the .enc file to external storage")
+    print("  - Examples: AWS S3, Azure Blob, Google Drive, encrypted USB drive")
+    print("  - The encrypted file is safe to store in cloud storage")
     print()
 
     # Get passphrase
@@ -59,8 +68,16 @@ def create_encrypted_backup(args):
         print(f"  Location: {backup_file}")
         print("\nNext steps:")
         print("  1. Store the passphrase in a secure password manager")
-        print("  2. Copy the backup file to a secure remote location")
-        print(f"  3. Test restoration: python {sys.argv[0]} verify {backup_file}")
+        print("  2. Copy the backup file to external storage:")
+        print(f"     - For Docker: docker cp secret-rotator:{backup_file} ./external-backup/")
+        print(f"     - For local: cp {backup_file} /path/to/external/storage/")
+        print("  3. Test restoration in non-production environment:")
+        print(f"     secret-rotator-backup verify {backup_file}")
+        print("\n  Recommended external storage options:")
+        print("     - AWS S3 bucket with encryption")
+        print("     - Azure Blob Storage with encryption")
+        print("     - Encrypted USB drive in physical safe")
+        print("     - Password manager with file attachments (1Password, LastPass)")
 
     except Exception as e:
         print(f"\n✗ ERROR: Failed to create backup: {e}")
@@ -80,6 +97,11 @@ def create_split_backup(args):
     print(f"  - Distribute the {args.shares} shares to different secure locations")
     print("  - No single location will have the complete key")
     print(f"  - You need {args.threshold} shares to recover the key")
+    print("\nRECOMMENDED DISTRIBUTION:")
+    print("  - Different physical safes in different buildings")
+    print("  - Different cloud storage accounts (different providers)")
+    print("  - With trusted individuals in different geographic locations")
+    print("  - Different AWS regions / Azure regions")
     print()
 
     response = input(f"Create {args.shares} shares (threshold {args.threshold})? (yes/no): ")
@@ -99,12 +121,18 @@ def create_split_backup(args):
 
         print("\nNext steps:")
         print(f"  1. Distribute shares to {args.shares} different secure locations:")
-        print("     - Physical safes in different buildings")
-        print("     - Trusted individuals")
-        print("     - Different cloud storage accounts")
-        print("   2. Document who has each share")
+        print("     Example distribution strategy:")
+        print("       • Share 1: Company safe (headquarters)")
+        print("       • Share 2: Backup facility (different city)")
+        print("       • Share 3: CEO's personal safe")
+        print("       • Share 4: CTO's personal safe")
+        print("       • Share 5: Cloud storage (AWS S3, encrypted)")
+        print("  2. Document who has each share (but keep this document secure)")
         print(f"  3. Test restoration with {args.threshold} shares:")
-        print(f"     python {sys.argv[0]} restore-split share1.share share2.share ...")
+        print(f"     secret-rotator-backup restore-split share1.share share2.share share3.share")
+        print("\n  For Docker deployments, copy shares out of container:")
+        for i, share_file in enumerate(share_files, 1):
+            print(f"     docker cp secret-rotator:{share_file} ./share{i}/")
 
     except Exception as e:
         print(f"\n✗ ERROR: Failed to create split backup: {e}")
@@ -137,6 +165,7 @@ def create_plaintext_backup(args):
         print(f"  Location: {backup_file}")
         print("\n⚠️  CRITICAL: This file is UNENCRYPTED!")
         print("  Store it in a physically secure location immediately!")
+        print("  Examples: Bank safe deposit box, home safe, secure vault")
 
     except Exception as e:
         print(f"\n✗ ERROR: Failed to create backup: {e}")
@@ -150,12 +179,15 @@ def list_backups(args):
     print("\n" + "=" * 70)
     print("AVAILABLE MASTER KEY BACKUPS")
     print("=" * 70)
+    print(f"Backup directory: {args.backup_dir}")
 
     backups = manager.list_backups()
 
     if not backups:
         print("\nNo backups found.")
-        print(f"Backup directory: {args.backup_dir}")
+        print("\nCreate a backup with one of these commands:")
+        print("  secret-rotator-backup create-encrypted")
+        print("  secret-rotator-backup create-split --shares 5 --threshold 3")
         return
 
     for i, backup in enumerate(backups, 1):
@@ -166,6 +198,7 @@ def list_backups(args):
             print(f"   File: {backup['file']}")
             print(f"   Key ID: {backup.get('key_id', 'unknown')}")
             print(f"   Status: {backup['status']}")
+            print("   ✓ Safe to copy to external storage")
 
         elif backup["type"] == "split_key":
             print(f"   Threshold: {backup['threshold']} of {backup['total_shares']} shares")
@@ -176,6 +209,9 @@ def list_backups(args):
                 print(
                     f"   ⚠️  WARNING: Need {backup['threshold']} shares to restore, only have {backup['available_shares']}"
                 )
+            print("   Files:")
+            for share in backup.get("shares", []):
+                print(f"     - {share}")
 
         elif backup["type"] == "plaintext":
             print(f"   File: {backup['file']}")
@@ -200,6 +236,11 @@ def verify_backup(args):
 
             if success:
                 print("\n✓ SUCCESS: Backup is valid and can be restored")
+                print("\nThis backup has been verified:")
+                print("  - File integrity: OK")
+                print("  - Passphrase: Correct")
+                print("  - Decryption: Successful")
+                print("  - Key structure: Valid")
             else:
                 print("\n✗ ERROR: Backup verification failed")
                 sys.exit(1)
@@ -251,6 +292,8 @@ def restore_backup(args):
                 print("  1. Restart the secret rotation application")
                 print("  2. Verify the application can decrypt existing secrets")
                 print("  3. Check application logs for any issues")
+                print("\nFor Docker:")
+                print("  docker-compose restart secret-rotator")
             else:
                 print("\n✗ ERROR: Restoration failed")
                 sys.exit(1)
@@ -294,6 +337,8 @@ def restore_split_backup(args):
             print("\nNext steps:")
             print("  1. Restart the secret rotation application")
             print("  2. Verify the application can decrypt existing secrets")
+            print("\nFor Docker:")
+            print("  docker-compose restart secret-rotator")
         else:
             print("\n✗ ERROR: Restoration failed")
             sys.exit(1)
@@ -314,6 +359,7 @@ def export_instructions(args):
         print("  - Emergency contact information")
         print("  - Backup custodian names")
         print("  - Storage locations")
+        print("  - Cloud storage configuration")
 
     except Exception as e:
         print(f"\n✗ ERROR: Failed to export instructions: {e}")
@@ -324,6 +370,31 @@ def main():
     parser = argparse.ArgumentParser(
         description="Manage master encryption key backups",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Create encrypted backup (recommended)
+  secret-rotator-backup create-encrypted
+  
+  # Create split key backup (5 shares, need 3 to restore)
+  secret-rotator-backup create-split --shares 5 --threshold 3
+  
+  # List all backups
+  secret-rotator-backup list
+  
+  # Verify an encrypted backup
+  secret-rotator-backup verify backup.enc
+  
+  # Restore from encrypted backup
+  secret-rotator-backup restore backup.enc
+  
+  # Restore from split key shares
+  secret-rotator-backup restore-split share1.share share2.share share3.share
+
+Architecture Note:
+  Master key: config/.master.key (read-only)
+  Backups:    data/key_backups/ (writable)
+  This separation maintains security isolation.
+        """,
     )
 
     parser.add_argument(
@@ -334,15 +405,15 @@ def main():
 
     parser.add_argument(
         "--backup-dir",
-        default="config/key_backups",
-        help="Backup directory (default: config/key_backups)",
+        default="data/key_backups",  # CHANGED: From config/key_backups
+        help="Backup directory (default: data/key_backups)",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
     # Create encrypted backup
     parser_encrypted = subparsers.add_parser(
-        "create-encrypted", help="Create encrypted backup with passphrase"
+        "create-encrypted", help="Create encrypted backup with passphrase (RECOMMENDED)"
     )
     parser_encrypted.add_argument("--name", help="Optional backup name")
 
@@ -357,7 +428,7 @@ def main():
 
     # Create plaintext backup
     parser_plain = subparsers.add_parser(
-        "create-plaintext", help="Create unencrypted backup (not recommended)"
+        "create-plaintext", help="Create unencrypted backup (NOT RECOMMENDED)"
     )
     parser_plain.add_argument("--name", help="Optional backup name")
 
