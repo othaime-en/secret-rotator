@@ -1,6 +1,10 @@
 """
-Master_Key Backup and Recovery System.
+Master Key Backup and Recovery System.
 This module provides functionality to back up and recover master encryption keys.
+
+SECURITY NOTE: Key backups are stored separately from the operational config
+to maintain principle of least privilege. The config directory is read-only
+in production deployments.
 """
 
 import json
@@ -22,17 +26,48 @@ class MasterKeyBackupManager:
     """
     Manage backup and recovery of master encryption keys.
     Implements multiple backup strategies for disaster recovery.
+    
+    ARCHITECTURE NOTE:
+    - Master key file: config/.master.key (read-only in production)
+    - Key backups: data/key_backups/ (separate writable volume)
+    - This separation maintains security isolation between immutable config
+      and dynamic backup operations.
     """
 
     def __init__(
-        self, master_key_file: str = "config/.master.key", backup_dir: str = "config/key_backups"
+        self, 
+        master_key_file: str = "config/.master.key", 
+        backup_dir: str = "data/key_backups"  # CHANGED: From config/key_backups
     ):
+        """
+        Initialize the backup manager.
+        
+        Args:
+            master_key_file: Path to the master encryption key (read-only)
+            backup_dir: Directory for storing key backups (writable)
+                       Default: data/key_backups (separate from config)
+        
+        Security Notes:
+            - Master key file should be in read-only config directory
+            - Backup directory should be in writable data volume
+            - This separation prevents config modification by runtime processes
+        """
         self.master_key_file = Path(master_key_file)
         self.backup_dir = Path(backup_dir)
-        self.backup_dir.mkdir(parents=True, exist_ok=True)
-
-        # Set restrictive permissions on backup directory
-        os.chmod(self.backup_dir, 0o700)
+        
+        # Create backup directory if it doesn't exist
+        # NOTE: This will fail gracefully if parent directory is read-only
+        try:
+            self.backup_dir.mkdir(parents=True, exist_ok=True)
+            # Set restrictive permissions on backup directory
+            os.chmod(self.backup_dir, 0o700)
+            logger.info(f"Key backup directory initialized: {self.backup_dir}")
+        except OSError as e:
+            logger.error(
+                f"Failed to create backup directory at {self.backup_dir}: {e}\n"
+                f"Ensure the data volume is mounted as writable in your deployment."
+            )
+            raise
 
     def create_encrypted_key_backup(
         self, passphrase: str, backup_name: Optional[str] = None
@@ -49,6 +84,12 @@ class MasterKeyBackupManager:
 
         Returns:
             Path to the encrypted backup file
+            
+        Security Notes:
+            - Backup is encrypted with PBKDF2 key derivation (600k iterations)
+            - Passphrase should be 20+ characters
+            - Store passphrase in secure password manager
+            - Encrypted backups can be safely copied to external storage
         """
         if not self.master_key_file.exists():
             raise FileNotFoundError(f"Master key not found: {self.master_key_file}")
@@ -101,6 +142,10 @@ class MasterKeyBackupManager:
         logger.warning(
             "IMPORTANT: Store the passphrase securely. "
             "Without it, this backup cannot be recovered!"
+        )
+        logger.info(
+            f"BEST PRACTICE: Copy {backup_file} to external storage "
+            "(S3, Azure Blob, encrypted USB, etc.) for disaster recovery."
         )
 
         return str(backup_file)
@@ -200,6 +245,12 @@ class MasterKeyBackupManager:
 
         Returns:
             List of share file paths
+            
+        Security Notes:
+            - Shares should be distributed to different secure locations
+            - No single share can reconstruct the key
+            - Geographic separation recommended (different buildings/regions)
+            - Ideal for organizational key management
         """
         try:
             from pyshamir import split
@@ -255,6 +306,13 @@ class MasterKeyBackupManager:
         logger.warning(
             f"IMPORTANT: Distribute these {num_shares} shares to different secure locations. "
             f"Any {threshold} shares can reconstruct the key."
+        )
+        logger.info(
+            "BEST PRACTICE: Store shares in geographically separate locations:\n"
+            "  - Different physical safes in different buildings\n"
+            "  - Different cloud storage accounts (different providers)\n"
+            "  - With trusted individuals in different locations\n"
+            "  - Different AWS regions / Azure regions"
         )
 
         return share_files
@@ -353,6 +411,12 @@ class MasterKeyBackupManager:
 
         Returns:
             Path to the backup file
+            
+        Security Notes:
+            - This creates an UNENCRYPTED copy of your master key
+            - Use ONLY if you will immediately store it in a physical safe/vault
+            - Consider using encrypted backups instead for better security
+            - This backup type is NOT recommended for production use
         """
         if not self.master_key_file.exists():
             raise FileNotFoundError(f"Master key not found: {self.master_key_file}")
@@ -510,55 +574,88 @@ BACKUP LOCATIONS
 Master Key File: {self.master_key_file}
 Backup Directory: {self.backup_dir}
 
+ARCHITECTURE NOTE:
+- Master key: Stored in read-only config directory
+- Key backups: Stored in separate writable data volume
+- This separation maintains security isolation and follows principle of
+  least privilege (runtime processes can't modify immutable config)
+
 AVAILABLE BACKUP TYPES
 =======================
 
-1. ENCRYPTED BACKUP (Recommended for remote storage)
+1. ENCRYPTED BACKUP (Recommended for all deployments)
    - Protected by passphrase
-   - Can be stored in cloud storage
+   - Can be stored in cloud storage (S3, Azure Blob, etc.)
    - Requires strong passphrase (20+ characters)
+   - Safe to copy to external/remote storage
 
-   Create: python -c "from secret_rotator.key_backup_manager import MasterKeyBackupManager; \\
-                      mgr = MasterKeyBackupManager(); \\
-                      mgr.create_encrypted_key_backup('YOUR_STRONG_PASSPHRASE')"
+   Create: secret-rotator-backup create-encrypted
 
-   Restore: python -c "from secret_rotator.key_backup_manager import MasterKeyBackupManager; \\
-                       mgr = MasterKeyBackupManager(); \\
-                       mgr.restore_from_encrypted_backup('backup_file.enc', 'YOUR_PASSPHRASE')"
+   Restore: secret-rotator-backup restore backup_file.enc
+
+   BEST PRACTICE: After creating encrypted backup:
+   1. Copy the .enc file to external storage (S3, Azure, USB drive)
+   2. Store passphrase in secure password manager
+   3. Test restoration in non-production environment
 
 2. SPLIT KEY BACKUP (Recommended for distributed storage)
    - Key split into multiple shares using Shamir's Secret Sharing
    - Any K of N shares can reconstruct the key
    - No single person/location has complete key
+   - Ideal for organizational key management
 
-   Create: python -c "from secret_rotator.key_backup_manager import MasterKeyBackupManager; \\
-                      mgr = MasterKeyBackupManager(); \\
-                      mgr.create_split_key_backup(num_shares=5, threshold=3)"
+   Create: secret-rotator-backup create-split --shares 5 --threshold 3
 
-   Restore: python -c "from secret_rotator.key_backup_manager import MasterKeyBackupManager; \\
-                       mgr = MasterKeyBackupManager(); \\
-                       mgr.restore_from_split_key(['share1.share', 'share2.share', 'share3.share'])"
+   Restore: secret-rotator-backup restore-split share1.share share2.share share3.share
+
+   DISTRIBUTION STRATEGY:
+   - Store shares in geographically separate locations
+   - Different physical safes in different buildings
+   - Different cloud storage providers/regions
+   - With trusted individuals in different locations
+   
+   Example: 5 shares with threshold of 3:
+   - Share 1: Company safe (HQ)
+   - Share 2: Backup facility (different city)
+   - Share 3: CEO's personal safe
+   - Share 4: CTO's personal safe  
+   - Share 5: Cloud storage (AWS S3, different region)
 
 3. PLAINTEXT BACKUP (Use only for immediate physical storage)
    - Unencrypted copy of master key
    - MUST be stored in physically secure location (safe, vault)
    - Should be used only as last resort
+   - NOT recommended for production use
 
-   Create: python -c "from secret_rotator.key_backup_manager import MasterKeyBackupManager; \\
-                      mgr = MasterKeyBackupManager(); \\
-                      mgr.create_plaintext_backup()"
+   Create: secret-rotator-backup create-plaintext
+
+DOCKER/CONTAINER DEPLOYMENTS
+=============================
+When running in Docker/containers:
+
+1. The backup directory ({self.backup_dir}) is in the data volume
+2. Encrypted backups (.enc files) are safe to copy out of container:
+   
+   docker cp secret-rotator:/app/data/key_backups/backup.enc ./external-storage/
+
+3. For production, automate copying backups to external storage:
+   - Use docker volumes mapped to S3-backed storage
+   - Use backup containers that sync to cloud storage
+   - Schedule periodic copies to external locations
 
 BACKUP BEST PRACTICES
 ======================
 1. Create backups IMMEDIATELY after key generation
 2. Test backup restoration in non-production environment
 3. Store backups in multiple secure locations:
-   - Physical safe/vault (plaintext backup)
+   - Physical safe/vault (for plaintext backups only)
+   - Cloud storage with encryption (encrypted backups)
    - Password manager (encrypted backup passphrase)
    - Distributed across trusted parties (split key shares)
 4. Document backup locations and recovery procedures
-5. Regularly verify backups are accessible
+5. Regularly verify backups are accessible (monthly recommended)
 6. Update backups after key rotation
+7. For production: Use automated backup to external storage
 
 RECOVERY PROCEDURES
 ===================
@@ -566,14 +663,50 @@ If master key is lost:
 1. Locate your backup files
 2. Verify backup integrity before restoration
 3. Stop the secret rotation application
-4. Restore master key from backup
+4. Restore master key from backup:
+   - For encrypted: secret-rotator-backup restore backup.enc
+   - For split keys: secret-rotator-backup restore-split share1 share2 share3
 5. Restart the application
 6. Verify application can decrypt existing secrets
+
+EXTERNAL STORAGE INTEGRATION (Future)
+=====================================
+This system will support automatic backup to external storage:
+- AWS S3 with server-side encryption
+- Azure Blob Storage with encryption
+- Google Cloud Storage
+- Custom S3-compatible storage
+
+Configuration will be added to config.yaml:
+```yaml
+backup:
+  key_backups:
+    local_path: "{self.backup_dir}"
+    external_storage:
+      enabled: true
+      type: "s3"
+      bucket: "my-key-backups"
+      encryption: true
+```
 
 EMERGENCY CONTACTS
 ==================
 System Administrator: [YOUR NAME/EMAIL]
 Backup Custodians: [LIST PEOPLE WHO HAVE ACCESS TO BACKUPS]
+Cloud Storage Admin: [PERSON WITH ACCESS TO S3/AZURE]
+
+SECURITY REMINDERS
+==================
+✓ Never store master key and backups in same location
+✓ Use encrypted backups for cloud/remote storage
+✓ Use split-key backups for distributed organizations
+✓ Store passphrases in password managers (NOT in code/docs)
+✓ Test restoration procedures regularly
+✓ Keep backup locations documented but secure
+✓ Review and update backup strategy annually
+
+For questions or issues, refer to the project documentation:
+https://github.com/othaime-en/secret-rotator
 """
 
         output_path = Path(output_file)
