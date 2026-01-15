@@ -65,7 +65,8 @@ RUN mkdir -p /app/config /app/data /app/data/backup /app/logs && \
 
 # Copy entrypoint script
 COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Fix line endings and make executable
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 # Switch to non-root user
 USER secretrotator
