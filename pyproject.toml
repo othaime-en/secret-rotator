@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "secret-rotator"
-version = "1.1.0"
+version = "1.2.0"
 description = "Automated secret rotation system with encryption and backup management"
 readme = "README.md"
 authors = [{ name = "othaimeen", email = "othaimeen.dev@gmail.com" }]

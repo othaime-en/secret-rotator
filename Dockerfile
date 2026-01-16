@@ -39,7 +39,7 @@ FROM python:3.11-slim AS runtime
 
 LABEL maintainer="othaimeen.dev@gmail.com"
 LABEL description="Secret Rotation System - Production Runtime"
-LABEL version="1.1.0"
+LABEL version="1.2.0"
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
