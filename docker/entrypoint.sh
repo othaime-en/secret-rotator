@@ -162,29 +162,74 @@ else
     exit 1
 fi
 
-# Display configuration
-echo ""
-echo "Configuration:"
-echo "  Config file: $SECRET_ROTATOR_CONFIG"
-echo "  Data directory: /app/data"
-echo "  Logs directory: /app/logs"
-echo "  Python path: $(which python)"
-echo ""
+# -----------------------------------------------------------------------------
+# Step 5: Display Configuration Summary
+# -----------------------------------------------------------------------------
 
-# Run pre-flight checks
-log_info "Running pre-flight checks..."
+echo ""
+echo "==================================================================="
+echo "Configuration Summary"
+echo "==================================================================="
+echo "Config file:       $SECRET_ROTATOR_CONFIG"
+echo "Master key:        $NEW_KEY_PATH ($KEY_STATUS)"
+echo "Data directory:    /app/data"
+echo "Logs directory:    /app/logs"
+echo "Python version:    $(python --version 2>&1)"
+echo "Running as user:   $(whoami) (UID: $(id -u))"
+echo "==================================================================="
 
-# Check if running as non-root
-if [ "$(id -u)" = "0" ]; then
-    log_warn "Running as root user. This is not recommended for production."
-else
-    log_info "Running as user: $(whoami) (UID: $(id -u))"
+# -----------------------------------------------------------------------------
+# Step 6: First Run Instructions
+# -----------------------------------------------------------------------------
+
+if [ "$KEY_STATUS" = "will_generate" ]; then
+    echo ""
+    echo "==================================================================="
+    echo "⚠️  FIRST RUN SETUP REQUIRED"
+    echo "==================================================================="
+    echo ""
+    echo "After the application starts successfully:"
+    echo ""
+    echo "1. BACKUP THE MASTER KEY (Critical!)"
+    echo "   docker cp secret-rotator:/app/data/.master.key ./backup/"
+    echo ""
+    echo "2. Create an encrypted backup:"
+    echo "   docker exec secret-rotator secret-rotator-backup create-encrypted"
+    echo ""
+    echo "3. Copy encrypted backup to external storage:"
+    echo "   docker cp secret-rotator:/app/data/key_backups/backup_*.enc ./backup/"
+    echo ""
+    echo "4. Store the backup passphrase in a password manager"
+    echo ""
+    echo "==================================================================="
+    echo ""
 fi
 
+# -----------------------------------------------------------------------------
+# Step 7: Health Check
+# -----------------------------------------------------------------------------
+
+log_info "Running pre-flight checks..."
+
+# Check if config file is valid YAML
+if command -v python3 &> /dev/null; then
+    python3 -c "import yaml; yaml.safe_load(open('$SECRET_ROTATOR_CONFIG'))" 2>/dev/null || {
+        log_error "Configuration file is not valid YAML"
+        log_error "Check $SECRET_ROTATOR_CONFIG for syntax errors"
+        exit 1
+    }
+    log_info "✓ Configuration file is valid YAML"
+fi
+
+# -----------------------------------------------------------------------------
+# Step 8: Start Application
+# -----------------------------------------------------------------------------
+
+echo ""
 echo "==================================================================="
 echo "Starting Secret Rotator Application"
 echo "==================================================================="
 echo ""
 
-# Execute the main command
+# Execute the main command (from CMD in Dockerfile)
 exec "$@"
