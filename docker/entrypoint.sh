@@ -67,36 +67,105 @@ done
 
 log_info "✓ All required directories exist and are writable"
 
-# Check if config file exists
-if ! file_exists /app/config/config.yaml; then
-    log_warn "Config file not found at /app/config/config.yaml"
-    log_info "Creating default configuration from example..."
+# -----------------------------------------------------------------------------
+# Step 2: Handle Configuration File
+# -----------------------------------------------------------------------------
+
+log_info "Configuring application..."
+
+# Check if user provided custom config in /app/config/
+if [ -f /app/config/config.yaml ]; then
+    log_info "Using custom configuration from /app/config/config.yaml"
+    export SECRET_ROTATOR_CONFIG=/app/config/config.yaml
+    CONFIG_SOURCE="custom"
+else
+    # No custom config, use/create one in data volume
+    log_warn "No custom config found at /app/config/config.yaml"
     
-    if file_exists /app/config/config.example.yaml; then
-        cp /app/config/config.example.yaml /app/config/config.yaml
-        log_info "Default configuration created. Please customize it."
+    if [ ! -f /app/data/config.yaml ]; then
+        log_info "Creating default configuration in /app/data/config.yaml"
+        
+        if [ -f /app/config/config.example.yaml ]; then
+            cp /app/config/config.example.yaml /app/data/config.yaml
+            log_info "✓ Default configuration created from example"
+        else
+            log_error "Cannot find config.example.yaml in /app/config/"
+            exit 1
+        fi
     else
-        log_error "Neither config.yaml nor config.example.yaml found!"
+        log_info "Using existing configuration from /app/data/config.yaml"
+    fi
+    
+    export SECRET_ROTATOR_CONFIG=/app/data/config.yaml
+    CONFIG_SOURCE="default"
+fi
+
+log_info "Configuration source: $CONFIG_SOURCE"
+
+# -----------------------------------------------------------------------------
+# Step 3: Handle Master Encryption Key Migration
+# -----------------------------------------------------------------------------
+
+log_info "Checking master encryption key..."
+
+# New location (correct): /app/data/.master.key
+# Old location (legacy): /app/config/.master.key
+
+NEW_KEY_PATH="/app/data/.master.key"
+OLD_KEY_PATH="/app/config/.master.key"
+
+if [ -f "$NEW_KEY_PATH" ]; then
+    log_info "✓ Master key found at $NEW_KEY_PATH"
+    KEY_STATUS="exists"
+    
+elif [ -f "$OLD_KEY_PATH" ]; then
+    # Migration scenario: key exists in old location
+    log_warn "Master key found in legacy location: $OLD_KEY_PATH"
+    log_info "Migrating master key to data volume..."
+    
+    if cp "$OLD_KEY_PATH" "$NEW_KEY_PATH"; then
+        chmod 600 "$NEW_KEY_PATH"
+        log_info "✓ Master key migrated to $NEW_KEY_PATH"
+        log_info "  Old key preserved at $OLD_KEY_PATH for backup"
+        KEY_STATUS="migrated"
+    else
+        log_error "Failed to migrate master key"
         exit 1
     fi
+    
+else
+    # No key exists - will be generated on first run
+    log_info "No master key found - will be generated on first run"
+    log_warn "IMPORTANT: Backup the key after first run!"
+    log_info "  Key location: $NEW_KEY_PATH"
+    log_info "  Backup command: docker cp secret-rotator:/app/data/.master.key ./backup/"
+    KEY_STATUS="will_generate"
 fi
 
-# Check if master encryption key exists
-if ! file_exists /app/config/.master.key; then
-    log_warn "Master encryption key not found!"
-    log_info "The application will generate a new key on first run."
-    log_info "IMPORTANT: Backup the key file from /app/config/.master.key"
-fi
+# -----------------------------------------------------------------------------
+# Step 4: Verify Python Environment
+# -----------------------------------------------------------------------------
 
-# Verify Python environment
 log_info "Verifying Python environment..."
-python --version
-pip list | grep secret-rotator || log_warn "secret-rotator package not found in pip list"
+
+python --version || {
+    log_error "Python not found"
+    exit 1
+}
+
+# Verify package installation
+if python -c "import secret_rotator; print(f'Version: {secret_rotator.__version__}')" 2>/dev/null; then
+    log_info "✓ secret_rotator package verified"
+else
+    log_error "Failed to import secret_rotator module"
+    log_error "Package may not be installed correctly"
+    exit 1
+fi
 
 # Display configuration
 echo ""
 echo "Configuration:"
-echo "  Config file: ${SECRET_ROTATOR_CONFIG:-/app/config/config.yaml}"
+echo "  Config file: $SECRET_ROTATOR_CONFIG"
 echo "  Data directory: /app/data"
 echo "  Logs directory: /app/logs"
 echo "  Python path: $(which python)"
@@ -104,12 +173,6 @@ echo ""
 
 # Run pre-flight checks
 log_info "Running pre-flight checks..."
-
-# Verify the application can import
-python -c "import secret_rotator; print(f'Version: {secret_rotator.__version__}')" || {
-    log_error "Failed to import secret_rotator module"
-    exit 1
-}
 
 # Check if running as non-root
 if [ "$(id -u)" = "0" ]; then
