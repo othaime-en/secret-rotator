@@ -391,7 +391,7 @@ Examples:
   secret-rotator-backup restore-split share1.share share2.share share3.share
 
 Architecture Note:
-  Master key: config/.master.key (read-only)
+  Master key: data/.master.key (read-only)
   Backups:    data/key_backups/ (writable)
   This separation maintains security isolation.
         """,
@@ -399,8 +399,8 @@ Architecture Note:
 
     parser.add_argument(
         "--key-file",
-        default="config/.master.key",
-        help="Path to master key file (default: config/.master.key)",
+        default="data/.master.key",
+        help="Path to master key file (default: data/.master.key)",
     )
 
     parser.add_argument(
