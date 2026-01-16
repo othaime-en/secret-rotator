@@ -22,7 +22,14 @@ from datetime import datetime, timedelta
 class EncryptionManager:
     """Handle encryption/decryption of secrets using a master key"""
 
-    def __init__(self, key_file: str = "config/.master.key"):
+    def __init__(self, key_file: str = "data/.master.key"):
+        """
+        Architecture Note (v1.2.0):
+            Master key moved from config/ to data/ to enable:
+            - Auto-generation on first run
+            - Read-only config directory in production
+            - Proper separation of config vs runtime data
+        """
         self.key_file = Path(key_file)
         self.cipher = None
         self.key_metadata: Dict[str, Any] = {}
