@@ -1,6 +1,11 @@
 # Secret Rotation Configuration (Example Template)
-# Copy this file to `config.yaml` and fill in your values.
-# DO NOT commit `config.yaml` to version control.
+#
+# DOCKER DEPLOYMENT NOTES:
+# - This file should be mounted read-only in production: ./config:/app/config:ro
+# - Runtime data (keys, secrets, backups) stored in writable /app/data volume
+# - Copy this file to config.yaml and customize for your environment
+#
+# DO NOT commit config.yaml with secrets to version control!
 
 rotation:
   schedule: "daily" # daily, weekly, every_30_minutes, every_2_hours
@@ -53,11 +58,13 @@ environments:
 web:
   enabled: true
   port: 8080
-  host: "localhost"
+  host: "0.0.0.0" # Changed from localhost to allow external access in Docker
 
 providers:
   file_storage:
     type: "file"
+    # IMPORTANT: Paths are relative to container root or absolute
+    # In Docker, /app/data is a writable volume
     file_path: "data/secrets.json"
     backup_path: "data/backup/"
 
@@ -122,12 +129,16 @@ notifications:
 security:
   encryption:
     enabled: true
-    master_key_file: "config/.master.key"
+    # CRITICAL: Master key now stored in writable data volume
+    # This allows the application to generate it on first run
+    # Docker mount: /app/data (read-write)
+    master_key_file: "data/.master.key"
     rotate_master_key_days: 90
 
 # Backup configuration
 backup:
   enabled: true
+  # All backup paths in writable data volume
   storage_path: "data/backup/"
   encrypt_backups: true
   cleanup_time: "03:00"
@@ -140,6 +151,9 @@ backup:
   retention:
     days: 90
     max_backups_per_secret: 10
+
+  # Master key backups stored in data volume (not read-only config)
+  key_backups_path: "data/key_backups/"
 
   # Remote backup (optional)
   remote_backup:
