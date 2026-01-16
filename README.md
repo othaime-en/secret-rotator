@@ -48,7 +48,7 @@ cd secret-rotator
 pip install -e .
 ```
 
-### Using Docker
+### Docker Quick Start (Fresh Install)
 
 ```bash
 # Clone the repository
@@ -59,7 +59,9 @@ cd secret-rotator
 cp .env.example .env
 # Edit .env with your settings
 
-# Build and run with Docker Compose
+# Create directories and start
+mkdir -p data logs
+
 docker-compose up -d
 ```
 
@@ -68,6 +70,44 @@ For development with hot-reload:
 ```bash
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
+
+The container automatically handles:
+
+- Directory creation and permissions
+- Default configuration setup
+- Master encryption key generation
+- Application initialization
+
+**Important:** Backup the master key after first run:
+
+```bash
+docker cp secret-rotator:/app/data/.master.key ./backup/
+```
+
+### Production Deployment (Custom Config)
+
+```bash
+# Prepare custom configuration
+mkdir -p config data logs
+cp config/config.example.yaml config/config.yaml
+# Edit config/config.yaml with your settings
+
+# Uncomment config volume in docker-compose.yml:
+# - ./config:/app/config:ro
+
+# Deploy
+docker-compose up -d
+```
+
+### Architecture (v1.2.0+)
+
+```
+./config/     → /app/config/ (read-only, optional)
+./data/       → /app/data/ (read-write, required - secrets, keys, backups)
+./logs/       → /app/logs/ (read-write, required)
+```
+
+See [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) for detailed guide.
 
 ## Quick Start
 
