@@ -33,7 +33,7 @@ class SecretRotationApp:
         # Initialize encryption manager if enabled
         encryption_enabled = settings.get("security.encryption.enabled", True)
         if encryption_enabled:
-            key_file = settings.get("security.encryption.master_key_file", "config/.master.key")
+            key_file = settings.get("security.encryption.master_key_file", "data/.master.key")
             self.encryption_manager = EncryptionManager(key_file=key_file)
             logger.info("Encryption initialized")
 
@@ -95,7 +95,7 @@ class SecretRotationApp:
                         "file_path": provider_config.get("file_path", "data/secrets.json"),
                         "encrypt_secrets": encrypt_secrets,
                         "encryption_key_file": settings.get(
-                            "security.encryption.master_key_file", "config/.master.key"
+                            "security.encryption.master_key_file", "data/.master.key"
                         ),
                     },
                 )
@@ -169,9 +169,9 @@ class SecretRotationApp:
             logger.info(f"Master Key ID: {key_info.get('key_id', 'unknown')}")
             logger.info(f"Key Age: {key_info.get('age_days', 'unknown')} days")
 
-            key_file = settings.get("security.encryption.master_key_file", "config/.master.key")
+            key_file = settings.get("security.encryption.master_key_file", "data/.master.key")
             logger.warning(f"IMPORTANT: Backup master key file: {key_file}")
-            logger.info("Use: python tools/manage_key_backups.py create-encrypted")
+            logger.info("Use: secret-rotator-backup create-encrypted")
 
         logger.info("=" * 60)
 
