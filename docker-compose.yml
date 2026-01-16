@@ -18,20 +18,29 @@ services:
     
     # Environment variables
     environment:
-      - SECRET_ROTATOR_CONFIG=/app/config/config.yaml
+      # Config location is set by entrypoint based on what's available
       - PYTHONUNBUFFERED=1
-      - TZ=UTC
+      - TZ=${TZ:-UTC}
       # Logging configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - LOG_STRUCTURED=${LOG_STRUCTURED:-true}
     
     # Volume mounts for persistent data
+    # ARCHITECTURE:
+    #   - config/  = Read-only user configuration (optional)
+    #   - data/    = Read-write runtime data (secrets, keys, backups)
+    #   - logs/    = Read-write application logs
     volumes:
-      # Configuration (read-only in production)
-      - ./config:/app/config:ro
-      # Data directory (secrets and backups) - read-write
+      # OPTIONAL: Mount custom config (read-only for security)
+      # If not provided, app uses default config in data volume
+      # Uncomment for production with custom config:
+      # - ./config:/app/config:ro
+      
+      # REQUIRED: Data directory (read-write)
+      # Contains: secrets, master key, backups, key backups
       - secret-rotator-data:/app/data
-      # Logs directory - read-write
+      
+      # REQUIRED: Logs directory (read-write)
       - secret-rotator-logs:/app/logs
     
     # Security settings
@@ -42,8 +51,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 512M
+          cpus: '${CPU_LIMIT:-1.0}'
+          memory: ${MEMORY_LIMIT:-512M}
         reservations:
           cpus: '0.5'
           memory: 256M
