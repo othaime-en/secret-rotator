@@ -56,11 +56,13 @@ WORKDIR /app
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 
-# Copy application code
+# Copy example configuration (will be used if no custom config provided)
 COPY --from=builder /build/config/config.example.yaml /app/config/config.example.yaml
 
-# Set up directory structure with proper permissions
-RUN mkdir -p /app/config /app/data /app/data/backup /app/logs && \
+# Create directory structure
+# NOTE: These directories will be overridden by volume mounts
+# but we create them here to ensure proper ownership
+RUN mkdir -p /app/config /app/data /app/data/backup /app/data/key_backups /app/logs && \
     chown -R secretrotator:secretrotator /app
 
 # Copy entrypoint script
@@ -74,8 +76,7 @@ USER secretrotator
 # Set environment variables
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    SECRET_ROTATOR_CONFIG=/app/config/config.yaml
+    PYTHONDONTWRITEBYTECODE=1
 
 # Expose web interface port
 EXPOSE 8080
@@ -85,7 +86,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8080/api/status || exit 1
 
 # Set volumes for persistent data
-VOLUME ["/app/config", "/app/data", "/app/logs"]
+# IMPORTANT: These are declaration only. Actual volumes defined in docker-compose.yml
+VOLUME ["/app/data", "/app/logs"]
 
 # Use entrypoint script
 ENTRYPOINT ["/entrypoint.sh"]
