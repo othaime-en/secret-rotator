@@ -27,30 +27,28 @@ class MasterKeyBackupManager:
     Manage backup and recovery of master encryption keys.
     Implements multiple backup strategies for disaster recovery.
 
-    ARCHITECTURE NOTE:
-    - Master key file: config/.master.key (read-only in production)
-    - Key backups: data/key_backups/ (separate writable volume)
-    - This separation maintains security isolation between immutable config
-      and dynamic backup operations.
+    ARCHITECTURE NOTE (v1.2.0):
+    - Master key file: data/.master.key (writable data volume)
+    - Key backups: data/key_backups/ (writable data volume)
+    - This allows proper separation: config (read-only) vs data (read-write)
     """
 
     def __init__(
         self,
-        master_key_file: str = "config/.master.key",
+        master_key_file: str = "data/.master.key",
         backup_dir: str = "data/key_backups",  # CHANGED: From config/key_backups
     ):
         """
         Initialize the backup manager.
 
         Args:
-            master_key_file: Path to the master encryption key (read-only)
-            backup_dir: Directory for storing key backups (writable)
-                       Default: data/key_backups (separate from config)
+            master_key_file: Path to the master encryption key (in data volume)
+            backup_dir: Directory for storing key backups (in data volume)
 
         Security Notes:
-            - Master key file should be in read-only config directory
-            - Backup directory should be in writable data volume
-            - This separation prevents config modification by runtime processes
+            - Master key file is in writable data volume for auto-generation
+            - Backup directory is in writable data volume for runtime operations
+            - Config directory remains read-only for security
         """
         self.master_key_file = Path(master_key_file)
         self.backup_dir = Path(backup_dir)
