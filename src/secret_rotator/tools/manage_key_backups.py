@@ -8,11 +8,8 @@ Usage:
     secret-rotator-backup list
     secret-rotator-backup verify backup.enc
     secret-rotator-backup restore backup.enc
-
-ARCHITECTURE NOTE:
-- Master key: config/.master.key (read-only)
-- Backups: data/key_backups/ (writable volume)
-- This separation maintains security isolation
+    secret-rotator-backup restore-split share1.share share2.share share3.share
+    secret-rotator-backup export-instructions --output KEY_BACKUP_INSTRUCTIONS.txt
 """
 import sys
 import argparse
