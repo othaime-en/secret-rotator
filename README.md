@@ -5,6 +5,7 @@ A comprehensive Python-based system for automating the rotation of passwords, AP
 [![PyPI version](https://badge.fury.io/py/secret-rotator.svg)](https://badge.fury.io/py/secret-rotator)
 [![Python Versions](https://img.shields.io/pypi/pyversions/secret-rotator.svg)](https://pypi.org/project/secret-rotator/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Commits since latest](https://img.shields.io/github/commits-since/othaime-en/secret-rotator/latest)](https://github.com/othaime-en/secret-rotator/commits/latest)
 
 ## Features
 
