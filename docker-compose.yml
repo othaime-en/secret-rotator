@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runtime
-    image: secret-rotator:1.1.0
+    image: secret-rotator:1.2.0
     container_name: secret-rotator
     
     # Restart policy for production reliability
