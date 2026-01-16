@@ -16,11 +16,11 @@ rotation:
 logging:
   level: "INFO" #DEBUG, INFO, WARNING, ERROR, CRITICAL
   file: "logs/rotation.log"
-  console_enabled: true # Console output: Set to false in production
+  console_enabled: false # Console output: Set to false in production
 
   # Use structured (JSON) logging for easier parsing
   # Recommended for production with log aggregation tools
-  structured: true # Set to true if using ELK, Splunk, etc.
+  structured: false # Set to true if using ELK, Splunk, etc.
 
   max_file_size: "10MB" # Rotate when file reaches this size
   backup_count: 5 # Keep this many old log files
