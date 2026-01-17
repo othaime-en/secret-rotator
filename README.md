@@ -107,7 +107,7 @@ docker-compose up -d
 ./logs/       → /app/logs/ (read-write, required)
 ```
 
-See [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) for detailed guide.
+See [DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md) for detailed guide.
 
 ## Quick Start
 
