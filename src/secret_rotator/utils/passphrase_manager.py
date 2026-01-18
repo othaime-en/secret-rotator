@@ -4,6 +4,8 @@ Handles passphrase retrieval from multiple sources with intelligent fallbacks.
 """
 
 import os
+import sys
+import getpass
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -72,6 +74,11 @@ class PassphraseManager:
             passphrase = self._read_from_file(expanded_path)
             if passphrase:
                 return passphrase, f"standard location: {location}"
+        
+        # Priority 4: Environment variable
+        env_passphrase = os.getenv('BACKUP_PASSPHRASE')
+        if env_passphrase:
+            return env_passphrase, "BACKUP_PASSPHRASE environment variable"
         
         return None, "no_source_available"
     
