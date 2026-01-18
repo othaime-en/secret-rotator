@@ -113,3 +113,47 @@ class PassphraseManager:
     def _get_from_config(self) -> Tuple[Optional[str], str]:
         """Get passphrase based on config file settings"""
         return None, ""
+    
+    def prompt_interactive(self, 
+                          purpose: str = "backup encryption",
+                          min_length: int = 20,
+                          require_confirmation: bool = True) -> str:
+        """
+        Interactively prompt for passphrase with validation.
+        
+        Args:
+            purpose: What the passphrase is for
+            min_length: Minimum required length
+            require_confirmation: Whether to ask for confirmation
+        
+        Returns:
+            The entered passphrase
+        
+        Raises:
+            KeyboardInterrupt: If user cancels
+        """
+        print(f"\nEnter passphrase for {purpose}")
+        print(f"Minimum length: {min_length} characters")
+        print()
+        
+        while True:
+            passphrase = getpass.getpass("Enter passphrase: ")
+            
+            if not passphrase:
+                print("ERROR: Passphrase cannot be empty\n")
+                continue
+            
+            if len(passphrase) < min_length:
+                print(f"⚠️  WARNING: Passphrase is only {len(passphrase)} characters "
+                      f"(recommended: {min_length}+)")
+                response = input("Continue anyway? (yes/no): ")
+                if response.lower() != "yes":
+                    continue
+            
+            if require_confirmation:
+                passphrase_confirm = getpass.getpass("Confirm passphrase: ")
+                if passphrase != passphrase_confirm:
+                    print("ERROR: Passphrases do not match. Try again.\n")
+                    continue
+            
+            return passphrase
