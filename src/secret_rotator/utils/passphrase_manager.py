@@ -3,11 +3,21 @@ Universal passphrase management for PyPI and Docker deployments.
 Handles passphrase retrieval from multiple sources with intelligent fallbacks.
 """
 
+import os
+from pathlib import Path
 from typing import Optional, Tuple
 
 
 class PassphraseManager:
     """Unified passphrase handling for all installation types"""
+    
+    # Standard locations checked in order (works for both PyPI and Docker)
+    STANDARD_LOCATIONS = [
+        '/run/secrets/backup_passphrase',  # Docker secret (Swarm/Compose)
+        '~/.local/share/secret-rotator/.backup-passphrase',  # XDG data dir (PyPI)
+        '~/.config/secret-rotator/.backup-passphrase',  # XDG config dir (PyPI)
+        '/app/data/.backup-passphrase',  # Docker data volume
+    ]
     
     def __init__(self, config_manager=None):
         """
@@ -41,4 +51,42 @@ class PassphraseManager:
         Returns:
             Tuple of (passphrase, source_description) or (None, reason)
         """
+        
+        # Priority 1: CLI argument (explicit override)
+        if cli_file:
+            passphrase = self._read_from_file(cli_file)
+            if passphrase:
+                return passphrase, f"CLI argument: {cli_file}"
+            else:
+                return None, f"CLI file not found or empty: {cli_file}"
+        
+        # Priority 2: Config file setting
+        if self.config_manager:
+            passphrase, source = self._get_from_config()
+            if passphrase:
+                return passphrase, source
+        
+        # Priority 3: Standard locations (convention over configuration)
+        for location in self.STANDARD_LOCATIONS:
+            expanded_path = os.path.expanduser(location)
+            passphrase = self._read_from_file(expanded_path)
+            if passphrase:
+                return passphrase, f"standard location: {location}"
+        
         return None, "no_source_available"
+    
+    def _read_from_file(self, file_path: str) -> Optional[str]:
+        """Safely read passphrase from file"""
+        try:
+            path = Path(file_path)
+            if path.exists() and path.is_file():
+                with open(path, 'r') as f:
+                    content = f.read().strip()
+                    return content if content else None
+        except (IOError, PermissionError, OSError):
+            pass
+        return None
+    
+    def _get_from_config(self) -> Tuple[Optional[str], str]:
+        """Get passphrase based on config file settings"""
+        return None, ""
