@@ -80,6 +80,18 @@ class PassphraseManager:
         if env_passphrase:
             return env_passphrase, "BACKUP_PASSPHRASE environment variable"
         
+        # Priority 5: Stdin (for piping)
+        if not sys.stdin.isatty():
+            try:
+                passphrase = sys.stdin.readline().strip()
+                if passphrase:
+                    return passphrase, "stdin"
+            except Exception:
+                pass
+            
+            # If we're non-interactive and nothing worked, fail with helpful message
+            return None, "non_interactive_no_source"
+        
         return None, "no_source_available"
     
     def _read_from_file(self, file_path: str) -> Optional[str]:
