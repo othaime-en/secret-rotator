@@ -92,6 +92,10 @@ class PassphraseManager:
             # If we're non-interactive and nothing worked, fail with helpful message
             return None, "non_interactive_no_source"
         
+        # Priority 6: Interactive prompt
+        if allow_interactive:
+            return None, "interactive_required"
+        
         return None, "no_source_available"
     
     def _read_from_file(self, file_path: str) -> Optional[str]:
