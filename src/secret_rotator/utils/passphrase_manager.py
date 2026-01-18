@@ -112,6 +112,25 @@ class PassphraseManager:
     
     def _get_from_config(self) -> Tuple[Optional[str], str]:
         """Get passphrase based on config file settings"""
+        source = self.config_manager.get('backup.key_backup.passphrase_source')
+        if not source:
+            return None, ""
+        
+        # Config specifies a file
+        if source.startswith('file:'):
+            file_path = source.replace('file:', '', 1)
+            file_path = os.path.expanduser(file_path)
+            passphrase = self._read_from_file(file_path)
+            if passphrase:
+                return passphrase, f"config file source: {file_path}"
+        
+        # Config specifies an environment variable
+        elif source.startswith('env:'):
+            env_var = source.replace('env:', '', 1)
+            passphrase = os.getenv(env_var)
+            if passphrase:
+                return passphrase, f"config env variable: {env_var}"
+        
         return None, ""
     
     def prompt_interactive(self, 
