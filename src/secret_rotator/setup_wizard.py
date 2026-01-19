@@ -329,16 +329,33 @@ def main():
         sys.exit(0)
 
     try:
-        # Create directories
         create_directories(config_dir, data_dir, log_dir)
 
-        # Create configuration
         config_file = create_config(config_dir, data_dir, log_dir)
 
-        # Setup encryption
+        # Setup backup passphrase configuration
+        print("\n" + "=" * 70)
+        print("STEP 4: BACKUP CONFIGURATION")
+        print("=" * 70)
+        backup_passphrase_config = setup_backup_passphrase(config_dir, data_dir)
+        
+        with open(config_file, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        if 'backup' not in config:
+            config['backup'] = {}
+        
+        config['backup']['key_backup'] = {
+            'passphrase_source': backup_passphrase_config
+        }
+        
+        with open(config_file, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        
+        print(f"✓ Configuration updated: {config_file}")
+
         setup_encryption(config_dir)
 
-        # Print summary
         print_summary(config_dir, data_dir, log_dir, config_file)
 
     except KeyboardInterrupt:
