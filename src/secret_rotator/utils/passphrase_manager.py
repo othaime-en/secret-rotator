@@ -176,3 +176,57 @@ class PassphraseManager:
                     continue
             
             return passphrase
+    
+    def print_help_message(self, is_docker: Optional[bool] = None):
+        """
+        Print helpful error message with platform-specific instructions.
+        
+        Args:
+            is_docker: True for Docker, False for PyPI, None for auto-detect
+        """
+        if is_docker is None:
+            # Auto-detect: check if we're in Docker
+            is_docker = os.path.exists('/.dockerenv') or os.path.exists('/run/secrets')
+        
+        print("\n" + "=" * 70, file=sys.stderr)
+        print("ERROR: No passphrase available (non-interactive mode)", file=sys.stderr)
+        print("=" * 70, file=sys.stderr)
+        print("\nProvide passphrase using one of these methods:\n", file=sys.stderr)
+        
+        print("1. Create passphrase file (RECOMMENDED):", file=sys.stderr)
+        if is_docker:
+            print("   # On host machine:", file=sys.stderr)
+            print("   mkdir -p secrets", file=sys.stderr)
+            print("   echo 'your-passphrase' > secrets/backup_passphrase.txt", file=sys.stderr)
+            print("   chmod 600 secrets/backup_passphrase.txt", file=sys.stderr)
+            print("   # Then configure docker-compose.yml to mount as secret", file=sys.stderr)
+            print("   # OR:", file=sys.stderr)
+            print("   docker exec secret-rotator bash -c \\", file=sys.stderr)
+            print("     'echo \"passphrase\" > /app/data/.backup-passphrase'", file=sys.stderr)
+            print("   docker exec secret-rotator chmod 600 /app/data/.backup-passphrase", file=sys.stderr)
+        else:
+            print("   mkdir -p ~/.config/secret-rotator", file=sys.stderr)
+            print("   echo 'your-passphrase' > ~/.config/secret-rotator/.backup-passphrase", file=sys.stderr)
+            print("   chmod 600 ~/.config/secret-rotator/.backup-passphrase", file=sys.stderr)
+        print()
+        
+        print("2. Use CLI argument:", file=sys.stderr)
+        print("   secret-rotator-backup create-encrypted --passphrase-file /path/to/file", file=sys.stderr)
+        print()
+        
+        print("3. Use environment variable:", file=sys.stderr)
+        print("   export BACKUP_PASSPHRASE='your-passphrase'", file=sys.stderr)
+        print("   secret-rotator-backup create-encrypted", file=sys.stderr)
+        print()
+        
+        print("4. Pipe from stdin:", file=sys.stderr)
+        print("   echo 'your-passphrase' | secret-rotator-backup create-encrypted", file=sys.stderr)
+        print()
+        
+        print("5. Interactive mode (requires TTY):", file=sys.stderr)
+        if is_docker:
+            print("   docker exec -it secret-rotator secret-rotator-backup create-encrypted", file=sys.stderr)
+        else:
+            print("   secret-rotator-backup create-encrypted", file=sys.stderr)
+        
+        print("=" * 70, file=sys.stderr)
