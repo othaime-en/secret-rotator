@@ -230,3 +230,50 @@ class PassphraseManager:
             print("   secret-rotator-backup create-encrypted", file=sys.stderr)
         
         print("=" * 70, file=sys.stderr)
+    
+    def create_passphrase_file(self, 
+                               file_path: str,
+                               passphrase: Optional[str] = None,
+                               interactive: bool = True) -> bool:
+        """
+        Create a passphrase file with proper permissions.
+        
+        Args:
+            file_path: Where to create the file
+            passphrase: Passphrase to write (if None, will prompt if interactive)
+            interactive: Whether to prompt if passphrase not provided
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        if not passphrase and interactive:
+            try:
+                passphrase = self.prompt_interactive(
+                    purpose="storage in file",
+                    require_confirmation=True
+                )
+            except KeyboardInterrupt:
+                print("\nCancelled by user")
+                return False
+        
+        if not passphrase:
+            return False
+        
+        try:
+            path = Path(file_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Write passphrase
+            with open(path, 'w') as f:
+                f.write(passphrase)
+            
+            # Set restrictive permissions
+            os.chmod(path, 0o600)
+            
+            print(f"✓ Passphrase saved to: {file_path}")
+            print(f"  Permissions: 600 (owner read/write only)")
+            return True
+            
+        except (IOError, OSError) as e:
+            print(f"ERROR: Failed to create passphrase file: {e}", file=sys.stderr)
+            return False
