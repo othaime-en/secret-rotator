@@ -262,9 +262,29 @@ def verify_backup(args):
     print("=" * 70)
     print(f"\nVerifying: {args.backup_file}")
 
-    # Check if encrypted backup
     if args.backup_file.endswith(".enc"):
-        passphrase = getpass.getpass("\nEnter passphrase: ")
+
+        from secret_rotator.config.settings import settings
+        passphrase_mgr = PassphraseManager(config_manager=settings)
+        
+        passphrase, source = passphrase_mgr.get_passphrase(
+            cli_file=getattr(args, 'passphrase_file', None),
+            allow_interactive=True,
+            purpose="backup verification"
+        )
+        
+        if source == "interactive_required":
+            try:
+                passphrase = getpass.getpass("\nEnter passphrase: ")
+            except KeyboardInterrupt:
+                print("\n\nCancelled by user")
+                sys.exit(0)
+        elif passphrase is None:
+            if source == "non_interactive_no_source":
+                passphrase_mgr.print_help_message()
+            else:
+                print(f"ERROR: {source}", file=sys.stderr)
+            sys.exit(1)
 
         try:
             success = manager.verify_backup(args.backup_file, passphrase)
