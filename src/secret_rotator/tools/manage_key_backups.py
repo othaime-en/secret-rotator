@@ -11,12 +11,14 @@ Usage:
     secret-rotator-backup restore-split share1.share share2.share share3.share
     secret-rotator-backup export-instructions --output KEY_BACKUP_INSTRUCTIONS.txt
 """
+import os
 import sys
 import argparse
 import getpass
 from pathlib import Path
 
 from secret_rotator.key_backup_manager import MasterKeyBackupManager
+from secret_rotator.utils.passphrase_manager import PassphraseManager
 
 
 def create_encrypted_backup(args):
@@ -26,36 +28,68 @@ def create_encrypted_backup(args):
     print("\n" + "=" * 70)
     print("CREATE ENCRYPTED MASTER KEY BACKUP")
     print("=" * 70)
-    print("\nThis will create an encrypted backup of your master encryption key.")
-    print("You will be prompted to enter a strong passphrase.")
-    print("\nIMPORTANT:")
-    print("  - Use a passphrase with 20+ characters")
-    print("  - Include uppercase, lowercase, numbers, and symbols")
-    print("  - Store the passphrase in a secure password manager")
-    print("  - Without this passphrase, the backup CANNOT be recovered")
-    print("\nBEST PRACTICE:")
-    print("  - After creating the backup, copy the .enc file to external storage")
-    print("  - Examples: AWS S3, Azure Blob, Google Drive, encrypted USB drive")
-    print("  - The encrypted file is safe to store in cloud storage")
-    print()
-
-    # Get passphrase
-    while True:
-        passphrase = getpass.getpass("Enter passphrase: ")
-        passphrase_confirm = getpass.getpass("Confirm passphrase: ")
-
-        if passphrase != passphrase_confirm:
-            print("ERROR: Passphrases do not match. Try again.\n")
-            continue
-
-        if len(passphrase) < 20:
-            print("WARNING: Passphrase should be at least 20 characters.")
-            response = input("Continue anyway? (yes/no): ")
-            if response.lower() != "yes":
-                continue
-
-        break
-
+    
+    # Initialize passphrase manager with config
+    from secret_rotator.config.settings import settings
+    passphrase_mgr = PassphraseManager(config_manager=settings)
+    
+    # Get passphrase using unified system
+    passphrase, source = passphrase_mgr.get_passphrase(
+        cli_file=getattr(args, 'passphrase_file', None),
+        allow_interactive=True,
+        purpose="master key backup encryption"
+    )
+    
+    # Handle different source results
+    if source == "interactive_required":
+        # Show helpful information before prompting
+        print("\nThis will create an encrypted backup of your master encryption key.")
+        print("You will be prompted to enter a strong passphrase.")
+        print("\nIMPORTANT:")
+        print("  - Use a passphrase with 20+ characters")
+        print("  - Include uppercase, lowercase, numbers, and symbols")
+        print("  - Store the passphrase in a secure password manager")
+        print("  - Without this passphrase, the backup CANNOT be recovered")
+        print("\nTo avoid entering passphrase each time, you can create a passphrase file:")
+        
+        # Platform-specific hint
+        if os.path.exists('/.dockerenv') or os.path.exists('/run/secrets'):
+            print("  docker exec secret-rotator bash -c 'echo \"passphrase\" > /app/data/.backup-passphrase'")
+            print("  docker exec secret-rotator chmod 600 /app/data/.backup-passphrase")
+        else:
+            print("  echo 'your-passphrase' > ~/.config/secret-rotator/.backup-passphrase")
+            print("  chmod 600 ~/.config/secret-rotator/.backup-passphrase")
+        
+        try:
+            passphrase = passphrase_mgr.prompt_interactive(
+                purpose="master key backup encryption",
+                min_length=20,
+                require_confirmation=True
+            )
+        except KeyboardInterrupt:
+            print("\n\nCancelled by user")
+            sys.exit(0)
+    
+    elif source == "non_interactive_no_source":
+        # No source found and we're non-interactive
+        passphrase_mgr.print_help_message()
+        sys.exit(1)
+    
+    elif passphrase is None:
+        # Some other error
+        print(f"ERROR: {source}", file=sys.stderr)
+        sys.exit(1)
+    
+    else:
+        # Got passphrase from non-interactive source
+        print(f"✓ Using passphrase from: {source}", file=sys.stderr)
+    
+    # Validate passphrase
+    if not passphrase or len(passphrase) < 8:
+        print("ERROR: Passphrase must be at least 8 characters", file=sys.stderr)
+        sys.exit(1)
+    
+    # Create the backup
     try:
         backup_file = manager.create_encrypted_key_backup(
             passphrase=passphrase, backup_name=args.name
@@ -66,8 +100,13 @@ def create_encrypted_backup(args):
         print("\nNext steps:")
         print("  1. Store the passphrase in a secure password manager")
         print("  2. Copy the backup file to external storage:")
-        print(f"     - For Docker: docker cp secret-rotator:{backup_file} ./external-backup/")
-        print(f"     - For local: cp {backup_file} /path/to/external/storage/")
+        
+        if os.path.exists('/.dockerenv') or os.path.exists('/run/secrets'):
+            print(f"     docker cp secret-rotator:{backup_file} ./external-backup/")
+            print("     # Then upload to S3, Azure, or other secure storage")
+        else:
+            print(f"     cp {backup_file} /path/to/external/storage/")
+        
         print("  3. Test restoration in non-production environment:")
         print(f"     secret-rotator-backup verify {backup_file}")
         print("\n  Recommended external storage options:")
@@ -79,7 +118,6 @@ def create_encrypted_backup(args):
     except Exception as e:
         print(f"\n✗ ERROR: Failed to create backup: {e}")
         sys.exit(1)
-
 
 def create_split_backup(args):
     """Create a split key backup using Shamir's Secret Sharing"""
