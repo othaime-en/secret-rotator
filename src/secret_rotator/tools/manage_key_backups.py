@@ -357,7 +357,7 @@ def restore_backup(args):
             else:
                 print(f"ERROR: {source}", file=sys.stderr)
             sys.exit(1)
-            
+
         try:
             success = manager.restore_from_encrypted_backup(args.backup_file, passphrase)
 
@@ -464,11 +464,10 @@ Examples:
   
   # Restore from split key shares
   secret-rotator-backup restore-split share1.share share2.share share3.share
-
-Architecture Note:
-  Master key: data/.master.key (read-only)
-  Backups:    data/key_backups/ (writable)
-  This separation maintains security isolation.
+  
+  # Export backup and recovery instructions
+  secret-rotator-backup export-instructions --output KEY_BACKUP_INSTRUCTIONS.txt
+  
         """,
     )
 
@@ -492,6 +491,11 @@ Architecture Note:
     )
     parser_encrypted.add_argument("--name", help="Optional backup name")
 
+    parser_encrypted.add_argument(
+        "--passphrase-file",
+        help="File containing passphrase (overrides other sources)"
+    )
+
     # Create split key backup
     parser_split = subparsers.add_parser(
         "create-split", help="Create split key backup (Shamir Secret Sharing)"
@@ -513,10 +517,18 @@ Architecture Note:
     # Verify backup
     parser_verify = subparsers.add_parser("verify", help="Verify a backup")
     parser_verify.add_argument("backup_file", help="Path to backup file")
+    parser_verify.add_argument(
+        "--passphrase-file",
+        help="File containing passphrase (for encrypted backups)"
+    )
 
     # Restore from backup
     parser_restore = subparsers.add_parser("restore", help="Restore from encrypted backup")
     parser_restore.add_argument("backup_file", help="Path to backup file")
+    parser_restore.add_argument(
+        "--passphrase-file",
+        help="File containing passphrase"
+    )
 
     # Restore from split
     parser_restore_split = subparsers.add_parser(
