@@ -101,7 +101,6 @@ class SecretRotationApp:
                 )
                 self.engine.register_provider(file_provider)
 
-                # Validate provider connection
                 if file_provider.validate_connection():
                     logger.info(f"Provider '{provider_name}' validated successfully")
                 else:
@@ -202,7 +201,6 @@ class SecretRotationApp:
 
         self.running = True
 
-        # Start scheduler
         self.scheduler.start()
 
         # Start web server if enabled
@@ -424,23 +422,28 @@ class SecretRotationApp:
             print("ERROR: Encryption is not enabled. Cannot rotate master key.")
             return
 
-        print("\n" + "=" * 60)
+        print("\n" + "=" * 70)
         print("MASTER KEY ROTATION")
-        print("=" * 60)
+        print("=" * 70)
         print("\n⚠️  WARNING: This is a critical operation!")
         print("\nThis will:")
         print("  1. Generate a new master encryption key")
         print("  2. Re-encrypt ALL secrets with the new key")
-        print("  3. Backup the old key")
+        print("  3. Backup the old key (automatic)")
+        print("  4. Update all providers atomically")
         print("\nBefore proceeding:")
         print("  - Create a backup of your current master key")
         print("  - Ensure all backups are verified and accessible")
         print("  - Run during a maintenance window")
+        print("\nRecommended backup command:")
+        print("  secret-rotator-backup create-encrypted")
 
         response = input("\nHave you created a backup of the master key? (yes/no): ")
         if response.lower() != "yes":
             print("\nCreate a backup first:")
-            print("  python tools/manage_key_backups.py create-encrypted")
+            print("  secret-rotator-backup create-encrypted")
+            print("\nOr if you have an existing backup:")
+            print("  Type 'yes' to continue anyway (not recommended)")
             return
 
         response = input("\nContinue with master key rotation? (yes/no): ")
@@ -448,59 +451,40 @@ class SecretRotationApp:
             print("Rotation cancelled.")
             return
 
-        # Define re-encryption callback
-        def re_encrypt_all_secrets(old_cipher, new_cipher):
-            """Re-encrypt all secrets with new key"""
-            try:
-                for provider_name, provider in self.engine.providers.items():
-                    if hasattr(provider, "encryption_manager"):
-                        logger.info(f"Re-encrypting secrets in provider: {provider_name}")
-
-                        # Temporarily use old cipher to decrypt
-                        old_em = provider.encryption_manager
-                        provider.encryption_manager.cipher = old_cipher
-
-                        # Get all secrets (decrypted)
-                        import json
-
-                        with open(provider.file_path, "r") as f:
-                            secrets = json.load(f)
-
-                        # Re-encrypt with new cipher
-                        provider.encryption_manager.cipher = new_cipher
-
-                        for secret_id in secrets.keys():
-                            # Decrypt with old key
-                            provider.encryption_manager.cipher = old_cipher
-                            decrypted_value = provider.get_secret(secret_id)
-
-                            # Encrypt with new key
-                            provider.encryption_manager.cipher = new_cipher
-                            provider.update_secret(secret_id, decrypted_value)
-
-                        logger.info(f"Re-encrypted {len(secrets)} secrets in {provider_name}")
-
-                return True
-            except Exception as e:
-                logger.error(f"Re-encryption failed: {e}")
-                return False
-
-        # Perform rotation
         logger.info("Starting master key rotation...")
+        print("\n" + "=" * 70)
+        print("Starting rotation... (this may take a few moments)")
+        print("=" * 70)
+        
         success = self.encryption_manager.rotate_master_key(
-            re_encrypt_callback=re_encrypt_all_secrets
+            providers=self.engine.providers
         )
 
         if success:
-            print("\n✓ SUCCESS: Master key rotated successfully")
+            print("\n" + "=" * 70)
+            print("✓ SUCCESS: Master key rotated successfully")
+            print("=" * 70)
             print("\nNext steps:")
-            print("  1. Create a new backup of the master key")
-            print("  2. Update key backups in all locations")
-            print("  3. Restart the application")
-            print("  4. Verify encryption: secret-rotator --mode verify")
+            print("  1. Create a new backup of the master key:")
+            print("     secret-rotator-backup create-encrypted")
+            print("  2. Update key backups in all external locations")
+            print("  3. Restart the application:")
+            print("     docker-compose restart (for Docker)")
+            print("     OR systemctl restart secret-rotator (for systemd)")
+            print("  4. Verify encryption is working:")
+            print("     secret-rotator --mode verify")
+            print("  5. Test a rotation:")
+            print("     secret-rotator --mode once")
         else:
-            print("\n✗ ERROR: Master key rotation failed")
-            print("Old key has been restored from backup.")
+            print("\n" + "=" * 70)
+            print("✗ ERROR: Master key rotation failed")
+            print("=" * 70)
+            print("\nThe system has been automatically rolled back to the previous state.")
+            print("Check the logs for details:")
+            print("  tail -f logs/rotation.log")
+            print("\nIf you need assistance, the backup files are preserved in:")
+            print(f"  {self.encryption_manager.key_file.parent}")
+            
 
     def cleanup_old_backups(self):
         """Manually trigger backup cleanup"""
