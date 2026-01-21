@@ -152,6 +152,21 @@ backup:
     days: 90
     max_backups_per_secret: 10
 
+  # Master key backup configuration
+  key_backup:
+    # How to provide passphrase for encrypted backups
+    # Options:
+    #   "interactive"           - Prompt each time (most secure, requires TTY)
+    #   "file:/path/to/file"    - Read from file (convenient for automation)
+    #   "env:VARIABLE_NAME"     - Read from environment variable (good for CI/CD)
+    #
+    # If not set, will auto-detect from standard locations:
+    #   - /run/secrets/backup_passphrase (Docker secret)
+    #   - ~/.config/secret-rotator/.backup-passphrase (PyPI user config)
+    #   - ~/.local/share/secret-rotator/.backup-passphrase (PyPI user data)
+    #   - /app/data/.backup-passphrase (Docker data volume)
+    passphrase_source: "interactive"
+
   # Master key backups stored in data volume (not read-only config)
   key_backups_path: "data/key_backups/"
 

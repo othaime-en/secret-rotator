@@ -8,6 +8,7 @@ import sys
 import yaml
 import shutil
 from pathlib import Path
+from secret_rotator.utils.passphrase_manager import PassphraseManager
 
 
 def get_config_dir():
@@ -235,6 +236,75 @@ def print_summary(config_dir, data_dir, log_dir, config_file):
     print("\n" + "=" * 70)
 
 
+def setup_backup_passphrase(config_dir, data_dir):
+    """Configure backup passphrase during initial setup"""
+    print("\n" + "=" * 70)
+    print("BACKUP PASSPHRASE CONFIGURATION")
+    print("=" * 70)
+    print("\nFor encrypting master key backups, you need a passphrase.")
+    print("How would you like to provide this passphrase?\n")
+    
+    print("1. Interactive (ask each time) - Most secure")
+    print("2. Store in secure file - Convenient for automation")
+    print("3. Environment variable - Good for CI/CD")
+    print("4. I'll configure this later")
+    
+    choice = input("\nSelect option [1]: ").strip() or "1"
+    
+    config_value = "interactive"  # default
+    
+    if choice == "1":
+        print("\n✓ Passphrase will be requested interactively when needed")
+        config_value = "interactive"
+    
+    elif choice == "2":
+        print("\nCreating secure passphrase file...")
+        
+        # Determine best location
+        if os.path.exists('/app/data'):  # Docker environment
+            passphrase_file = Path('/app/data/.backup-passphrase')
+            display_path = '/app/data/.backup-passphrase'
+        else:  # PyPI installation
+            passphrase_file = config_dir / '.backup-passphrase'
+            display_path = str(passphrase_file)
+        
+        # Use PassphraseManager to create file
+        pm = PassphraseManager()
+        success = pm.create_passphrase_file(
+            str(passphrase_file),
+            passphrase=None,  # Will prompt
+            interactive=True
+        )
+        
+        if success:
+            config_value = f"file:{passphrase_file}"
+            print(f"\n✓ Passphrase file created: {display_path}")
+            print("  This file will be used automatically for encrypted backups")
+        else:
+            print("\n⚠️  Failed to create passphrase file, using interactive mode")
+            config_value = "interactive"
+    
+    elif choice == "3":
+        env_var = input("Environment variable name [BACKUP_PASSPHRASE]: ").strip()
+        env_var = env_var or "BACKUP_PASSPHRASE"
+        
+        print(f"\n✓ Will use environment variable: {env_var}")
+        print(f"\nAdd this to your environment:")
+        print(f"  export {env_var}='your-secure-passphrase-here'")
+        config_value = f"env:{env_var}"
+    
+    elif choice == "4":
+        print("\n✓ Backup passphrase not configured")
+        print("  You can configure this later in config.yaml")
+        config_value = "interactive"
+    
+    else:
+        print("\n⚠️  Invalid choice, using interactive mode")
+        config_value = "interactive"
+    
+    return config_value
+
+
 def main():
     """Main setup wizard"""
     print("=" * 70)
@@ -259,16 +329,33 @@ def main():
         sys.exit(0)
 
     try:
-        # Create directories
         create_directories(config_dir, data_dir, log_dir)
 
-        # Create configuration
         config_file = create_config(config_dir, data_dir, log_dir)
 
-        # Setup encryption
+        # Setup backup passphrase configuration
+        print("\n" + "=" * 70)
+        print("STEP 4: BACKUP CONFIGURATION")
+        print("=" * 70)
+        backup_passphrase_config = setup_backup_passphrase(config_dir, data_dir)
+        
+        with open(config_file, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        if 'backup' not in config:
+            config['backup'] = {}
+        
+        config['backup']['key_backup'] = {
+            'passphrase_source': backup_passphrase_config
+        }
+        
+        with open(config_file, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        
+        print(f"✓ Configuration updated: {config_file}")
+
         setup_encryption(config_dir)
 
-        # Print summary
         print_summary(config_dir, data_dir, log_dir, config_file)
 
     except KeyboardInterrupt:
