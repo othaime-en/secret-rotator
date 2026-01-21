@@ -19,7 +19,7 @@ class FileSecretProvider(SecretProvider):
         # Initialize encryption manager if encryption is enabled
         self.encryption_manager = None
         if self.encrypt_secrets:
-            key_file = config.get("encryption_key_file", "config/.master.key")
+            key_file = config.get("encryption_key_file", "data/.master.key")
             self.encryption_manager = EncryptionManager(key_file=key_file)
             logger.info(f"Encryption enabled for provider {name}")
 
@@ -66,7 +66,6 @@ class FileSecretProvider(SecretProvider):
     def update_secret(self, secret_id: str, new_value: str) -> bool:
         """Encrypt and update secret in file"""
         try:
-            # Read current secrets
             with open(self.file_path, "r") as f:
                 secrets = json.load(f)
 
@@ -80,10 +79,8 @@ class FileSecretProvider(SecretProvider):
                     logger.error(f"Failed to encrypt secret {secret_id}: {e}")
                     return False
 
-            # Update secret
             secrets[secret_id] = value_to_store
 
-            # Write back to file
             with open(self.file_path, "w") as f:
                 json.dump(secrets, f, indent=2)
 
@@ -145,7 +142,6 @@ class FileSecretProvider(SecretProvider):
                     migrated_secrets[secret_id] = encrypted_value
                     logger.info(f"Migrated secret {secret_id} to encrypted format")
 
-            # Write back encrypted secrets
             with open(self.file_path, "w") as f:
                 json.dump(migrated_secrets, f, indent=2)
 
