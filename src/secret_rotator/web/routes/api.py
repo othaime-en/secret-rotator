@@ -202,3 +202,79 @@ def backup_detail(backup_file):
     except Exception as e:
         logger.error(f"Failed to load backup detail: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/restore', methods=['POST'])
+def restore():
+    """
+    Restore a secret from a backup.
+    
+    Request Body (JSON):
+        {
+            "backup_file": "/path/to/backup.json"
+        }
+    
+    Returns:
+        JSON with restoration result
+    
+    Example Response:
+        {
+            "success": true,
+            "secret_id": "db_password",
+            "message": "Restored backup for db_password"
+        }
+    """
+    engine = current_app.rotation_engine
+    
+    # Parse request body
+    data = request.get_json()
+    if not data or 'backup_file' not in data:
+        return jsonify({
+            'success': false,
+            'error': 'backup_file required in request body'
+        }), 400
+    
+    backup_file = data['backup_file']
+    
+    logger.info(f"Restore requested for backup: {backup_file}")
+    
+    try:
+        # Load backup data
+        backup_data = engine.backup_manager.restore_backup(backup_file, decrypt=True)
+        secret_id = backup_data['secret_id']
+        old_value = backup_data['old_value']
+        
+        # Get the first provider (for now - could be enhanced to specify provider)
+        provider = list(engine.providers.values())[0]
+        
+        # Restore the old value
+        success = provider.update_secret(secret_id, old_value)
+        
+        if success:
+            logger.info(f"Successfully restored backup for {secret_id} from {backup_file}")
+            return jsonify({
+                'success': True,
+                'secret_id': secret_id,
+                'message': f'Restored backup for {secret_id}'
+            })
+        else:
+            logger.error(f"Failed to update secret {secret_id} during restoration")
+            return jsonify({
+                'success': False,
+                'error': 'Failed to update secret'
+            }), 500
+    
+    except FileNotFoundError:
+        logger.warning(f"Backup file not found: {backup_file}")
+        return jsonify({
+            'success': False,
+            'error': 'Backup file not found'
+        }), 404
+    
+    except Exception as e:
+        logger.error(f"Restoration failed: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+        
