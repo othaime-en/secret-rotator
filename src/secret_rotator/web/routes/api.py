@@ -11,6 +11,7 @@ All endpoints return JSON responses and use standard HTTP status codes.
 """
 
 from flask import Blueprint, jsonify, request, current_app
+from urllib.parse import unquote
 from secret_rotator.utils.logger import logger
 
 bp = Blueprint('api', __name__)
@@ -148,4 +149,56 @@ def backups():
     
     except Exception as e:
         logger.error(f"Failed to list backups: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/backups/<path:backup_file>')
+def backup_detail(backup_file):
+    """
+    Get detailed information about a specific backup.
+    
+    Path Parameters:
+        backup_file: URL-encoded path to backup file
+    
+    Returns:
+        JSON with decrypted backup metadata
+    
+    Example Response:
+        {
+            "secret_id": "db_password",
+            "timestamp": "20250122_143022_123456",
+            "old_value": "old_password_masked",
+            "new_value": "new_password_masked",
+            "backup_created": "2025-01-22T14:30:22.123456",
+            "encrypted": true
+        }
+    """
+    engine = current_app.rotation_engine
+    
+    # Flask automatically decodes the path parameter
+    # but we'll be extra careful
+    decoded_path = unquote(backup_file)
+    
+    logger.info(f"Backup detail requested for: {decoded_path}")
+    
+    try:
+        backup_data = engine.backup_manager.restore_backup(decoded_path, decrypt=True)
+        
+        # Mask sensitive values for display
+        from secret_rotator.encryption_manager import SecretMasker
+        backup_data['old_value'] = SecretMasker.mask_for_backup_display(
+            backup_data['old_value']
+        )
+        backup_data['new_value'] = SecretMasker.mask_for_backup_display(
+            backup_data['new_value']
+        )
+        
+        return jsonify(backup_data)
+    
+    except FileNotFoundError:
+        logger.warning(f"Backup file not found: {decoded_path}")
+        return jsonify({'error': 'Backup not found'}), 404
+    
+    except Exception as e:
+        logger.error(f"Failed to load backup detail: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
