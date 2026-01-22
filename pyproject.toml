@@ -25,7 +25,7 @@ classifiers = [
 ]
 keywords = ["security", "secrets", "rotation", "encryption", "automation"]
 requires-python = ">=3.9"
-dependencies = ["cryptography>=46.0.0", "PyYAML>=6.0.0", "schedule>=1.2.0"]
+dependencies = ["cryptography>=46.0.0", "PyYAML>=6.0.0", "schedule>=1.2.0","Flask>=3.0.0","Werkzeug>=3.0.0"]
 
 [project.optional-dependencies]
 dev = [
