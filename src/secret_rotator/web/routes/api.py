@@ -109,3 +109,43 @@ def rotate():
     except Exception as e:
         logger.error(f"Rotation failed: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/backups')
+def backups():
+    """
+    List available backups with optional filtering.
+    
+    Query Parameters:
+        secret_id (optional): Filter backups by secret ID
+    
+    Returns:
+        JSON with list of backup metadata
+    
+    Example Response:
+        {
+            "backups": [
+                {
+                    "secret_id": "db_password",
+                    "timestamp": "20250122_143022_123456",
+                    "backup_file": "/path/to/backup.json",
+                    "encrypted": true,
+                    "backup_created": "2025-01-22T14:30:22.123456"
+                }
+            ]
+        }
+    """
+    engine = current_app.rotation_engine
+    secret_id = request.args.get('secret_id')
+    
+    try:
+        backups = engine.backup_manager.list_backups(secret_id, mask_values=True)
+        
+        logger.info(f"Backups endpoint called, returning {len(backups)} backups"
+                   + (f" for secret_id={secret_id}" if secret_id else ""))
+        
+        return jsonify({'backups': backups})
+    
+    except Exception as e:
+        logger.error(f"Failed to list backups: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
