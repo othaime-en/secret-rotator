@@ -33,4 +33,67 @@ class APIClient {
         }
         return response.json();
     }
+
+    /**
+     * Trigger rotation of all secrets
+     * @returns {Promise<Object>} Rotation results
+     */
+    async rotateAll() {
+        const response = await fetch(`${this.baseURL}/api/rotate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: Rotation failed`);
+        }
+        return response.json();
+    }
+
+    /**
+     * Fetch backups list
+     * @returns {Promise<Object>} Backups data
+     */
+    async fetchBackups() {
+        const response = await fetch(`${this.baseURL}/api/backups`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: Failed to fetch backups`);
+        }
+        return response.json();
+    }
+
+    /**
+     * Fetch backup detail
+     * @param {string} backupFile - Path to backup file
+     * @returns {Promise<Object>} Backup details
+     */
+    async fetchBackupDetail(backupFile) {
+        const response = await fetch(
+            `${this.baseURL}/api/backups/${encodeURIComponent(backupFile)}`
+        );
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: Failed to fetch backup detail`);
+        }
+        return response.json();
+    }
+
+    /**
+     * Restore a backup
+     * @param {string} backupFile - Path to backup file
+     * @returns {Promise<Object>} Restoration result
+     */
+    async restoreBackup(backupFile) {
+        const response = await fetch(`${this.baseURL}/api/restore`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ backup_file: backupFile })
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: Restore failed`);
+        }
+        return response.json();
+    }
 }
