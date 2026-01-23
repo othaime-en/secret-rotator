@@ -232,9 +232,19 @@ class SecretRotationApp:
         # Start web server if enabled
         if self.web_server:
             self.web_server.start()
+            web_host = settings.get('web.host', 'localhost')
+            web_port = settings.get('web.port', 8080)
+            use_flask = settings.get("web.use_flask", False)
+
+            server_type = "Flask" if use_flask else "Legacy"
             logger.info(
-                f"Web interface: http://{settings.get('web.host', 'localhost')}:{settings.get('web.port', 8080)}"
+                f"{server_type} web interface: http://{web_host}:{web_port}"
             )
+
+        # Start Flask test server if enabled
+        if hasattr(self, 'flask_test_server') and self.flask_test_server:
+            self.flask_test_server.start()
+            logger.info("Flask test server: http://localhost:8081")
 
         logger.info("Secret Rotation System started")
         logger.info("Press Ctrl+C to stop")
