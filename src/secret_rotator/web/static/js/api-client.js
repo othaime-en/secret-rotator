@@ -53,10 +53,15 @@ class APIClient {
 
     /**
      * Fetch backups list
+     * @param {string|null} secretId - Optional filter by secret ID
      * @returns {Promise<Object>} Backups data
      */
-    async fetchBackups() {
-        const response = await fetch(`${this.baseURL}/api/backups`);
+    async fetchBackups(secretId = null) {
+        const url = secretId
+            ? `${this.baseURL}/api/backups?secret_id=${encodeURIComponent(secretId)}`
+            : `${this.baseURL}/api/backups`;
+
+        const response = await fetch(url);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: Failed to fetch backups`);
         }
@@ -96,4 +101,50 @@ class APIClient {
         }
         return response.json();
     }
+
+    /**
+     * Fetch backup health metrics
+     * @returns {Promise<Object>} Health data
+     */
+    async fetchBackupHealth() {
+        const response = await fetch(`${this.baseURL}/api/backup-health`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: Failed to fetch backup health`);
+        }
+        return response.json();
+    }
+
+    /**
+     * Fetch verification history
+     * @param {number} days - Number of days to fetch
+     * @returns {Promise<Object>} Verification history
+     */
+    async fetchVerificationHistory(days = 7) {
+        const response = await fetch(
+            `${this.baseURL}/api/verification-history?days=${days}`
+        );
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: Failed to fetch verification history`);
+        }
+        return response.json();
+    }
+
+    /**
+     * Trigger manual backup verification
+     * @returns {Promise<Object>} Verification report
+     */
+    async runVerification() {
+        const response = await fetch(`${this.baseURL}/api/run-verification`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: Verification failed`);
+        }
+        return response.json();
+    }
 }
+
+window.APIClient = APIClient;
