@@ -72,9 +72,35 @@ class SecretRotationApp:
         if web_enabled:
             web_port = settings.get("web.port", 8080)
             web_host = settings.get("web.host", "localhost")
-            self.web_server = WebServer(self.engine, port=web_port)
+            use_flask = settings.get("web.use_flask", False)
+            
             # Store scheduler reference in engine for web interface access
             self.engine.scheduler = self.scheduler
+            
+            if use_flask:
+                # NEW: Use Flask server
+                from secret_rotator.web import FlaskWebServer
+                self.web_server = FlaskWebServer(
+                    self.engine, 
+                    port=web_port, 
+                    host=web_host
+                )
+                logger.info(f"Using Flask web server on port {web_port}")
+            else:
+                # EXISTING: Use legacy server
+                self.web_server = WebServer(self.engine, port=web_port)
+                logger.info(f"Using legacy web server on port {web_port}")
+            
+            # TEMPORARY: Run Flask on separate port for parallel testing
+            # This allows testing both servers simultaneously
+            if not use_flask and settings.get("web.enable_flask_testing", False):
+                from secret_rotator.web import FlaskWebServer
+                self.flask_test_server = FlaskWebServer(
+                    self.engine,
+                    port=8081,
+                    host=web_host
+                )
+                logger.info("Flask test server enabled on port 8081")
 
         logger.info("Setup complete")
         self._print_security_status()
