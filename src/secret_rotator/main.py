@@ -261,9 +261,8 @@ class SecretRotationApp:
             self.stop()
 
     def stop(self):
-        """Stop all components"""
-        logger.info("Shutting down Secret Rotation System")
-
+        """Stop all components gracefully"""
+        logger.info("Shutting down Secret Rotation System...")
         self.running = False
 
         if self.scheduler:
@@ -272,7 +271,11 @@ class SecretRotationApp:
         if self.web_server:
             self.web_server.stop()
 
-        logger.info("Shutdown complete")
+        # Stop Flask test server if running
+        if hasattr(self, 'flask_test_server') and self.flask_test_server:
+            self.flask_test_server.stop()
+
+        logger.info("Secret Rotation System stopped")
 
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals"""
