@@ -14,7 +14,11 @@
         {% block content %}{% endblock %}
     </div>
 
+    <!-- Core JavaScript -->
+    <script src="{{ url_for('static', filename='js/api-client.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tabs.js') }}"></script>
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+
     {% block extra_js %}{% endblock %}
 </body>
 
