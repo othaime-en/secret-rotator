@@ -5,56 +5,57 @@
 {% block content %}
 <h1>Secret Rotation Dashboard</h1>
 
-<div id="status" class="status-box">
-    <h2>System Status</h2>
-    <p>Loading...</p>
-</div>
-
-<div class="stats-container">
-    <div class="stat-card">
-        <h3>Total Jobs</h3>
-        <p id="total-jobs">{{ stats.total_jobs }}</p>
-    </div>
-    <div class="stat-card">
-        <h3>Providers</h3>
-        <p id="total-providers">{{ stats.total_providers }}</p>
-    </div>
-    <div class="stat-card">
-        <h3>Rotators</h3>
-        <p id="total-rotators">{{ stats.total_rotators }}</p>
-    </div>
-</div>
+<div id="status"></div>
 
 <div class="tab-container">
     <div class="tab active" data-tab="jobs">Rotation Jobs</div>
-    <div class="tab" data-tab="backups">Backups</div>
-    <div class="tab" data-tab="health">Backup Health</div>
+    <div class="tab" data-tab="backups" data-onload="loadBackups">Backups</div>
+    <div class="tab" data-tab="health" data-onload="loadBackupHealth">Backup Health</div>
     <div class="tab" data-tab="logs">Logs</div>
 </div>
 
 <div id="jobs-content" class="tab-content active">
     <h2>Rotation Jobs</h2>
-    <div id="jobs-list"></div>
-    <button id="rotate-all-btn" onclick="rotateAll()">Rotate All Secrets</button>
+    <div id="jobs"></div>
+    <button onclick="rotateAll()">Rotate All Secrets</button>
 </div>
 
 <div id="backups-content" class="tab-content">
-    <h2>Backups</h2>
-    <div id="backups-list"></div>
+    <h2>Backup History</h2>
+    <div class="filter-section">
+        <label for="secretFilter">Filter by Secret ID:</label>
+        <input type="text" id="secretFilter" placeholder="Enter secret ID..." />
+        <button onclick="loadBackups()">Search</button>
+        <button onclick="document.getElementById('secretFilter').value=''; loadBackups();">Clear</button>
+    </div>
+    <div id="backups"></div>
 </div>
 
 <div id="health-content" class="tab-content">
-    <h2>Backup Health</h2>
-    <div id="health-info"></div>
+    <h2>Backup System Health</h2>
+    
+    <div id="health-status"></div>
+    
+    <div style="margin: 20px 0;">
+        <button onclick="runVerificationNow()">Run Verification Now</button>
+        <button onclick="loadVerificationHistory()">View History</button>
+    </div>
+    
+    <h3>Recent Verification History</h3>
+    <div id="verification-history"></div>
 </div>
 
 <div id="logs-content" class="tab-content">
-    <h2>Activity Logs</h2>
-    <div id="logs-list"></div>
+    <h2>Recent Activity Logs</h2>
+    <div id="logs"></div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/api-client.js') }}"></script>
-<script src="{{ url_for('static', filename='js/tabs.js') }}"></script>
+<script>
+    // Initialize log with welcome message
+    document.addEventListener('DOMContentLoaded', () => {
+        addLog('Dashboard loaded');
+    });
+</script>
 {% endblock %}
