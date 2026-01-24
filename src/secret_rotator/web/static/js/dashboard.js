@@ -1,14 +1,15 @@
 /**
- * Main Dashboard JavaScript
- * 
- * Coordinates API calls, tab management, and UI updates
+ * Secret Rotation Dashboard - Main JavaScript
+ * Extracted and enhanced from web_interface.py
  */
 
 // Global instances
 let api;
 let tabs;
 
-// Initialize on page load
+/**
+ * Initialize dashboard on page load
+ */
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Dashboard initializing...');
 
@@ -24,97 +25,73 @@ document.addEventListener('DOMContentLoaded', () => {
  * Load and display rotation jobs
  */
 async function loadJobs() {
-    const jobsList = document.getElementById('jobs-list');
-    const statusBox = document.getElementById('status');
+    const jobsDiv = document.getElementById('jobs');
 
-    jobsList.innerHTML = '<p class="loading">Loading jobs</p>';
+    if (!jobsDiv) {
+        console.error('Jobs container not found');
+        return;
+    }
+
+    jobsDiv.innerHTML = '<p class="loading">Loading jobs</p>';
 
     try {
-        const [statusData, jobsData] = await Promise.all([
-            api.fetchStatus(),
-            api.fetchJobs()
-        ]);
+        const data = await api.fetchJobs();
 
-        // Update status
-        statusBox.innerHTML = `
-            <h2>System Status</h2>
-            <p><strong>Status:</strong> ${statusData.status}</p>
-            <p><strong>Providers:</strong> ${statusData.providers}</p>
-            <p><strong>Rotators:</strong> ${statusData.rotators}</p>
-            <p><strong>Jobs:</strong> ${statusData.jobs}</p>
-        `;
-
-        // Update stats cards
-        document.getElementById('total-jobs').textContent = statusData.jobs;
-        document.getElementById('total-providers').textContent = statusData.providers;
-        document.getElementById('total-rotators').textContent = statusData.rotators;
-
-        // Display jobs
-        if (jobsData.jobs && jobsData.jobs.length > 0) {
-            jobsList.innerHTML = `
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="border-bottom: 2px solid #e1e8ed;">
-                            <th style="text-align: left; padding: 10px;">Secret ID</th>
-                            <th style="text-align: left; padding: 10px;">Provider</th>
-                            <th style="text-align: left; padding: 10px;">Rotator</th>
-                            <th style="text-align: left; padding: 10px;">Schedule</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${jobsData.jobs.map(job => `
-                            <tr style="border-bottom: 1px solid #e1e8ed;">
-                                <td style="padding: 10px;">${job.secret_id || 'N/A'}</td>
-                                <td style="padding: 10px;">${job.provider || 'N/A'}</td>
-                                <td style="padding: 10px;">${job.rotator || 'N/A'}</td>
-                                <td style="padding: 10px;">${job.schedule || 'N/A'}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            `;
+        if (data.jobs && data.jobs.length > 0) {
+            jobsDiv.innerHTML = data.jobs.map(job => `
+                <div class="job">
+                    <strong>${escapeHtml(job.name)}</strong><br>
+                    Provider: ${escapeHtml(job.provider)} | Rotator: ${escapeHtml(job.rotator)}<br>
+                    Secret ID: <code>${escapeHtml(job.secret_id)}</code>
+                </div>
+            `).join('');
         } else {
-            jobsList.innerHTML = '<p>No rotation jobs configured.</p>';
+            jobsDiv.innerHTML = '<div class="status info">No rotation jobs configured.</div>';
         }
-
     } catch (error) {
-        console.error('Failed to load jobs:', error);
-        jobsList.innerHTML = `<div class="status error">Failed to load jobs: ${error.message}</div>`;
+        console.error('Error loading jobs:', error);
+        jobsDiv.innerHTML = `<div class="status error">Failed to load jobs: ${escapeHtml(error.message)}</div>`;
     }
 }
 
 /**
- * Trigger rotation of all secrets
+ * Rotate all secrets with confirmation
  */
 async function rotateAll() {
-    const statusBox = document.getElementById('status');
-    const button = document.getElementById('rotate-all-btn');
+    if (!confirm('Are you sure you want to rotate all secrets? This action cannot be undone.')) {
+        return;
+    }
 
-    button.disabled = true;
-    button.textContent = 'Rotating...';
-    statusBox.innerHTML = '<div class="status info">Rotation in progress...</div>';
+    const statusDiv = document.getElementById('status');
+
+    statusDiv.innerHTML = '<div class="status info">Rotation in progress...</div>';
 
     try {
         const data = await api.rotateAll();
-
         const results = data.results || {};
-        const total = Object.keys(results).length;
         const successful = Object.values(results).filter(r => r).length;
+        const total = Object.keys(results).length;
 
-        statusBox.innerHTML = `
-            <div class="status success">
-                <strong>Rotation Complete:</strong> ${successful}/${total} secrets rotated successfully
+        const statusClass = successful === total ? 'success' : 'error';
+
+        statusDiv.innerHTML = `
+            <div class="status ${statusClass}">
+                Rotation complete: ${successful}/${total} successful
             </div>
         `;
 
+        // Show detailed results in logs
+        const logs = Object.entries(results)
+            .map(([job, success]) => `[${new Date().toLocaleTimeString()}] ${job}: ${success ? 'SUCCESS' : 'FAILED'}`)
+            .join('\n');
+        addLog(logs);
+
+        // Reload jobs after rotation
         setTimeout(loadJobs, 1000);
 
     } catch (error) {
-        console.error('Rotation failed:', error);
-        statusBox.innerHTML = `<div class="status error">Rotation failed: ${error.message}</div>`;
-    } finally {
-        button.disabled = false;
-        button.textContent = 'Rotate All Secrets';
+        console.error('Rotation error:', error);
+        statusDiv.innerHTML = `<div class="status error">Error during rotation: ${escapeHtml(error.message)}</div>`;
     }
 }
 
@@ -122,74 +99,272 @@ async function rotateAll() {
  * Load and display backups
  */
 async function loadBackups() {
-    const backupsList = document.getElementById('backups-list');
-    backupsList.innerHTML = '<p class="loading">Loading backups</p>';
+    const backupsDiv = document.getElementById('backups');
+    const secretFilter = document.getElementById('secretFilter');
+    const secretId = secretFilter ? secretFilter.value.trim() : null;
+
+    if (!backupsDiv) {
+        console.error('Backups container not found');
+        return;
+    }
+
+    backupsDiv.innerHTML = '<p class="loading">Loading backups</p>';
 
     try {
-        const data = await api.fetchBackups();
+        const data = await api.fetchBackups(secretId);
 
         if (data.backups && data.backups.length > 0) {
-            backupsList.innerHTML = `
-                <p><strong>Total Backups:</strong> ${data.backups.length}</p>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
-                    <thead>
-                        <tr style="border-bottom: 2px solid #e1e8ed;">
-                            <th style="text-align: left; padding: 10px;">Secret ID</th>
-                            <th style="text-align: left; padding: 10px;">Timestamp</th>
-                            <th style="text-align: left; padding: 10px;">Encrypted</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${data.backups.map(backup => `
-                            <tr style="border-bottom: 1px solid #e1e8ed;">
-                                <td style="padding: 10px;">${backup.secret_id || 'N/A'}</td>
-                                <td style="padding: 10px;">${backup.timestamp || 'N/A'}</td>
-                                <td style="padding: 10px;">${backup.encrypted ? 'Yes' : 'No'}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            `;
-        } else {
-            backupsList.innerHTML = '<p>No backups found.</p>';
-        }
+            backupsDiv.innerHTML = data.backups.map(backup => {
+                const encodedPath = encodeURIComponent(backup.backup_file);
+                const created = new Date(backup.backup_created).toLocaleString();
+                const fileName = backup.backup_file.split('/').pop();
 
+                return `
+                    <div class="backup">
+                        <div class="backup-item">
+                            <div class="backup-info">
+                                <strong>${escapeHtml(backup.secret_id)}</strong><br>
+                                <small>Created: ${created}</small><br>
+                                <small>File: ${escapeHtml(fileName)}</small>
+                            </div>
+                            <div class="backup-actions">
+                                <button class="success" onclick="viewBackup('${encodedPath}')">View</button>
+                                <button class="danger" onclick="confirmRestore('${escapeHtml(backup.backup_file)}', '${escapeHtml(backup.secret_id)}')">Restore</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            backupsDiv.innerHTML = '<div class="status info">No backups found.</div>';
+        }
     } catch (error) {
-        console.error('Failed to load backups:', error);
-        backupsList.innerHTML = `<div class="status error">Failed to load backups: ${error.message}</div>`;
+        console.error('Error loading backups:', error);
+        backupsDiv.innerHTML = `<div class="status error">Error loading backups: ${escapeHtml(error.message)}</div>`;
     }
 }
 
 /**
- * Load and display backup health
+ * View backup details
+ */
+async function viewBackup(encodedBackupFile) {
+    try {
+        const data = await api.fetchBackupDetail(decodeURIComponent(encodedBackupFile));
+
+        const details = `
+Secret ID: ${data.secret_id}
+Timestamp: ${new Date(data.backup_created).toLocaleString()}
+Old Value: ${data.old_value || '(masked)'}
+New Value: ${data.new_value || '(masked)'}
+Encrypted: ${data.encrypted ? 'Yes' : 'No'}
+        `.trim();
+
+        alert('Backup Details:\n\n' + details);
+    } catch (error) {
+        console.error('Error viewing backup:', error);
+        alert('Error viewing backup details: ' + error.message);
+    }
+}
+
+/**
+ * Confirm and restore backup
+ */
+function confirmRestore(backupFile, secretId) {
+    if (confirm(`Are you sure you want to restore the backup for "${secretId}"?\n\nThis will replace the current secret value with the old value from the backup.`)) {
+        restoreBackup(backupFile);
+    }
+}
+
+/**
+ * Restore backup
+ */
+async function restoreBackup(backupFile) {
+    const statusDiv = document.getElementById('status');
+
+    statusDiv.innerHTML = '<div class="status info">Restoring backup...</div>';
+
+    try {
+        const data = await api.restoreBackup(backupFile);
+
+        if (data.success) {
+            statusDiv.innerHTML = `<div class="status success">Successfully restored backup for ${escapeHtml(data.secret_id)}</div>`;
+            addLog(`Restored backup for ${data.secret_id}`);
+
+            // Reload backups
+            setTimeout(loadBackups, 1000);
+        } else {
+            statusDiv.innerHTML = `<div class="status error">Failed to restore backup: ${escapeHtml(data.error)}</div>`;
+        }
+    } catch (error) {
+        console.error('Error during restoration:', error);
+        statusDiv.innerHTML = `<div class="status error">Error during restoration: ${escapeHtml(error.message)}</div>`;
+    }
+}
+
+/**
+ * Load backup health metrics
  */
 async function loadBackupHealth() {
-    const healthInfo = document.getElementById('health-info');
-    healthInfo.innerHTML = '<p class="loading">Loading health metrics</p>';
+    const healthDiv = document.getElementById('health-status');
+
+    if (!healthDiv) {
+        console.error('Health status container not found');
+        return;
+    }
+
+    healthDiv.innerHTML = '<p class="loading">Loading health metrics</p>';
 
     try {
         const data = await api.fetchBackupHealth();
 
-        const statusClass = data.status === 'healthy' ? 'success' : 'error';
+        let statusClass = 'info';
+        if (data.status === 'healthy') statusClass = 'success';
+        if (data.status === 'warning' || data.status === 'critical') statusClass = 'error';
 
-        healthInfo.innerHTML = `
+        healthDiv.innerHTML = `
             <div class="status ${statusClass}">
-                <h3>Health Status: ${data.status || 'Unknown'}</h3>
-                <p><strong>Success Rate:</strong> ${data.success_rate || 0}%</p>
-                <p><strong>Total Backups:</strong> ${data.total_backups || 0}</p>
-                <p><strong>Verified:</strong> ${data.verified || 0}</p>
-                <p><strong>Failed:</strong> ${data.failed || 0}</p>
-                ${data.last_verification ? `<p><strong>Last Verification:</strong> ${data.last_verification}</p>` : ''}
+                <h3>Status: ${escapeHtml(data.status || 'Unknown').toUpperCase()}</h3>
+                <div style="margin-top: 10px;">
+                    <strong>Success Rate:</strong> ${data.success_rate || 0}%<br>
+                    <strong>Total Backups:</strong> ${data.total_backups || 0}<br>
+                    <strong>Verified:</strong> ${data.verified || 0}<br>
+                    <strong>Failed:</strong> ${data.failed || 0}<br>
+                    ${data.last_verification ? `<strong>Last Verification:</strong> ${new Date(data.last_verification).toLocaleString()}<br>` : ''}
+                </div>
             </div>
         `;
-
     } catch (error) {
-        console.error('Failed to load backup health:', error);
-        healthInfo.innerHTML = `<div class="status error">Failed to load health metrics: ${error.message}</div>`;
+        console.error('Error loading backup health:', error);
+        healthDiv.innerHTML = `<div class="status error">Error loading backup health: ${escapeHtml(error.message)}</div>`;
     }
+}
+
+/**
+ * Run verification now
+ */
+async function runVerificationNow() {
+    if (!confirm('Run backup verification now? This may take a few minutes.')) {
+        return;
+    }
+
+    const healthDiv = document.getElementById('health-status');
+    healthDiv.innerHTML = '<div class="status info">Running verification...</div>';
+
+    try {
+        const data = await api.runVerification();
+
+        if (data.success) {
+            const report = data.report;
+            healthDiv.innerHTML = `
+                <div class="status success">
+                    <h3>Verification Complete</h3>
+                    <div style="margin-top: 10px;">
+                        <strong>Total Backups:</strong> ${report.total_backups}<br>
+                        <strong>Verified:</strong> ${report.verified}<br>
+                        <strong>Failed:</strong> ${report.failed}<br>
+                        ${report.failed > 0 ? '<br><strong style="color: red;">⚠️ Some backups failed verification!</strong>' : ''}
+                    </div>
+                </div>
+            `;
+
+            // Reload health metrics
+            setTimeout(loadBackupHealth, 2000);
+        } else {
+            healthDiv.innerHTML = '<div class="status error">Verification failed</div>';
+        }
+    } catch (error) {
+        console.error('Error running verification:', error);
+        healthDiv.innerHTML = `<div class="status error">Error running verification: ${escapeHtml(error.message)}</div>`;
+    }
+}
+
+/**
+ * Load verification history
+ */
+async function loadVerificationHistory() {
+    const historyDiv = document.getElementById('verification-history');
+
+    if (!historyDiv) {
+        console.error('Verification history container not found');
+        return;
+    }
+
+    historyDiv.innerHTML = '<p class="loading">Loading verification history</p>';
+
+    try {
+        const data = await api.fetchVerificationHistory(7);
+
+        if (data.history && data.history.length > 0) {
+            let html = '<table><thead><tr><th>Date</th><th>Total</th><th>Verified</th><th>Failed</th><th>Success Rate</th></tr></thead><tbody>';
+
+            data.history.forEach(report => {
+                const successRate = ((report.verified / report.total_backups) * 100).toFixed(1);
+                const statusColor = successRate >= 95 ? '#28a745' : '#dc3545';
+                const timestamp = new Date(report.timestamp).toLocaleString();
+
+                html += `
+                    <tr>
+                        <td>${timestamp}</td>
+                        <td>${report.total_backups}</td>
+                        <td>${report.verified}</td>
+                        <td>${report.failed}</td>
+                        <td style="color: ${statusColor}; font-weight: bold;">${successRate}%</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            historyDiv.innerHTML = html;
+        } else {
+            historyDiv.innerHTML = '<div class="status info">No verification history available</div>';
+        }
+    } catch (error) {
+        console.error('Error loading verification history:', error);
+        historyDiv.innerHTML = `<div class="status error">Error loading history: ${escapeHtml(error.message)}</div>`;
+    }
+}
+
+/**
+ * Add log entry
+ */
+function addLog(message) {
+    const logsDiv = document.getElementById('logs');
+
+    if (!logsDiv) {
+        console.error('Logs container not found');
+        return;
+    }
+
+    const timestamp = new Date().toLocaleTimeString();
+    logsDiv.innerHTML = `[${timestamp}] ${escapeHtml(message)}\n` + logsDiv.innerHTML;
+}
+
+/**
+ * Escape HTML to prevent XSS
+ */
+function escapeHtml(text) {
+    if (typeof text !== 'string') {
+        return text;
+    }
+
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+
+    return text.replace(/[&<>"']/g, m => map[m]);
 }
 
 window.loadJobs = loadJobs;
 window.rotateAll = rotateAll;
 window.loadBackups = loadBackups;
+window.viewBackup = viewBackup;
+window.confirmRestore = confirmRestore;
+window.restoreBackup = restoreBackup;
 window.loadBackupHealth = loadBackupHealth;
+window.runVerificationNow = runVerificationNow;
+window.loadVerificationHistory = loadVerificationHistory;
+window.addLog = addLog;
