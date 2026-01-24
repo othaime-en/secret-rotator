@@ -145,6 +145,90 @@ class APIClient {
         }
         return response.json();
     }
+
+    /**
+     * Handle fetch response
+     */
+    async _handleResponse(response) {
+        if (!response.ok) {
+            const errorText = await response.text();
+            let errorMessage = `HTTP ${response.status}`;
+
+            try {
+                const errorData = JSON.parse(errorText);
+                errorMessage = errorData.error || errorData.message || errorMessage;
+            } catch (e) {
+                errorMessage = errorText || errorMessage;
+            }
+
+            throw new Error(errorMessage);
+        }
+        return response.json();
+    }
+
+    async fetchStatus() {
+        const response = await fetch(`${this.baseURL}/api/status`);
+        return this._handleResponse(response);
+    }
+
+    async fetchJobs() {
+        const response = await fetch(`${this.baseURL}/api/jobs`);
+        return this._handleResponse(response);
+    }
+
+    async rotateAll() {
+        const response = await fetch(`${this.baseURL}/api/rotate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        return this._handleResponse(response);
+    }
+
+    async fetchBackups(secretId = null) {
+        const url = secretId
+            ? `${this.baseURL}/api/backups?secret_id=${encodeURIComponent(secretId)}`
+            : `${this.baseURL}/api/backups`;
+
+        const response = await fetch(url);
+        return this._handleResponse(response);
+    }
+
+    async fetchBackupDetail(backupFile) {
+        const response = await fetch(
+            `${this.baseURL}/api/backups/${encodeURIComponent(backupFile)}`
+        );
+        return this._handleResponse(response);
+    }
+
+    async restoreBackup(backupFile) {
+        const response = await fetch(`${this.baseURL}/api/restore`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ backup_file: backupFile })
+        });
+        return this._handleResponse(response);
+    }
+
+    async fetchBackupHealth() {
+        const response = await fetch(`${this.baseURL}/api/backup-health`);
+        return this._handleResponse(response);
+    }
+
+    async fetchVerificationHistory(days = 7) {
+        const response = await fetch(
+            `${this.baseURL}/api/verification-history?days=${days}`
+        );
+        return this._handleResponse(response);
+    }
+
+    async runVerification() {
+        const response = await fetch(`${this.baseURL}/api/run-verification`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        return this._handleResponse(response);
+    }
+
 }
 
 window.APIClient = APIClient;
