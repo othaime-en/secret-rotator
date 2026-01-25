@@ -67,14 +67,7 @@ class SecretRotationApp:
         )
         self.scheduler.setup_schedule(schedule_config)
 
-        # Set up web server
-        web_enabled = settings.get("web.enabled", True)
-        if web_enabled:
-            web_port = settings.get("web.port", 8080)
-            web_host = settings.get("web.host", "localhost")
-            self.web_server = WebServer(self.engine, port=web_port)
-            # Store scheduler reference in engine for web interface access
-            self.engine.scheduler = self.scheduler
+        self._setup_web_server()
 
         logger.info("Setup complete")
         self._print_security_status()
@@ -194,6 +187,25 @@ class SecretRotationApp:
 
         logger.info("=" * 60)
 
+    def _setup_web_server(self):
+        """Simple Flask-only setup"""
+        web_enabled = settings.get("web.enabled", True)
+        if not web_enabled:
+            return
+        
+        web_port = settings.get("web.port", 8080)
+        web_host = settings.get("web.host", "localhost")
+        
+        from secret_rotator.web import FlaskWebServer
+        self.web_server = FlaskWebServer(
+            self.engine,
+            port=web_port,
+            host=web_host
+        )
+    
+        self.engine.scheduler = self.scheduler
+        logger.info(f"Flask web interface: http://{web_host}:{web_port}")
+    
     def start(self):
         """Start all components"""
         if not self.engine:
@@ -206,9 +218,19 @@ class SecretRotationApp:
         # Start web server if enabled
         if self.web_server:
             self.web_server.start()
+            web_host = settings.get('web.host', 'localhost')
+            web_port = settings.get('web.port', 8080)
+            use_flask = settings.get("web.use_flask", False)
+
+            server_type = "Flask" if use_flask else "Legacy"
             logger.info(
-                f"Web interface: http://{settings.get('web.host', 'localhost')}:{settings.get('web.port', 8080)}"
+                f"{server_type} web interface: http://{web_host}:{web_port}"
             )
+
+        # Start Flask test server if enabled
+        if hasattr(self, 'flask_test_server') and self.flask_test_server:
+            self.flask_test_server.start()
+            logger.info("Flask test server: http://localhost:8081")
 
         logger.info("Secret Rotation System started")
         logger.info("Press Ctrl+C to stop")
@@ -225,9 +247,8 @@ class SecretRotationApp:
             self.stop()
 
     def stop(self):
-        """Stop all components"""
-        logger.info("Shutting down Secret Rotation System")
-
+        """Stop all components gracefully"""
+        logger.info("Shutting down Secret Rotation System...")
         self.running = False
 
         if self.scheduler:
@@ -236,7 +257,11 @@ class SecretRotationApp:
         if self.web_server:
             self.web_server.stop()
 
-        logger.info("Shutdown complete")
+        # Stop Flask test server if running
+        if hasattr(self, 'flask_test_server') and self.flask_test_server:
+            self.flask_test_server.stop()
+
+        logger.info("Secret Rotation System stopped")
 
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals"""

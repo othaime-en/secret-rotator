@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Secret Rotation Dashboard{% endblock %}
+
+{% block content %}
+<h1>Secret Rotation Dashboard</h1>
+
+<div id="status"></div>
+
+<div class="tab-container">
+    <div class="tab active" data-tab="jobs">Rotation Jobs</div>
+    <div class="tab" data-tab="backups" data-onload="loadBackups">Backups</div>
+    <div class="tab" data-tab="health" data-onload="loadBackupHealth">Backup Health</div>
+    <div class="tab" data-tab="logs">Logs</div>
+</div>
+
+<div id="jobs-content" class="tab-content active">
+    <h2>Rotation Jobs</h2>
+    <div id="jobs"></div>
+    <button onclick="rotateAll()">Rotate All Secrets</button>
+</div>
+
+<div id="backups-content" class="tab-content">
+    <h2>Backup History</h2>
+    <div class="filter-section">
+        <label for="secretFilter">Filter by Secret ID:</label>
+        <input type="text" id="secretFilter" placeholder="Enter secret ID..." />
+        <button onclick="loadBackups()">Search</button>
+        <button onclick="document.getElementById('secretFilter').value=''; loadBackups();">Clear</button>
+    </div>
+    <div id="backups"></div>
+</div>
+
+<div id="health-content" class="tab-content">
+    <h2>Backup System Health</h2>
+    
+    <div id="health-status"></div>
+    
+    <div style="margin: 20px 0;">
+        <button onclick="runVerificationNow()">Run Verification Now</button>
+        <button onclick="loadVerificationHistory()">View History</button>
+    </div>
+    
+    <h3>Recent Verification History</h3>
+    <div id="verification-history"></div>
+</div>
+
+<div id="logs-content" class="tab-content">
+    <h2>Recent Activity Logs</h2>
+    <div id="logs"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Initialize log with welcome message
+    document.addEventListener('DOMContentLoaded', () => {
+        addLog('Dashboard loaded');
+    });
+</script>
+{% endblock %}
