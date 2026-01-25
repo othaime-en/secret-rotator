@@ -58,7 +58,18 @@ environments:
 web:
   enabled: true
   port: 8080
-  host: "0.0.0.0" # Changed from localhost to allow external access in Docker
+  host: "0.0.0.0"
+  use_flask: true
+  enable_flask_testing: false
+
+  # Flask configuration
+  secret_key: "${FLASK_SECRET_KEY}"  # REQUIRED: Set via environment variable
+  threaded: true  # Enable multi-threaded request handling
+
+  # Security settings (for future use)
+  # cors_enabled: false
+  # allowed_origins: []
+  # rate_limiting: true
 
 providers:
   file_storage:
