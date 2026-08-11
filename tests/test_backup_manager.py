@@ -352,5 +352,69 @@ class TestBackupManagerEdgeCases(unittest.TestCase):
         self.assertEqual(len(backups), 5)
 
 
+class TestBackupManagerPathTraversal(unittest.TestCase):
+    """Regression tests for S2: path traversal in restore_backup()."""
+
+    def setUp(self):
+        # Two separate temp dirs: one is the legitimate backup dir, the
+        # other simulates "somewhere else on disk" (e.g. where a
+        # .master.key file might live) that must stay unreachable.
+        self.temp_backup_dir = tempfile.mkdtemp()
+        self.outside_dir = tempfile.mkdtemp()
+        self.backup_manager = BackupManager(backup_dir=self.temp_backup_dir, encrypt_backups=False)
+
+        # A "secret" file outside the backup directory that traversal
+        # payloads will try to reach.
+        self.secret_file = Path(self.outside_dir) / "secret.json"
+        self.secret_file.write_text(json.dumps({"key": "super-secret-master-key"}))
+
+    def tearDown(self):
+        import shutil
+
+        for d in (self.temp_backup_dir, self.outside_dir):
+            if Path(d).exists():
+                shutil.rmtree(d)
+
+    def test_relative_traversal_is_rejected(self):
+        """'../../<outside file>' must never resolve to a file outside backup_dir.
+
+        The fix strips any path/traversal components down to a bare
+        filename before it ever touches the filesystem, so a traversal
+        payload collapses to looking up "secret.json" *inside*
+        backup_dir — where it doesn't exist — rather than escaping to
+        read the real file. Either a FileNotFoundError (this case) or a
+        ValueError (rejected outright) is an acceptable, safe outcome;
+        what must never happen is the outside file's contents coming back.
+        """
+        depth = len(Path(self.temp_backup_dir).resolve().parts)
+        traversal = "../" * (depth + 2) + str(self.secret_file).lstrip("/")
+
+        with self.assertRaises((ValueError, FileNotFoundError)):
+            self.backup_manager.restore_backup(traversal)
+
+    def test_absolute_path_outside_backup_dir_is_rejected(self):
+        """An absolute path to a file outside backup_dir must not be read."""
+        with self.assertRaises((ValueError, FileNotFoundError)):
+            self.backup_manager.restore_backup(str(self.secret_file))
+
+    def test_legitimate_backup_filename_still_works(self):
+        """Normal, non-traversal usage must be unaffected by the fix."""
+        backup_path = self.backup_manager.create_backup("svc", "old", "new")
+        filename = Path(backup_path).name
+
+        # Restoring by bare filename (as returned by list_backups) works.
+        result = self.backup_manager.restore_backup(filename)
+        self.assertEqual(result["secret_id"], "svc")
+
+        # Restoring by the full path returned from create_backup also works,
+        # since it already lives inside backup_dir.
+        result2 = self.backup_manager.restore_backup(backup_path)
+        self.assertEqual(result2["secret_id"], "svc")
+
+    def test_dot_dot_alone_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self.backup_manager.restore_backup("..")
+
+
 if __name__ == "__main__":
     unittest.main()

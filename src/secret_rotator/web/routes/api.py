@@ -199,6 +199,12 @@ def backup_detail(backup_file):
         logger.warning(f"Backup file not found: {decoded_path}")
         return jsonify({'error': 'Backup not found'}), 404
     
+    except ValueError as e:
+        # Raised by BackupManager when the requested path resolves
+        # outside the backup directory (path traversal attempt).
+        logger.warning(f"Rejected backup path outside backup directory: {decoded_path} ({e})")
+        return jsonify({'error': 'Invalid backup file'}), 400
+    
     except Exception as e:
         logger.error(f"Failed to load backup detail: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
@@ -230,7 +236,7 @@ def restore():
     data = request.get_json()
     if not data or 'backup_file' not in data:
         return jsonify({
-            'success': false,
+            'success': False,
             'error': 'backup_file required in request body'
         }), 400
     
@@ -271,10 +277,18 @@ def restore():
             'error': 'Backup file not found'
         }), 404
     
+    except ValueError as e:
+        # Raised by BackupManager when the requested path resolves
+        # outside the backup directory (path traversal attempt).
+        logger.warning(f"Rejected backup path outside backup directory: {backup_file} ({e})")
+        return jsonify({
+            'success': False,
+            'error': 'Invalid backup file'
+        }), 400
+    
     except Exception as e:
         logger.error(f"Restoration failed: {e}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
-        
