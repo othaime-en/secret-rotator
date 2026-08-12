@@ -63,8 +63,18 @@ web:
   enable_flask_testing: false
 
   # Flask configuration
-  secret_key: "${FLASK_SECRET_KEY}"  # REQUIRED: Set via environment variable
-  threaded: true  # Enable multi-threaded request handling
+  # SECRET_KEY resolution (see src/secret_rotator/web/secret_key.py):
+  #   1. This value, if set to a real secret (not the placeholder below)
+  #   2. The FLASK_SECRET_KEY environment variable (recommended — avoids
+  #      putting the key in a file at all)
+  #   3. In dev/test: a random ephemeral key is generated automatically
+  #   4. In production (SECRET_ROTATOR_ENV=production): startup fails if
+  #      neither of the above is set, rather than falling back silently
+  # NOTE: this config loader does NOT do "${VAR}" environment-variable
+  # interpolation — leave this key unset and use FLASK_SECRET_KEY instead
+  # unless you're intentionally hardcoding a value here.
+  # secret_key: ""
+  threaded: true # Enable multi-threaded request handling
 
   # Security settings (for future use)
   # cors_enabled: false

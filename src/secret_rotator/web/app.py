@@ -8,6 +8,7 @@ registers blueprints, and sets up error handlers.
 from flask import Flask, jsonify
 from pathlib import Path
 from secret_rotator.utils.logger import logger
+from secret_rotator.web.secret_key import resolve_secret_key
 
 
 def create_app(rotation_engine, config=None):
@@ -36,16 +37,26 @@ def create_app(rotation_engine, config=None):
         static_url_path='/static'
     )
     
-    # Default configuration
+    # Default configuration. SECRET_KEY is intentionally left unset here
+    # (rather than a hardcoded placeholder) — it's resolved explicitly
+    # below via resolve_secret_key(), which is the single source of
+    # truth for where a real key comes from and what happens if one
+    # isn't configured.
     app.config.update(
-        SECRET_KEY='dev-key-change-in-production',  # TODO: Load from config
+        SECRET_KEY=None,
         JSON_SORT_KEYS=False,  # Preserve order in API responses
         TESTING=False,
     )
     
-    # Apply custom configuration
+    # Apply custom configuration (e.g. web.secret_key plumbed through
+    # from main.py, or overrides passed in by tests)
     if config:
         app.config.update(config)
+    
+    # Resolve the real SECRET_KEY now that any explicit config has been
+    # applied. This will raise RuntimeError and abort startup if
+    # SECRET_ROTATOR_ENV=production and no real key is configured.
+    app.config['SECRET_KEY'] = resolve_secret_key(app.config.get('SECRET_KEY'))
     
     # Store rotation engine reference for access in routes
     app.rotation_engine = rotation_engine
