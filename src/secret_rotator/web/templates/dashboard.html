@@ -3,7 +3,17 @@
 {% block title %}Secret Rotation Dashboard{% endblock %}
 
 {% block content %}
-<h1>Secret Rotation Dashboard</h1>
+<div style="display:flex; align-items:center; justify-content:space-between;">
+    <h1>Secret Rotation Dashboard</h1>
+    {% if username %}
+    <div style="font-size:13px; color:#666;">
+        Logged in as <strong>{{ username }}</strong>
+        · <form method="POST" action="{{ url_for('auth.logout') }}" style="display:inline;">
+            <button type="submit" style="background:none;border:none;color:#007bff;cursor:pointer;font-size:13px;padding:0;">Log out</button>
+        </form>
+    </div>
+    {% endif %}
+</div>
 
 <div id="status"></div>
 

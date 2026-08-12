@@ -7,6 +7,7 @@ registers blueprints, and sets up error handlers.
 
 from flask import Flask, jsonify
 from pathlib import Path
+from datetime import timedelta
 from secret_rotator.utils.logger import logger
 from secret_rotator.web.secret_key import resolve_secret_key
 
@@ -37,15 +38,14 @@ def create_app(rotation_engine, config=None):
         static_url_path='/static'
     )
     
-    # Default configuration. SECRET_KEY is intentionally left unset here
-    # (rather than a hardcoded placeholder) — it's resolved explicitly
-    # below via resolve_secret_key(), which is the single source of
-    # truth for where a real key comes from and what happens if one
-    # isn't configured.
     app.config.update(
         SECRET_KEY=None,
-        JSON_SORT_KEYS=False,  # Preserve order in API responses
+        JSON_SORT_KEYS=False,
         TESTING=False,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE='Lax',
+        SESSION_COOKIE_SECURE=False,
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
     )
     
     # Apply custom configuration (e.g. web.secret_key plumbed through
@@ -62,10 +62,27 @@ def create_app(rotation_engine, config=None):
     app.rotation_engine = rotation_engine
     
     from .routes import dashboard_bp, api_bp, health_bp
+    from .auth import bp as auth_bp, require_login, credentials_configured
     
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(api_bp, url_prefix='/api')
     app.register_blueprint(health_bp, url_prefix='/api')
+    app.register_blueprint(auth_bp)
+    
+    app.before_request(require_login)
+    
+    if not credentials_configured():
+        import os
+        env = os.getenv("SECRET_ROTATOR_ENV", "development").strip().lower()
+        message = (
+            "No web admin password is configured (web.auth.password_hash "
+            "in config.yaml, or SECRET_ROTATOR_ADMIN_PASSWORD_HASH env "
+            "var). The dashboard will be unreachable until you run: "
+            "secret-rotator --mode set-web-password"
+        )
+        if env == "production":
+            raise RuntimeError(message)
+        logger.warning(message)
     
     register_error_handlers(app)
     

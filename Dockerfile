@@ -18,7 +18,6 @@ COPY requirements.txt .
 COPY pyproject.toml .
 COPY README.md .
 
-# Create virtual environment and install dependencies
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -28,7 +27,6 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 COPY src/ ./src/
 COPY config/config.example.yaml ./config/
 
-# Install the package
 RUN pip install --no-cache-dir .
 
 # Verify installation in builder
@@ -73,24 +71,19 @@ RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 # Switch to non-root user
 USER secretrotator
 
-# Set environment variables
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Expose web interface port
 EXPOSE 8080
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8080/api/status || exit 1
+    CMD curl -f http://localhost:8080/api/healthz || exit 1
 
 # Set volumes for persistent data
 # IMPORTANT: These are declaration only. Actual volumes defined in docker-compose.yml
 VOLUME ["/app/data", "/app/logs"]
 
-# Use entrypoint script
 ENTRYPOINT ["/entrypoint.sh"]
 
-# Default command
 CMD ["secret-rotator"]

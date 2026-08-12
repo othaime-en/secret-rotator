@@ -13,6 +13,22 @@ from secret_rotator.utils.logger import logger
 bp = Blueprint('health', __name__)
 
 
+@bp.route('/healthz')
+def healthz():
+    """
+    Minimal, unauthenticated liveness probe.
+
+    This is intentionally separate from /status (in api_bp), which now
+    requires login (S1) and returns operational details (job/provider
+    counts). Docker/orchestrator healthchecks need a plain "is the
+    process up" check that doesn't require credentials and doesn't leak
+    any internal state — this is that endpoint. Keep it exempt from auth
+    in web/auth.py's EXEMPT_ENDPOINTS, and keep it free of anything more
+    revealing than a static "ok".
+    """
+    return jsonify({'status': 'ok'})
+
+
 @bp.route('/backup-health')
 def backup_health():
     """
