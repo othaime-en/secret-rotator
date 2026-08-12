@@ -46,6 +46,9 @@ class TestAuthEnforcement(unittest.TestCase):
         engine = RotationEngine()
         app = create_app(engine)
         app.config["TESTING"] = True
+        # CSRF is tested separately in tests/test_csrf.py; disable it here
+        # so these tests can focus purely on auth semantics.
+        app.config["WTF_CSRF_ENABLED"] = False
         self.client = app.test_client()
 
     def _login(self, username=TEST_USERNAME, password=TEST_PASSWORD):
@@ -166,6 +169,9 @@ class TestAuthNotConfigured(unittest.TestCase):
         engine = RotationEngine()
         app = create_app(engine)
         app.config["TESTING"] = True
+        # CSRF is tested separately in tests/test_csrf.py; disable it here
+        # so these tests can focus purely on auth semantics.
+        app.config["WTF_CSRF_ENABLED"] = False
         client = app.test_client()
 
         resp = client.post(

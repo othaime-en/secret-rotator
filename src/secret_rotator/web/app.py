@@ -5,9 +5,10 @@ This module creates and configures the Flask application instance,
 registers blueprints, and sets up error handlers.
 """
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, render_template
 from pathlib import Path
 from datetime import timedelta
+from flask_wtf.csrf import CSRFProtect, CSRFError
 from secret_rotator.utils.logger import logger
 from secret_rotator.web.secret_key import resolve_secret_key
 
@@ -40,7 +41,7 @@ def create_app(rotation_engine, config=None):
     
     app.config.update(
         SECRET_KEY=None,
-        JSON_SORT_KEYS=False,
+        JSON_SORT_KEYS=False,  # Preserve order in API responses
         TESTING=False,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE='Lax',
@@ -69,7 +70,14 @@ def create_app(rotation_engine, config=None):
     app.register_blueprint(health_bp, url_prefix='/api')
     app.register_blueprint(auth_bp)
     
+    # Enforce login on every request except the small EXEMPT_ENDPOINTS
+    # allow-list defined in web/auth.py (login page, static assets, the
+    # unauthenticated /api/healthz liveness probe).
     app.before_request(require_login)
+    
+    # CSRF protection on all state-changing requests
+    csrf = CSRFProtect()
+    csrf.init_app(app)
     
     if not credentials_configured():
         import os
@@ -125,3 +133,27 @@ def register_error_handlers(app):
             'error': 'Method Not Allowed',
             'message': 'The method is not allowed for the requested URL'
         }), 405
+    
+    @app.errorhandler(CSRFError)
+    def csrf_error(error):
+        """
+        Handle CSRF validation failures (S4).
+
+        Most often caused by a session that expired between page load
+        and form submit, or a genuine cross-site request being blocked
+        — either way, never treat this as a normal 400 elsewhere in the
+        app that might leak stack details.
+        """
+        logger.warning(f"CSRF validation failed for {request.path}: {error.description}")
+        
+        if request.path.startswith('/api/'):
+            return jsonify({
+                'error': 'CSRF validation failed',
+                'message': 'Missing or invalid CSRF token. Reload the page and try again.'
+            }), 400
+        
+        return render_template(
+            'login.html',
+            error="Your session expired or the form was tampered with. Please sign in again.",
+            next=request.args.get('next', ''),
+        ), 400
