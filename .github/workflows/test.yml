@@ -32,3 +32,33 @@ jobs:
       - name: Test summary
         if: always()
         run: echo "Tests completed. Check the logs above for results."
+
+  security-scan:
+    # This app runs with access to database credentials and a
+    # master encryption key — a compromised/vulnerable dependency here
+    # is a direct path to credential theft. Previously nothing caught
+    # known-CVE pins or an unofficial/dependency-confusion-shaped
+    # package name (mysql_connector_repackaged) automatically; this
+    # job exists so both regress loudly in CI instead of silently.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install project + dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[all]"
+          pip install pip-audit bandit
+
+      - name: pip-audit (known-CVE scan of installed dependencies)
+        run: pip-audit
+
+      - name: bandit (static security scan of source)
+        run: bandit -r src/secret_rotator -ll

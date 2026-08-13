@@ -1,0 +1,23 @@
+# Automated dependency update PRs, so pinned CVEs and future
+# advisories get flagged without someone having to remember to run
+# `pip-audit` manually. Paired with the security-scan CI job in
+# .github/workflows/test.yml, which is what actually blocks a merge —
+# Dependabot here is for visibility/proposal, not enforcement.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "security"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "ci"
