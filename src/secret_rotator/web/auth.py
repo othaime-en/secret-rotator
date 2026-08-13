@@ -19,6 +19,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from secret_rotator.config.settings import settings
 from secret_rotator.utils.logger import logger
+from secret_rotator.audit_log import audit_log
 
 bp = Blueprint("auth", __name__)
 
@@ -117,6 +118,7 @@ def login():
             session["username"] = username
             session.permanent = True
             logger.info(f"Successful web login for user '{username}'")
+            audit_log.log("login", username, success=True)
 
             next_url = request.form.get("next") or request.args.get("next")
             # Only ever redirect to a same-site relative path, never an
@@ -127,6 +129,7 @@ def login():
             return redirect(url_for("dashboard.index"))
         else:
             logger.warning(f"Failed web login attempt for user '{username!r}'")
+            audit_log.log("login_failed", username or "(empty)", success=False)
             error = "Invalid username or password"
             # Small, deliberate delay to add friction against rapid
             # credential-guessing. Not a substitute for real rate
@@ -144,4 +147,5 @@ def logout():
     session.clear()
     if username:
         logger.info(f"User '{username}' logged out")
+        audit_log.log("logout", username, success=True)
     return redirect(url_for("auth.login"))

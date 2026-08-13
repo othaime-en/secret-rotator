@@ -6,6 +6,7 @@ from secret_rotator.utils.logger import logger
 from secret_rotator.utils.retry import retry_with_backoff
 from secret_rotator.backup_manager import BackupManager
 from secret_rotator.config.settings import settings
+from secret_rotator.audit_log import audit_log
 
 
 class RotationEngine:
@@ -41,8 +42,15 @@ class RotationEngine:
     @retry_with_backoff(
         max_attempts=settings.get("rotation.retry_attempts", 3), exceptions=(Exception,)
     )
-    def rotate_secret(self, job_config: Dict[str, Any]) -> bool:
-        """Rotate a single secret based on job configuration"""
+    def rotate_secret(self, job_config: Dict[str, Any], actor: str = "system") -> bool:
+        """Rotate a single secret based on job configuration.
+
+        Args:
+            job_config: the rotation job definition.
+            actor: who triggered this — a dashboard username, or
+                "system" for scheduler/CLI-triggered rotations. Recorded
+                in the audit log (S5).
+        """
         job_name = job_config["name"]
         provider_name = job_config["provider"]
         rotator_name = job_config["rotator"]
@@ -56,10 +64,18 @@ class RotationEngine:
 
         if not provider:
             logger.error(f"Provider '{provider_name}' not found")
+            audit_log.log(
+                "rotate", actor, secret_id=secret_id, success=False,
+                details={"job": job_name, "reason": f"provider '{provider_name}' not found"},
+            )
             return False
 
         if not rotator:
             logger.error(f"Rotator '{rotator_name}' not found")
+            audit_log.log(
+                "rotate", actor, secret_id=secret_id, success=False,
+                details={"job": job_name, "reason": f"rotator '{rotator_name}' not found"},
+            )
             return False
 
         try:
@@ -79,6 +95,10 @@ class RotationEngine:
                     logger.info(f"Backup created at {backup_path}")
                 except Exception as e:
                     logger.error(f"Backup failed for {job_name}, aborting rotation: {e}")
+                    audit_log.log(
+                        "rotate", actor, secret_id=secret_id, success=False,
+                        details={"job": job_name, "reason": f"backup failed: {e}"},
+                    )
                     return False
 
             # Step 2: Generate new secret (re-generate if needed, but we can reuse temp if backup succeeded)
@@ -89,34 +109,59 @@ class RotationEngine:
             )
             if not new_secret:
                 logger.error(f"Failed to generate new secret for {job_name}")
+                audit_log.log(
+                    "rotate", actor, secret_id=secret_id, success=False,
+                    details={"job": job_name, "reason": "secret generation failed"},
+                )
                 return False
 
             # Step 3: Validate new secret
             if not rotator.validate_secret(new_secret):
                 logger.error(f"Generated secret failed validation for {job_name}")
+                audit_log.log(
+                    "rotate", actor, secret_id=secret_id, success=False,
+                    details={"job": job_name, "reason": "generated secret failed validation"},
+                )
                 return False
 
             # Step 4: Update secret in provider
             success = provider.update_secret(secret_id, new_secret)
             if success:
                 logger.info(f"Successfully rotated secret for {job_name}")
+                audit_log.log(
+                    "rotate", actor, secret_id=secret_id, success=True,
+                    details={"job": job_name, "provider": provider_name, "rotator": rotator_name},
+                )
                 return True
             else:
                 logger.error(f"Failed to update secret for {job_name}")
+                audit_log.log(
+                    "rotate", actor, secret_id=secret_id, success=False,
+                    details={"job": job_name, "reason": "provider update_secret returned False"},
+                )
                 return False
 
         except Exception as e:
             logger.error(f"Error during rotation of {job_name}: {e}")
+            audit_log.log(
+                "rotate", actor, secret_id=secret_id, success=False,
+                details={"job": job_name, "reason": str(e)},
+            )
             return False
 
-    def rotate_all_secrets(self) -> Dict[str, bool]:
-        """Rotate all configured secrets"""
+    def rotate_all_secrets(self, actor: str = "system") -> Dict[str, bool]:
+        """Rotate all configured secrets.
+
+        Args:
+            actor: who triggered this batch — passed through to each
+                rotate_secret() call for the audit log (S5).
+        """
         results = {}
         logger.info(f"Starting rotation of {len(self.rotation_jobs)} secrets")
 
         for job in self.rotation_jobs:
             job_name = job["name"]
-            success = self.rotate_secret(job)
+            success = self.rotate_secret(job, actor=actor)
             results[job_name] = success
 
             # Add delay between rotations to avoid overwhelming systems

@@ -10,9 +10,10 @@ This blueprint provides JSON API endpoints for:
 All endpoints return JSON responses and use standard HTTP status codes.
 """
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request, current_app, session
 from urllib.parse import unquote
 from secret_rotator.utils.logger import logger
+from secret_rotator.audit_log import audit_log
 
 bp = Blueprint('api', __name__)
 
@@ -95,11 +96,12 @@ def rotate():
         }
     """
     engine = current_app.rotation_engine
+    actor = session.get('username', 'unknown')
     
-    logger.info("Manual rotation triggered via API")
+    logger.info(f"Manual rotation triggered via API by {actor}")
     
     try:
-        results = engine.rotate_all_secrets()
+        results = engine.rotate_all_secrets(actor=actor)
         successful = sum(1 for r in results.values() if r)
         total = len(results)
         
@@ -231,6 +233,7 @@ def restore():
         }
     """
     engine = current_app.rotation_engine
+    actor = session.get('username', 'unknown')
     
     # Parse request body
     data = request.get_json()
@@ -242,7 +245,7 @@ def restore():
     
     backup_file = data['backup_file']
     
-    logger.info(f"Restore requested for backup: {backup_file}")
+    logger.info(f"Restore requested for backup: {backup_file} by {actor}")
     
     try:
         # Load backup data
@@ -258,6 +261,10 @@ def restore():
         
         if success:
             logger.info(f"Successfully restored backup for {secret_id} from {backup_file}")
+            audit_log.log(
+                "restore", actor, secret_id=secret_id, success=True,
+                details={"backup_file": backup_file},
+            )
             return jsonify({
                 'success': True,
                 'secret_id': secret_id,
@@ -265,6 +272,10 @@ def restore():
             })
         else:
             logger.error(f"Failed to update secret {secret_id} during restoration")
+            audit_log.log(
+                "restore", actor, secret_id=secret_id, success=False,
+                details={"backup_file": backup_file, "reason": "provider update_secret returned False"},
+            )
             return jsonify({
                 'success': False,
                 'error': 'Failed to update secret'
@@ -272,6 +283,10 @@ def restore():
     
     except FileNotFoundError:
         logger.warning(f"Backup file not found: {backup_file}")
+        audit_log.log(
+            "restore", actor, success=False,
+            details={"backup_file": backup_file, "reason": "backup not found"},
+        )
         return jsonify({
             'success': False,
             'error': 'Backup file not found'
@@ -281,6 +296,10 @@ def restore():
         # Raised by BackupManager when the requested path resolves
         # outside the backup directory (path traversal attempt).
         logger.warning(f"Rejected backup path outside backup directory: {backup_file} ({e})")
+        audit_log.log(
+            "restore", actor, success=False,
+            details={"backup_file": backup_file, "reason": "path traversal rejected"},
+        )
         return jsonify({
             'success': False,
             'error': 'Invalid backup file'
@@ -288,6 +307,10 @@ def restore():
     
     except Exception as e:
         logger.error(f"Restoration failed: {e}", exc_info=True)
+        audit_log.log(
+            "restore", actor, success=False,
+            details={"backup_file": backup_file, "reason": str(e)},
+        )
         return jsonify({
             'success': False,
             'error': str(e)
