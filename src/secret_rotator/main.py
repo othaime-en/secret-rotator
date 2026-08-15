@@ -192,14 +192,6 @@ class SecretRotationApp:
         Translate the `web.*` section of config.yaml into the Flask
         config-key dict that create_app()/app.config.update() expects.
 
-        This is what was missing before: main.py constructed
-        FlaskWebServer without ever passing `config` through, so
-        `web.secret_key` (and any other Flask-facing setting) in
-        config.yaml had zero effect no matter what an operator set it to.
-        Actual validation of the secret key value (rejecting placeholders,
-        insecure defaults, failing startup in production if unset) lives
-        in secret_rotator.web.secret_key.resolve_secret_key(), which
-        create_app() calls — this method just plumbs the raw value there.
         """
         flask_config = {}
 
@@ -215,16 +207,19 @@ class SecretRotationApp:
         if not web_enabled:
             return
         
+        # After
         web_port = settings.get("web.port", 8080)
         web_host = settings.get("web.host", "localhost")
+        web_threads = settings.get("web.threads", 8)
         flask_config = self._build_flask_config()
-        
+
         from secret_rotator.web import FlaskWebServer
         self.web_server = FlaskWebServer(
             self.engine,
             port=web_port,
             host=web_host,
             config=flask_config,
+            threads=web_threads,
         )
     
         self.engine.scheduler = self.scheduler
