@@ -5,13 +5,14 @@ from werkzeug.security import generate_password_hash
 
 from secret_rotator.rotation_engine import RotationEngine
 from secret_rotator.web.app import create_app
+from secret_rotator.web.rate_limit import limiter
 
 TEST_USERNAME = "testadmin"
 TEST_PASSWORD = "correct-horse-battery-staple"
 
 
 class TestAuthEnforcement(unittest.TestCase):
-    """Regression tests for S1: the dashboard and every API route were
+    """Regression tests: The dashboard and every API route were
     reachable with zero authentication."""
 
     @classmethod
@@ -50,6 +51,14 @@ class TestAuthEnforcement(unittest.TestCase):
         # so these tests can focus purely on auth semantics.
         app.config["WTF_CSRF_ENABLED"] = False
         self.client = app.test_client()
+        # The rate limiter is a module-level singleton shared
+        # across every create_app() call/test in this process, so its
+        # in-memory counters persist between tests unless cleared here.
+        # Without this, enough tests posting to /login or /api/rotate
+        # across this file (and test_csrf.py, which exercises the same
+        # routes) would eventually trip the real rate limit and start
+        # failing for reasons unrelated to what each test checks.
+        limiter.reset()
 
     def _login(self, username=TEST_USERNAME, password=TEST_PASSWORD):
         return self.client.post(

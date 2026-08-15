@@ -1,7 +1,7 @@
 """
 Health monitoring and backup verification endpoints.
 
-This blueprint provides endpoints for:
+This provides endpoints for:
 - Backup system health metrics
 - Verification history
 - Manual verification triggers
@@ -9,11 +9,13 @@ This blueprint provides endpoints for:
 
 from flask import Blueprint, jsonify, request, current_app
 from secret_rotator.utils.logger import logger
+from secret_rotator.web.rate_limit import limiter
 
 bp = Blueprint('health', __name__)
 
 
 @bp.route('/healthz')
+@limiter.exempt
 def healthz():
     """
     Minimal, unauthenticated liveness probe.
@@ -25,6 +27,12 @@ def healthz():
     any internal state — this is that endpoint. Keep it exempt from auth
     in web/auth.py's EXEMPT_ENDPOINTS, and keep it free of anything more
     revealing than a static "ok".
+
+    Exempt from rate limiting: orchestrator healthchecks poll
+    this every ~30s indefinitely by design (see the Dockerfile
+    HEALTHCHECK), and it does no real work, so there's no abuse case
+    to defend against here — only a false-positive "unhealthy"
+    container to avoid.
     """
     return jsonify({'status': 'ok'})
 
@@ -126,12 +134,17 @@ def verification_history():
 
 
 @bp.route('/run-verification', methods=['POST'])
+@limiter.limit("5 per minute")
 def run_verification():
     """
     Trigger manual backup verification.
     
     This endpoint initiates an immediate verification of all backups,
     independent of the scheduled verification time.
+
+    Rate limited to 5/minute per user — verification reads and
+    checksums every backup on disk, so it's not free to call in a
+    loop.
     
     Returns:
         JSON with verification report

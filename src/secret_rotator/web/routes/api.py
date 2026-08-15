@@ -14,6 +14,7 @@ from flask import Blueprint, jsonify, request, current_app, session
 from urllib.parse import unquote
 from secret_rotator.utils.logger import logger
 from secret_rotator.audit_log import audit_log
+from secret_rotator.web.rate_limit import limiter
 
 bp = Blueprint('api', __name__)
 
@@ -76,12 +77,21 @@ def jobs():
 
 
 @bp.route('/rotate', methods=['POST'])
+@limiter.limit("3 per minute")
 def rotate():
     """
     Trigger rotation of all configured secrets.
     
     This endpoint initiates immediate rotation of all jobs,
     regardless of their schedule. Use with caution.
+
+    Rate limited to 3/minute per user: this currently runs
+    every configured job synchronously in the request thread with a
+    1-second delay between each (see rotation_engine.rotate_all_secrets),
+    so even a single legitimate call can tie up resources for a while
+    on a system with many jobs — repeated calls make that much worse.
+    This limit is deliberately tight; once /api/rotate moves to a
+    background job (tracked separately), it can likely be relaxed.
     
     Returns:
         JSON with rotation results for each job
@@ -213,9 +223,14 @@ def backup_detail(backup_file):
 
 
 @bp.route('/restore', methods=['POST'])
+@limiter.limit("10 per minute")
 def restore():
     """
     Restore a secret from a backup.
+
+    Rate limited to 10/minute per user - restoring overwrites a
+    live secret with an old value, so this shouldn't be something a
+    script can loop on unnoticed.
     
     Request Body (JSON):
         {
