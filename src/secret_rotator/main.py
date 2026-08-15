@@ -187,6 +187,28 @@ class SecretRotationApp:
 
         logger.info("=" * 60)
 
+    def _build_flask_config(self):
+        """
+        Translate the `web.*` section of config.yaml into the Flask
+        config-key dict that create_app()/app.config.update() expects.
+
+        This is what was missing before: main.py constructed
+        FlaskWebServer without ever passing `config` through, so
+        `web.secret_key` (and any other Flask-facing setting) in
+        config.yaml had zero effect no matter what an operator set it to.
+        Actual validation of the secret key value (rejecting placeholders,
+        insecure defaults, failing startup in production if unset) lives
+        in secret_rotator.web.secret_key.resolve_secret_key(), which
+        create_app() calls — this method just plumbs the raw value there.
+        """
+        flask_config = {}
+
+        raw_secret_key = settings.get("web.secret_key")
+        if raw_secret_key:
+            flask_config["SECRET_KEY"] = raw_secret_key
+
+        return flask_config
+
     def _setup_web_server(self):
         """Simple Flask-only setup"""
         web_enabled = settings.get("web.enabled", True)
@@ -195,12 +217,14 @@ class SecretRotationApp:
         
         web_port = settings.get("web.port", 8080)
         web_host = settings.get("web.host", "localhost")
+        flask_config = self._build_flask_config()
         
         from secret_rotator.web import FlaskWebServer
         self.web_server = FlaskWebServer(
             self.engine,
             port=web_port,
-            host=web_host
+            host=web_host,
+            config=flask_config,
         )
     
         self.engine.scheduler = self.scheduler
@@ -581,6 +605,58 @@ class SecretRotationApp:
         print("=" * 60)
 
 
+def set_web_password():
+    """
+    Interactive CLI flow to set the web dashboard admin username/password
+    (S1). Writes web.auth.username and web.auth.password_hash into
+    config.yaml via the existing Settings.set()/save().
+
+    This intentionally lives outside SecretRotationApp — it doesn't need
+    the rotation engine, providers, or scheduler, just the config file.
+    """
+    import getpass
+
+    from secret_rotator.web.auth import hash_password
+
+    print("=" * 60)
+    print("Secret Rotator — set web dashboard admin credentials")
+    print("=" * 60)
+
+    default_username = settings.get("web.auth.username", "admin")
+    username = input(f"Username [{default_username}]: ").strip() or default_username
+
+    while True:
+        password = getpass.getpass("Password: ")
+        if len(password) < 8:
+            print("Password must be at least 8 characters. Try again.\n")
+            continue
+        confirm = getpass.getpass("Confirm password: ")
+        if password != confirm:
+            print("Passwords did not match. Try again.\n")
+            continue
+        break
+
+    password_hash = hash_password(password)
+
+    settings.set("web.auth.username", username)
+    settings.set("web.auth.password_hash", password_hash)
+
+    if settings.save():
+        print(f"\nSaved. '{username}' can now log in to the web dashboard.")
+        print(
+            "Alternatively, for containerized deployments, you can set "
+            "SECRET_ROTATOR_ADMIN_USERNAME / SECRET_ROTATOR_ADMIN_PASSWORD_HASH "
+            "as environment variables instead of writing to config.yaml — "
+            "those take priority if both are set."
+        )
+    else:
+        print(f"\nFailed to write config to {settings.config_path}.")
+        print("You can instead set these environment variables directly:")
+        print(f"  SECRET_ROTATOR_ADMIN_USERNAME={username}")
+        print(f"  SECRET_ROTATOR_ADMIN_PASSWORD_HASH={password_hash}")
+        sys.exit(1)
+
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
@@ -611,6 +687,9 @@ Examples:
 
   # Cleanup old backups
   secret-rotator --mode cleanup-backups
+
+  # Set (or change) the web dashboard admin password
+  secret-rotator --mode set-web-password
         """,
     )
 
@@ -625,6 +704,7 @@ Examples:
             "rotate-master-key",
             "cleanup-backups",
             "status",
+            "set-web-password",
         ],
         default="daemon",
         help="Run mode (default: daemon)",
@@ -650,6 +730,13 @@ Examples:
 
         logger.setLevel(logging.DEBUG)
         logger.info("Debug logging enabled")
+
+    # set-web-password doesn't need the full app (engine/providers/
+    # scheduler) — handle it standalone and exit before constructing
+    # SecretRotationApp.
+    if args.mode == "set-web-password":
+        set_web_password()
+        sys.exit(0)
 
     # Create and run app
     app = SecretRotationApp()

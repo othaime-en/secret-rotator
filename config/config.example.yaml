@@ -63,8 +63,29 @@ web:
   enable_flask_testing: false
 
   # Flask configuration
-  secret_key: "${FLASK_SECRET_KEY}"  # REQUIRED: Set via environment variable
+  # SECRET_KEY resolution (see src/secret_rotator/web/secret_key.py):
+  #   1. This value, if set to a real secret (not the placeholder below)
+  #   2. The FLASK_SECRET_KEY environment variable (recommended — avoids
+  #      putting the key in a file at all)
+  #   3. In dev/test: a random ephemeral key is generated automatically
+  #   4. In production (SECRET_ROTATOR_ENV=production): startup fails if
+  #      neither of the above is set, rather than falling back silently
+  # NOTE: this config loader does NOT do "${VAR}" environment-variable
+  # interpolation — leave this key unset and use FLASK_SECRET_KEY instead
+  # unless you're intentionally hardcoding a value here.
+  # secret_key: ""
   threaded: true  # Enable multi-threaded request handling
+
+  # Dashboard login (S1). Required before the dashboard is reachable —
+  # set with: secret-rotator --mode set-web-password
+  # (or set SECRET_ROTATOR_ADMIN_USERNAME / SECRET_ROTATOR_ADMIN_PASSWORD_HASH
+  # env vars instead, which take priority over these if both are present)
+  auth:
+    username: "admin"
+    # password_hash is a werkzeug generate_password_hash() value, never
+    # a plaintext password. Leave unset and the dashboard simply refuses
+    # all logins until you run the CLI command above.
+    # password_hash: ""
 
   # Security settings (for future use)
   # cors_enabled: false

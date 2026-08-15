@@ -5,7 +5,7 @@ This blueprint handles the main user interface, rendering
 Jinja2 templates for the dashboard and related pages.
 """
 
-from flask import Blueprint, render_template, current_app
+from flask import Blueprint, render_template, current_app, session
 from secret_rotator.utils.logger import logger
 
 bp = Blueprint('dashboard', __name__)
@@ -32,7 +32,7 @@ def index():
         'total_rotators': len(engine.rotators),
     }
     
-    return render_template('dashboard.html', stats=stats)
+    return render_template('dashboard.html', stats=stats, username=session.get('username'))
 
 
 @bp.route('/health')

@@ -58,9 +58,46 @@ class BackupManager:
             logger.error(f"Failed to create backup for {secret_id}: {e}")
             raise
 
+    def _resolve_backup_path(self, backup_file: str) -> Path:
+        """
+        Resolve a backup identifier to a path guaranteed to live inside
+        ``self.backup_dir``.
+
+        ``backup_file`` may be a bare filename (the normal case) or a full
+        path previously returned by this class (e.g. from ``create_backup``
+        or ``list_backups``). Regardless of what's passed in, the resolved,
+        absolute path must be contained within the backup directory —
+        otherwise this raises ``ValueError``. This prevents path traversal
+        (e.g. ``../../data/.master.key`` or an absolute path to an
+        arbitrary file) from being used to read files outside of backups,
+        which is especially critical here because these code paths are
+        reachable from unauthenticated HTTP requests.
+        """
+        backup_dir = self.backup_dir.resolve()
+
+        # Only ever consider the filename component of whatever we were
+        # given — this collapses "../../etc/passwd" and absolute paths
+        # like "/etc/passwd" down to a single path segment ("passwd"),
+        # so there is nothing left for ".." or a leading "/" to escape
+        # with once we join it back onto backup_dir below.
+        candidate_name = Path(backup_file).name
+        if not candidate_name or candidate_name in (".", ".."):
+            raise ValueError(f"Invalid backup file name: {backup_file!r}")
+
+        resolved = (backup_dir / candidate_name).resolve()
+
+        try:
+            resolved.relative_to(backup_dir)
+        except ValueError:
+            raise ValueError(
+                f"Backup path escapes backup directory: {backup_file!r}"
+            ) from None
+
+        return resolved
+
     def restore_backup(self, backup_file: str, decrypt: bool = True) -> Dict[str, Any]:
         """Load and optionally decrypt backup data for restoration"""
-        backup_path = Path(backup_file)
+        backup_path = self._resolve_backup_path(backup_file)
 
         if not backup_path.exists():
             raise FileNotFoundError(f"Backup file not found: {backup_file}")
