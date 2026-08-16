@@ -70,6 +70,10 @@ def create_app(rotation_engine, config=None):
     
     # Store rotation engine reference for access in routes
     app.rotation_engine = rotation_engine
+
+    # Background job tracker for POST /api/rotate 
+    from secret_rotator.web.job_manager import RotationJobManager
+    app.job_manager = RotationJobManager(rotation_engine)
     
     from .routes import dashboard_bp, api_bp, health_bp
     from .auth import bp as auth_bp, require_login, credentials_configured
@@ -88,7 +92,7 @@ def create_app(rotation_engine, config=None):
     csrf = CSRFProtect()
     csrf.init_app(app)
 
-    # Rate limiting (S10). See web/rate_limit.py for the key function
+    # Rate limiting. See web/rate_limit.py for the key function
     # and per-route limits applied in routes/api.py, routes/health.py,
     # and web/auth.py.
     limiter.init_app(app)
@@ -151,7 +155,7 @@ def register_error_handlers(app):
     @app.errorhandler(429)
     def rate_limit_exceeded(error):
         """
-        Handle rate limit breaches.
+        Handle rate limit breaches (S10).
 
         Flask-Limiter raises RateLimitExceeded (a 429 TooManyRequests
         subclass) when a request exceeds its configured limit — either
@@ -179,7 +183,12 @@ def register_error_handlers(app):
     @app.errorhandler(CSRFError)
     def csrf_error(error):
         """
-        Handle CSRF validation failures.
+        Handle CSRF validation failures (S4).
+
+        Most often caused by a session that expired between page load
+        and form submit, or a genuine cross-site request being blocked
+        — either way, never treat this as a normal 400 elsewhere in the
+        app that might leak stack details.
         """
         logger.warning(f"CSRF validation failed for {request.path}: {error.description}")
         
