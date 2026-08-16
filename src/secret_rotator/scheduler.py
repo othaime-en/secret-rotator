@@ -5,6 +5,7 @@ from typing import Callable
 from secret_rotator.utils.logger import logger
 from secret_rotator.config.settings import settings
 from secret_rotator.backup_manager import BackupManager, BackupIntegrityChecker
+from secret_rotator.rotation_engine import RotationInProgressError
 
 
 class RotationScheduler:
@@ -77,6 +78,15 @@ class RotationScheduler:
                 logger.info("Some rotations failed, verifying backup integrity")
                 self._verify_backup_integrity()
 
+        except RotationInProgressError:
+            # A manually-triggered rotation (e.g. the dashboard's
+            # "Rotate All" button) was already running when this tick
+            # fired. Skip this run rather than raising — the next
+            # scheduled tick will pick it back up.
+            logger.warning(
+                "Skipped scheduled rotation: a manually-triggered rotation "
+                "was already in progress"
+            )
         except Exception as e:
             logger.error(f"Error in scheduled rotation: {e}")
 
