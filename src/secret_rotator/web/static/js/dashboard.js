@@ -10,116 +10,237 @@ let tabs;
 /**
  * Initialize dashboard on page load
  */
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('Dashboard initializing...');
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("Dashboard initializing...");
 
-    api = new APIClient();
-    tabs = new TabManager('.tab-container');
+  api = new APIClient();
+  tabs = new TabManager(".tab-container");
 
-    loadJobs();
+  loadJobs();
 
-    console.log('Dashboard initialized');
+  console.log("Dashboard initialized");
 });
 
 /**
  * Load and display rotation jobs
  */
 async function loadJobs() {
-    const jobsDiv = document.getElementById('jobs');
+  const jobsDiv = document.getElementById("jobs");
 
-    if (!jobsDiv) {
-        console.error('Jobs container not found');
-        return;
-    }
+  if (!jobsDiv) {
+    console.error("Jobs container not found");
+    return;
+  }
 
-    jobsDiv.innerHTML = '<p class="loading">Loading jobs</p>';
+  jobsDiv.innerHTML = '<p class="loading">Loading jobs</p>';
 
-    try {
-        const data = await api.fetchJobs();
+  try {
+    const data = await api.fetchJobs();
 
-        if (data.jobs && data.jobs.length > 0) {
-            jobsDiv.innerHTML = data.jobs.map(job => `
+    if (data.jobs && data.jobs.length > 0) {
+      jobsDiv.innerHTML = data.jobs
+        .map(
+          (job) => `
                 <div class="job">
                     <strong>${escapeHtml(job.name)}</strong><br>
                     Provider: ${escapeHtml(job.provider)} | Rotator: ${escapeHtml(job.rotator)}<br>
                     Secret ID: <code>${escapeHtml(job.secret_id)}</code>
                 </div>
-            `).join('');
-        } else {
-            jobsDiv.innerHTML = '<div class="status info">No rotation jobs configured.</div>';
-        }
-    } catch (error) {
-        console.error('Error loading jobs:', error);
-        jobsDiv.innerHTML = `<div class="status error">Failed to load jobs: ${escapeHtml(error.message)}</div>`;
+            `,
+        )
+        .join("");
+    } else {
+      jobsDiv.innerHTML =
+        '<div class="status info">No rotation jobs configured.</div>';
     }
+  } catch (error) {
+    console.error("Error loading jobs:", error);
+    jobsDiv.innerHTML = `<div class="status error">Failed to load jobs: ${escapeHtml(error.message)}</div>`;
+  }
 }
 
 /**
- * Rotate all secrets with confirmation
+ * Rotate all secrets with confirmation.
+ *
+ * POST /api/rotate now starts a background job instead of running
+ * synchronously (roadmap Phase 2), so this polls GET
+ * /api/rotate/<job_id> for progress and final results instead of
+ * waiting on a single long-lived response. The button is disabled for
+ * the duration of the run so a user can't queue up multiple rotations
+ * by clicking repeatedly — matches the 409 "already running" response
+ * the server would give anyway, just resolved without a round trip.
  */
+let rotationPollHandle = null;
+
 async function rotateAll() {
-    if (!confirm('Are you sure you want to rotate all secrets? This action cannot be undone.')) {
-        return;
+  if (rotationPollHandle) {
+    // A rotation is already being tracked client-side; ignore
+    // extra clicks rather than starting a second poll loop.
+    return;
+  }
+
+  if (
+    !confirm(
+      "Are you sure you want to rotate all secrets? This action cannot be undone.",
+    )
+  ) {
+    return;
+  }
+
+  const statusDiv = document.getElementById("status");
+  const button = document.getElementById("rotateAllBtn");
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Rotating…";
+  }
+  statusDiv.innerHTML = '<div class="status info">Starting rotation…</div>';
+
+  try {
+    const job = await api.rotateAll();
+
+    if (job.already_running) {
+      statusDiv.innerHTML =
+        '<div class="status info">A rotation is already in progress — showing its status.</div>';
     }
 
-    const statusDiv = document.getElementById('status');
+    pollRotationJob(job.job_id);
+  } catch (error) {
+    console.error("Failed to start rotation:", error);
+    statusDiv.innerHTML = `<div class="status error">Failed to start rotation: ${escapeHtml(error.message)}</div>`;
+    resetRotateButton();
+  }
+}
 
-    statusDiv.innerHTML = '<div class="status info">Rotation in progress...</div>';
+/**
+ * Poll a rotation job until it reaches a terminal state, updating the
+ * status panel with live progress along the way.
+ */
+function pollRotationJob(jobId) {
+  const statusDiv = document.getElementById("status");
+  const POLL_INTERVAL_MS = 1500;
 
+  const tick = async () => {
+    let job;
     try {
-        const data = await api.rotateAll();
-        const results = data.results || {};
-        const successful = Object.values(results).filter(r => r).length;
-        const total = Object.keys(results).length;
+      job = await api.getRotationJob(jobId);
+    } catch (error) {
+      console.error("Error polling rotation job:", error);
+      statusDiv.innerHTML = `<div class="status error">Lost track of rotation progress: ${escapeHtml(error.message)}</div>`;
+      stopPolling();
+      resetRotateButton();
+      return;
+    }
 
-        const statusClass = successful === total ? 'success' : 'error';
+    renderRotationProgress(job);
 
-        statusDiv.innerHTML = `
-            <div class="status ${statusClass}">
-                Rotation complete: ${successful}/${total} successful
+    if (job.status === "completed" || job.status === "failed") {
+      stopPolling();
+      resetRotateButton();
+      logRotationOutcome(job);
+      setTimeout(loadJobs, 500);
+    }
+  };
+
+  function stopPolling() {
+    if (rotationPollHandle) {
+      clearInterval(rotationPollHandle);
+      rotationPollHandle = null;
+    }
+  }
+
+  tick(); // don't wait a full interval before the first update
+  rotationPollHandle = setInterval(tick, POLL_INTERVAL_MS);
+}
+
+function renderRotationProgress(job) {
+  const statusDiv = document.getElementById("status");
+  const { completed = 0, total = 0 } = job.progress || {};
+
+  if (job.status === "queued" || job.status === "running") {
+    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+    statusDiv.innerHTML = `
+            <div class="status info">
+                Rotating secrets… ${completed}/${total}
+                <div style="background:#e0e0e0;border-radius:4px;height:6px;margin-top:6px;overflow:hidden;">
+                    <div style="background:#28a745;height:100%;width:${pct}%;transition:width .3s ease;"></div>
+                </div>
             </div>
         `;
+    return;
+  }
 
-        // Show detailed results in logs
-        const logs = Object.entries(results)
-            .map(([job, success]) => `[${new Date().toLocaleTimeString()}] ${job}: ${success ? 'SUCCESS' : 'FAILED'}`)
-            .join('\n');
-        addLog(logs);
+  if (job.status === "failed") {
+    statusDiv.innerHTML = `<div class="status error">Rotation failed: ${escapeHtml(job.error || "unknown error")}</div>`;
+    return;
+  }
 
-        // Reload jobs after rotation
-        setTimeout(loadJobs, 1000);
+  // completed
+  const results = job.results || {};
+  const successful = Object.values(results).filter((r) => r).length;
+  const finishedTotal = Object.keys(results).length;
+  const statusClass =
+    finishedTotal === 0 || successful === finishedTotal ? "success" : "error";
 
-    } catch (error) {
-        console.error('Rotation error:', error);
-        statusDiv.innerHTML = `<div class="status error">Error during rotation: ${escapeHtml(error.message)}</div>`;
-    }
+  statusDiv.innerHTML = `
+        <div class="status ${statusClass}">
+            Rotation complete: ${successful}/${finishedTotal} successful
+        </div>
+    `;
+}
+
+function logRotationOutcome(job) {
+  if (job.status === "failed") {
+    addLog(`Rotation failed: ${job.error || "unknown error"}`);
+    return;
+  }
+
+  const results = job.results || {};
+  const logs = Object.entries(results)
+    .map(
+      ([name, success]) =>
+        `[${new Date().toLocaleTimeString()}] ${name}: ${success ? "SUCCESS" : "FAILED"}`,
+    )
+    .join("\n");
+  if (logs) {
+    addLog(logs);
+  }
+}
+
+function resetRotateButton() {
+  const button = document.getElementById("rotateAllBtn");
+  if (button) {
+    button.disabled = false;
+    button.textContent = "Rotate All Secrets";
+  }
 }
 
 /**
  * Load and display backups
  */
 async function loadBackups() {
-    const backupsDiv = document.getElementById('backups');
-    const secretFilter = document.getElementById('secretFilter');
-    const secretId = secretFilter ? secretFilter.value.trim() : null;
+  const backupsDiv = document.getElementById("backups");
+  const secretFilter = document.getElementById("secretFilter");
+  const secretId = secretFilter ? secretFilter.value.trim() : null;
 
-    if (!backupsDiv) {
-        console.error('Backups container not found');
-        return;
-    }
+  if (!backupsDiv) {
+    console.error("Backups container not found");
+    return;
+  }
 
-    backupsDiv.innerHTML = '<p class="loading">Loading backups</p>';
+  backupsDiv.innerHTML = '<p class="loading">Loading backups</p>';
 
-    try {
-        const data = await api.fetchBackups(secretId);
+  try {
+    const data = await api.fetchBackups(secretId);
 
-        if (data.backups && data.backups.length > 0) {
-            backupsDiv.innerHTML = data.backups.map(backup => {
-                const encodedPath = encodeURIComponent(backup.backup_file);
-                const created = new Date(backup.backup_created).toLocaleString();
-                const fileName = backup.backup_file.split('/').pop();
+    if (data.backups && data.backups.length > 0) {
+      backupsDiv.innerHTML = data.backups
+        .map((backup) => {
+          const encodedPath = encodeURIComponent(backup.backup_file);
+          const created = new Date(backup.backup_created).toLocaleString();
+          const fileName = backup.backup_file.split("/").pop();
 
-                return `
+          return `
                     <div class="backup">
                         <div class="backup-item">
                             <div class="backup-info">
@@ -134,175 +255,189 @@ async function loadBackups() {
                         </div>
                     </div>
                 `;
-            }).join('');
-        } else {
-            backupsDiv.innerHTML = '<div class="status info">No backups found.</div>';
-        }
-    } catch (error) {
-        console.error('Error loading backups:', error);
-        backupsDiv.innerHTML = `<div class="status error">Error loading backups: ${escapeHtml(error.message)}</div>`;
+        })
+        .join("");
+    } else {
+      backupsDiv.innerHTML = '<div class="status info">No backups found.</div>';
     }
+  } catch (error) {
+    console.error("Error loading backups:", error);
+    backupsDiv.innerHTML = `<div class="status error">Error loading backups: ${escapeHtml(error.message)}</div>`;
+  }
 }
 
 /**
  * View backup details
  */
 async function viewBackup(encodedBackupFile) {
-    try {
-        const data = await api.fetchBackupDetail(decodeURIComponent(encodedBackupFile));
+  try {
+    const data = await api.fetchBackupDetail(
+      decodeURIComponent(encodedBackupFile),
+    );
 
-        const details = `
+    const details = `
 Secret ID: ${data.secret_id}
 Timestamp: ${new Date(data.backup_created).toLocaleString()}
-Old Value: ${data.old_value || '(masked)'}
-New Value: ${data.new_value || '(masked)'}
-Encrypted: ${data.encrypted ? 'Yes' : 'No'}
+Old Value: ${data.old_value || "(masked)"}
+New Value: ${data.new_value || "(masked)"}
+Encrypted: ${data.encrypted ? "Yes" : "No"}
         `.trim();
 
-        alert('Backup Details:\n\n' + details);
-    } catch (error) {
-        console.error('Error viewing backup:', error);
-        alert('Error viewing backup details: ' + error.message);
-    }
+    alert("Backup Details:\n\n" + details);
+  } catch (error) {
+    console.error("Error viewing backup:", error);
+    alert("Error viewing backup details: " + error.message);
+  }
 }
 
 /**
  * Confirm and restore backup
  */
 function confirmRestore(backupFile, secretId) {
-    if (confirm(`Are you sure you want to restore the backup for "${secretId}"?\n\nThis will replace the current secret value with the old value from the backup.`)) {
-        restoreBackup(backupFile);
-    }
+  if (
+    confirm(
+      `Are you sure you want to restore the backup for "${secretId}"?\n\nThis will replace the current secret value with the old value from the backup.`,
+    )
+  ) {
+    restoreBackup(backupFile);
+  }
 }
 
 /**
  * Restore backup
  */
 async function restoreBackup(backupFile) {
-    const statusDiv = document.getElementById('status');
+  const statusDiv = document.getElementById("status");
 
-    statusDiv.innerHTML = '<div class="status info">Restoring backup...</div>';
+  statusDiv.innerHTML = '<div class="status info">Restoring backup...</div>';
 
-    try {
-        const data = await api.restoreBackup(backupFile);
+  try {
+    const data = await api.restoreBackup(backupFile);
 
-        if (data.success) {
-            statusDiv.innerHTML = `<div class="status success">Successfully restored backup for ${escapeHtml(data.secret_id)}</div>`;
-            addLog(`Restored backup for ${data.secret_id}`);
+    if (data.success) {
+      statusDiv.innerHTML = `<div class="status success">Successfully restored backup for ${escapeHtml(data.secret_id)}</div>`;
+      addLog(`Restored backup for ${data.secret_id}`);
 
-            // Reload backups
-            setTimeout(loadBackups, 1000);
-        } else {
-            statusDiv.innerHTML = `<div class="status error">Failed to restore backup: ${escapeHtml(data.error)}</div>`;
-        }
-    } catch (error) {
-        console.error('Error during restoration:', error);
-        statusDiv.innerHTML = `<div class="status error">Error during restoration: ${escapeHtml(error.message)}</div>`;
+      // Reload backups
+      setTimeout(loadBackups, 1000);
+    } else {
+      statusDiv.innerHTML = `<div class="status error">Failed to restore backup: ${escapeHtml(data.error)}</div>`;
     }
+  } catch (error) {
+    console.error("Error during restoration:", error);
+    statusDiv.innerHTML = `<div class="status error">Error during restoration: ${escapeHtml(error.message)}</div>`;
+  }
 }
 
 /**
  * Load backup health metrics
  */
 async function loadBackupHealth() {
-    const healthDiv = document.getElementById('health-status');
+  const healthDiv = document.getElementById("health-status");
 
-    if (!healthDiv) {
-        console.error('Health status container not found');
-        return;
-    }
+  if (!healthDiv) {
+    console.error("Health status container not found");
+    return;
+  }
 
-    healthDiv.innerHTML = '<p class="loading">Loading health metrics</p>';
+  healthDiv.innerHTML = '<p class="loading">Loading health metrics</p>';
 
-    try {
-        const data = await api.fetchBackupHealth();
+  try {
+    const data = await api.fetchBackupHealth();
 
-        let statusClass = 'info';
-        if (data.status === 'healthy') statusClass = 'success';
-        if (data.status === 'warning' || data.status === 'critical') statusClass = 'error';
+    let statusClass = "info";
+    if (data.status === "healthy") statusClass = "success";
+    if (data.status === "warning" || data.status === "critical")
+      statusClass = "error";
 
-        healthDiv.innerHTML = `
+    healthDiv.innerHTML = `
             <div class="status ${statusClass}">
-                <h3>Status: ${escapeHtml(data.status || 'Unknown').toUpperCase()}</h3>
+                <h3>Status: ${escapeHtml(data.status || "Unknown").toUpperCase()}</h3>
                 <div style="margin-top: 10px;">
                     <strong>Success Rate:</strong> ${data.success_rate || 0}%<br>
                     <strong>Total Backups:</strong> ${data.total_backups || 0}<br>
                     <strong>Verified:</strong> ${data.verified || 0}<br>
                     <strong>Failed:</strong> ${data.failed || 0}<br>
-                    ${data.last_verification ? `<strong>Last Verification:</strong> ${new Date(data.last_verification).toLocaleString()}<br>` : ''}
+                    ${data.last_verification ? `<strong>Last Verification:</strong> ${new Date(data.last_verification).toLocaleString()}<br>` : ""}
                 </div>
             </div>
         `;
-    } catch (error) {
-        console.error('Error loading backup health:', error);
-        healthDiv.innerHTML = `<div class="status error">Error loading backup health: ${escapeHtml(error.message)}</div>`;
-    }
+  } catch (error) {
+    console.error("Error loading backup health:", error);
+    healthDiv.innerHTML = `<div class="status error">Error loading backup health: ${escapeHtml(error.message)}</div>`;
+  }
 }
 
 /**
  * Run verification now
  */
 async function runVerificationNow() {
-    if (!confirm('Run backup verification now? This may take a few minutes.')) {
-        return;
-    }
+  if (!confirm("Run backup verification now? This may take a few minutes.")) {
+    return;
+  }
 
-    const healthDiv = document.getElementById('health-status');
-    healthDiv.innerHTML = '<div class="status info">Running verification...</div>';
+  const healthDiv = document.getElementById("health-status");
+  healthDiv.innerHTML =
+    '<div class="status info">Running verification...</div>';
 
-    try {
-        const data = await api.runVerification();
+  try {
+    const data = await api.runVerification();
 
-        if (data.success) {
-            const report = data.report;
-            healthDiv.innerHTML = `
+    if (data.success) {
+      const report = data.report;
+      healthDiv.innerHTML = `
                 <div class="status success">
                     <h3>Verification Complete</h3>
                     <div style="margin-top: 10px;">
                         <strong>Total Backups:</strong> ${report.total_backups}<br>
                         <strong>Verified:</strong> ${report.verified}<br>
                         <strong>Failed:</strong> ${report.failed}<br>
-                        ${report.failed > 0 ? '<br><strong style="color: red;">⚠️ Some backups failed verification!</strong>' : ''}
+                        ${report.failed > 0 ? '<br><strong style="color: red;">⚠️ Some backups failed verification!</strong>' : ""}
                     </div>
                 </div>
             `;
 
-            // Reload health metrics
-            setTimeout(loadBackupHealth, 2000);
-        } else {
-            healthDiv.innerHTML = '<div class="status error">Verification failed</div>';
-        }
-    } catch (error) {
-        console.error('Error running verification:', error);
-        healthDiv.innerHTML = `<div class="status error">Error running verification: ${escapeHtml(error.message)}</div>`;
+      // Reload health metrics
+      setTimeout(loadBackupHealth, 2000);
+    } else {
+      healthDiv.innerHTML =
+        '<div class="status error">Verification failed</div>';
     }
+  } catch (error) {
+    console.error("Error running verification:", error);
+    healthDiv.innerHTML = `<div class="status error">Error running verification: ${escapeHtml(error.message)}</div>`;
+  }
 }
 
 /**
  * Load verification history
  */
 async function loadVerificationHistory() {
-    const historyDiv = document.getElementById('verification-history');
+  const historyDiv = document.getElementById("verification-history");
 
-    if (!historyDiv) {
-        console.error('Verification history container not found');
-        return;
-    }
+  if (!historyDiv) {
+    console.error("Verification history container not found");
+    return;
+  }
 
-    historyDiv.innerHTML = '<p class="loading">Loading verification history</p>';
+  historyDiv.innerHTML = '<p class="loading">Loading verification history</p>';
 
-    try {
-        const data = await api.fetchVerificationHistory(7);
+  try {
+    const data = await api.fetchVerificationHistory(7);
 
-        if (data.history && data.history.length > 0) {
-            let html = '<table><thead><tr><th>Date</th><th>Total</th><th>Verified</th><th>Failed</th><th>Success Rate</th></tr></thead><tbody>';
+    if (data.history && data.history.length > 0) {
+      let html =
+        "<table><thead><tr><th>Date</th><th>Total</th><th>Verified</th><th>Failed</th><th>Success Rate</th></tr></thead><tbody>";
 
-            data.history.forEach(report => {
-                const successRate = ((report.verified / report.total_backups) * 100).toFixed(1);
-                const statusColor = successRate >= 95 ? '#28a745' : '#dc3545';
-                const timestamp = new Date(report.timestamp).toLocaleString();
+      data.history.forEach((report) => {
+        const successRate = (
+          (report.verified / report.total_backups) *
+          100
+        ).toFixed(1);
+        const statusColor = successRate >= 95 ? "#28a745" : "#dc3545";
+        const timestamp = new Date(report.timestamp).toLocaleString();
 
-                html += `
+        html += `
                     <tr>
                         <td>${timestamp}</td>
                         <td>${report.total_backups}</td>
@@ -311,51 +446,53 @@ async function loadVerificationHistory() {
                         <td style="color: ${statusColor}; font-weight: bold;">${successRate}%</td>
                     </tr>
                 `;
-            });
+      });
 
-            html += '</tbody></table>';
-            historyDiv.innerHTML = html;
-        } else {
-            historyDiv.innerHTML = '<div class="status info">No verification history available</div>';
-        }
-    } catch (error) {
-        console.error('Error loading verification history:', error);
-        historyDiv.innerHTML = `<div class="status error">Error loading history: ${escapeHtml(error.message)}</div>`;
+      html += "</tbody></table>";
+      historyDiv.innerHTML = html;
+    } else {
+      historyDiv.innerHTML =
+        '<div class="status info">No verification history available</div>';
     }
+  } catch (error) {
+    console.error("Error loading verification history:", error);
+    historyDiv.innerHTML = `<div class="status error">Error loading history: ${escapeHtml(error.message)}</div>`;
+  }
 }
 
 /**
  * Add log entry
  */
 function addLog(message) {
-    const logsDiv = document.getElementById('logs');
+  const logsDiv = document.getElementById("logs");
 
-    if (!logsDiv) {
-        console.error('Logs container not found');
-        return;
-    }
+  if (!logsDiv) {
+    console.error("Logs container not found");
+    return;
+  }
 
-    const timestamp = new Date().toLocaleTimeString();
-    logsDiv.innerHTML = `[${timestamp}] ${escapeHtml(message)}\n` + logsDiv.innerHTML;
+  const timestamp = new Date().toLocaleTimeString();
+  logsDiv.innerHTML =
+    `[${timestamp}] ${escapeHtml(message)}\n` + logsDiv.innerHTML;
 }
 
 /**
  * Escape HTML to prevent XSS
  */
 function escapeHtml(text) {
-    if (typeof text !== 'string') {
-        return text;
-    }
+  if (typeof text !== "string") {
+    return text;
+  }
 
-    const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-    };
+  const map = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  };
 
-    return text.replace(/[&<>"']/g, m => map[m]);
+  return text.replace(/[&<>"']/g, (m) => map[m]);
 }
 
 window.loadJobs = loadJobs;

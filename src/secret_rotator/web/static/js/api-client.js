@@ -2,8 +2,8 @@
  * API Client for Secret Rotation Dashboard
  *
  * Provides methods to interact with the Flask backend API.
- * All methods return Promises that resolve to JSON data.
- *
+ * All methods return Promises that resolve to JSON data (or reject
+ * with an Error carrying the server's error message).
  */
 
 class APIClient {
@@ -23,161 +23,29 @@ class APIClient {
   }
 
   /**
-   * Fetch system status
-   * @returns {Promise<Object>} Status data
-   */
-  async fetchStatus() {
-    const response = await fetch(`${this.baseURL}/api/status`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: Failed to fetch status`);
-    }
-    return response.json();
-  }
-
-  /**
-   * Fetch all rotation jobs
-   * @returns {Promise<Object>} Jobs data
-   */
-  async fetchJobs() {
-    const response = await fetch(`${this.baseURL}/api/jobs`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: Failed to fetch jobs`);
-    }
-    return response.json();
-  }
-
-  /**
-   * Trigger rotation of all secrets
-   * @returns {Promise<Object>} Rotation results
-   */
-  async rotateAll() {
-    const response = await fetch(`${this.baseURL}/api/rotate`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: Rotation failed`);
-    }
-    return response.json();
-  }
-
-  /**
-   * Fetch backups list
-   * @param {string|null} secretId - Optional filter by secret ID
-   * @returns {Promise<Object>} Backups data
-   */
-  async fetchBackups(secretId = null) {
-    const url = secretId
-      ? `${this.baseURL}/api/backups?secret_id=${encodeURIComponent(secretId)}`
-      : `${this.baseURL}/api/backups`;
-
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: Failed to fetch backups`);
-    }
-    return response.json();
-  }
-
-  /**
-   * Fetch backup detail
-   * @param {string} backupFile - Path to backup file
-   * @returns {Promise<Object>} Backup details
-   */
-  async fetchBackupDetail(backupFile) {
-    const response = await fetch(
-      `${this.baseURL}/api/backups/${encodeURIComponent(backupFile)}`,
-    );
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: Failed to fetch backup detail`);
-    }
-    return response.json();
-  }
-
-  /**
-   * Restore a backup
-   * @param {string} backupFile - Path to backup file
-   * @returns {Promise<Object>} Restoration result
-   */
-  async restoreBackup(backupFile) {
-    const response = await fetch(`${this.baseURL}/api/restore`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ backup_file: backupFile }),
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: Restore failed`);
-    }
-    return response.json();
-  }
-
-  /**
-   * Fetch backup health metrics
-   * @returns {Promise<Object>} Health data
-   */
-  async fetchBackupHealth() {
-    const response = await fetch(`${this.baseURL}/api/backup-health`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: Failed to fetch backup health`);
-    }
-    return response.json();
-  }
-
-  /**
-   * Fetch verification history
-   * @param {number} days - Number of days to fetch
-   * @returns {Promise<Object>} Verification history
-   */
-  async fetchVerificationHistory(days = 7) {
-    const response = await fetch(
-      `${this.baseURL}/api/verification-history?days=${days}`,
-    );
-    if (!response.ok) {
-      throw new Error(
-        `HTTP ${response.status}: Failed to fetch verification history`,
-      );
-    }
-    return response.json();
-  }
-
-  /**
-   * Trigger manual backup verification
-   * @returns {Promise<Object>} Verification report
-   */
-  async runVerification() {
-    const response = await fetch(`${this.baseURL}/api/run-verification`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: Verification failed`);
-    }
-    return response.json();
-  }
-
-  /**
-   * Handle fetch response
+   * Shared response handler: parses the JSON body and throws an Error
+   * (carrying .status and .body) for any non-2xx response.
    */
   async _handleResponse(response) {
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = `HTTP ${response.status}`;
-
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.error || errorData.message || errorMessage;
-      } catch (e) {
-        errorMessage = errorText || errorMessage;
-      }
-
-      throw new Error(errorMessage);
+    let body = null;
+    try {
+      body = await response.json();
+    } catch (e) {
+      // Non-JSON body — shouldn't normally happen, every route here
+      // returns JSON — but don't let a parse error mask the real
+      // HTTP error status below.
     }
-    return response.json();
+
+    if (!response.ok) {
+      const message =
+        (body && (body.error || body.message)) || `HTTP ${response.status}`;
+      const error = new Error(message);
+      error.status = response.status;
+      error.body = body;
+      throw error;
+    }
+
+    return body;
   }
 
   async fetchStatus() {
@@ -190,11 +58,42 @@ class APIClient {
     return this._handleResponse(response);
   }
 
+  /**
+   * Start a background rotation of all secrets.
+   *
+   * The server responds immediately (202) with a job id rather than
+   * waiting for rotation to finish — poll getRotationJob(jobId) for
+   * progress and the final result.
+   *
+   * If a rotation is already in flight, the server responds 409 with
+   * that job's id instead of starting a second one. That's treated as
+   * a normal (non-throwing) result here too, with already_running
+   * set on the returned object, since the caller almost always just
+   * wants a job id to poll — whichever rotation is actually running.
+   *
+   * @returns {Promise<Object>} Job info: { job_id, status, progress, already_running?, ... }
+   */
   async rotateAll() {
     const response = await fetch(`${this.baseURL}/api/rotate`, {
       method: "POST",
       headers: this._csrfHeaders({ "Content-Type": "application/json" }),
     });
+
+    if (response.status === 202 || response.status === 409) {
+      return response.json();
+    }
+    return this._handleResponse(response);
+  }
+
+  /**
+   * Poll the status of a background rotation job started by rotateAll().
+   * @param {string} jobId
+   * @returns {Promise<Object>} Job info: { job_id, status, progress, results, error, ... }
+   */
+  async getRotationJob(jobId) {
+    const response = await fetch(
+      `${this.baseURL}/api/rotate/${encodeURIComponent(jobId)}`,
+    );
     return this._handleResponse(response);
   }
 
