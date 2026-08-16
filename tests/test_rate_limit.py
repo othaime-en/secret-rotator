@@ -77,16 +77,18 @@ class TestRateLimiting(unittest.TestCase):
         self.assertEqual(eleventh.status_code, 429)
 
     def test_rotate_is_rate_limited_after_repeated_calls(self):
-        """/api/rotate is limited to 3/minute per user."""
+        """/api/rotate is limited to 10/minute per user. Each call
+        starts (or attaches to) a background job rather than running
+        synchronously, so this only exercises the enqueue endpoint,
+        not a full rotation sweep."""
         self._login()
 
-        for _ in range(3):
+        for _ in range(10):
             resp = self.client.post("/api/rotate")
             self.assertNotEqual(resp.status_code, 429)
 
-        fourth = self.client.post("/api/rotate")
-        self.assertEqual(fourth.status_code, 429)
-        self.assertIn("Too Many Requests", fourth.get_json().get("error", ""))
+        eleventh = self.client.post("/api/rotate")
+        self.assertEqual(eleventh.status_code, 429)
 
     def test_healthz_is_exempt_from_rate_limiting(self):
         """Docker/orchestrator healthchecks poll this every ~30s

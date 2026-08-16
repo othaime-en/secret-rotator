@@ -15,8 +15,7 @@ CSRF_META_RE = re.compile(r'<meta name="csrf-token" content="([^"]+)">')
 
 
 class TestCSRFProtection(unittest.TestCase):
-    """Regression tests for CSRF protection —
-    once we added sessions, that meant any authenticated admin's
+    """The login form had no CSRF protection - that meant any authenticated admin's
     browser could be tricked by a malicious page into rotating or
     restoring secrets without their knowledge."""
 
@@ -54,7 +53,7 @@ class TestCSRFProtection(unittest.TestCase):
         # doesn't send, so it doesn't interfere here.
         self.client = app.test_client()
         # See test_auth.py's setUp for why this is necessary: the rate
-        # limiter is a shared singleton across every test in this
+        # limiter (S10) is a shared singleton across every test in this
         # process, and this file alone makes enough /login and
         # /api/rotate requests to trip real limits without a reset.
         limiter.reset()
@@ -113,7 +112,12 @@ class TestCSRFProtection(unittest.TestCase):
         resp = self.client.post(
             "/api/rotate", headers={"X-CSRFToken": token}
         )
-        self.assertEqual(resp.status_code, 200)
+        # 202 Accepted: /api/rotate now starts a background job rather
+        # than rotating synchronously (roadmap Phase 2). The point of
+        # this test is that a valid CSRF token gets past CSRF checks,
+        # not the exact success status — 202 vs the old 200 either way
+        # confirms CSRF didn't reject it (that's a 400, tested above).
+        self.assertEqual(resp.status_code, 202)
 
     def test_restore_without_csrf_token_is_rejected(self):
         self._login()
