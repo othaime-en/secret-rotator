@@ -1,4 +1,3 @@
-import threading
 import time
 from typing import Callable, Dict, List, Any, Optional
 from secret_rotator.providers.base import SecretProvider
@@ -8,25 +7,26 @@ from secret_rotator.utils.retry import retry_with_backoff
 from secret_rotator.backup_manager import BackupManager
 from secret_rotator.config.settings import settings
 from secret_rotator.audit_log import audit_log
+from secret_rotator.distributed_lock import distributed_lock, LockAcquisitionError
 
 
 class RotationInProgressError(Exception):
     """
     Raised by rotate_all_secrets() when a previous call is still
-    running.
+    running — either in this process, or in another instance entirely.
 
     RotationEngine only ever runs one full "rotate everything" sweep
-    at a time, in-process, regardless of what triggered it — the web
-    dashboard's manual "Rotate All" button, the background scheduler's
-    periodic run, or a CLI --run-once invocation all go through this
-    same guard. Before this, those paths had no coordination at all:
-    a manual trigger firing while the scheduler's own run was
-    mid-flight (or two manual triggers in quick succession) could
-    race on the same jobs.
+    at a time, regardless of what triggered it — the web dashboard's
+    manual "Rotate All" button, the background scheduler's periodic
+    run, or a CLI --run-once invocation all go through this same
+    guard. Before this, those paths had no coordination at all: a
+    manual trigger firing while the scheduler's own run was mid-flight
+    (or two manual triggers in quick succession) could race on the
+    same jobs.
 
-    This is an in-process lock only — it does not coordinate across
-    multiple instances of the app running at once. That's tracked
-    separately.
+    See distributed_lock.py for the underlying mechanism: this is a
+    Redis-backed lock across instances when `distributed.enabled` is
+    true, and falls back to a plain in-process lock otherwise.
     """
     pass
 
@@ -42,8 +42,16 @@ class RotationEngine:
             backup_dir=settings.get("providers.file_storage.backup_path", "data/backup")
         )  # Use config or default
         # Guards "one full rotate_all_secrets() sweep at a time" —
-        # see RotationInProgressError above for why.
-        self._rotation_lock = threading.Lock()
+        # see RotationInProgressError above for why. blocking_timeout=0
+        # preserves the original fail-fast behavior (immediately raise
+        # rather than queue behind an in-flight sweep); `timeout` is
+        # generous since a large job list can legitimately take a
+        # while (1s sleep between jobs alone adds up).
+        self._rotation_lock = distributed_lock(
+            "rotation-sweep",
+            timeout=settings.get("distributed.rotation_lock_timeout", 3600),
+            blocking_timeout=0,
+        )
 
     def register_provider(self, provider: SecretProvider):
         self.providers[provider.name] = provider
@@ -74,7 +82,7 @@ class RotationEngine:
             job_config: the rotation job definition.
             actor: who triggered this — a dashboard username, or
                 "system" for scheduler/CLI-triggered rotations. Recorded
-                in the audit log (S5).
+                in the audit log.
         """
         job_name = job_config["name"]
         provider_name = job_config["provider"]
@@ -183,7 +191,7 @@ class RotationEngine:
 
         Args:
             actor: who triggered this batch — passed through to each
-                rotate_secret() call for the audit log (S5).
+                rotate_secret() call for the audit log.
             on_job_complete: optional callback invoked after each
                 individual job finishes, as
                 on_job_complete(job_name, success, completed_count, total_count).
@@ -197,13 +205,16 @@ class RotationEngine:
         Raises:
             RotationInProgressError: if another call to this method
                 (from any source — manual API trigger, the scheduler,
-                a CLI run) is already in progress in this process.
+                a CLI run) is already in progress in this process, or
+                (with `distributed.enabled: true`) in another instance.
         """
-        if not self._rotation_lock.acquire(blocking=False):
+        try:
+            self._rotation_lock.acquire()
+        except LockAcquisitionError as e:
             raise RotationInProgressError(
-                "A full rotation sweep is already running in this process; "
-                "try again once it finishes."
-            )
+                f"A full rotation sweep is already running elsewhere; "
+                f"try again once it finishes. ({e})"
+            ) from e
 
         try:
             results = {}
@@ -234,3 +245,21 @@ class RotationEngine:
             return results
         finally:
             self._rotation_lock.release()
+
+    def is_rotation_in_progress(self) -> bool:
+        """Non-blocking check for whether a sweep is currently running
+        — locally, or (with `distributed.enabled: true`) anywhere. Used
+        by callers (e.g. the scheduler, before its own periodic run)
+        that want to skip cleanly rather than trigger and immediately
+        hit RotationInProgressError."""
+        probe = distributed_lock(
+            "rotation-sweep",
+            timeout=settings.get("distributed.rotation_lock_timeout", 3600),
+            blocking_timeout=0,
+        )
+        try:
+            probe.acquire()
+        except LockAcquisitionError:
+            return True
+        probe.release()
+        return False
