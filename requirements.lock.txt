@@ -670,9 +670,9 @@ pymongo==4.15.5 \
     --hash=sha256:f043abdf20845bf29a554e95e4fe18d7d7a463095d6a1547699a12f80da91e02 \
     --hash=sha256:f22eeb86861cf7b8ee6886361d52abb88e3cd96c6f6d102e45e2604fc6e9e316
     # via -r requirements.txt
-pyshamir==1.0.4 \
-    --hash=sha256:69f9ab0277ed1fc7de99a52f5373619efae0355d54ba75d049ea694c463d9bc8 \
-    --hash=sha256:971fa89a054f351afb3ac788e25c845486ebe0a200ea0d570beec4ca81c73b24
+pyshamir==1.1.0 \
+    --hash=sha256:c99eab3eb50e0c8eca654f776acdf832534b717adb9e0d9127a60a0432c160f5 \
+    --hash=sha256:e4446174d0d0195f8d4fdd7f972917aeacbff9828f1f97cf89bce58edd8260e1
     # via -r requirements.txt
 pyyaml==6.0.3 \
     --hash=sha256:00c4bdeba853cc34e7dd471f16b4114f4162dc03e6b7afcc2128711f0eca823c \
