@@ -208,10 +208,50 @@ backup:
   # Master key backups stored in data volume (not read-only config)
   key_backups_path: "data/key_backups/"
 
-  # Remote backup (optional)
+  # Remote backup (optional). S3-compatible: works against AWS S3 and
+  # any S3-compatible endpoint (MinIO, Cloudflare R2, etc.) — set
+  # `endpoint_url` for non-AWS providers, leave it unset for AWS S3.
   remote_backup:
     enabled: false
-    type: "s3" # s3, azure_blob, gcs
+    type: "s3" # currently only "s3" (S3-compatible) is implemented
     bucket: "my-secret-backups"
     region: "us-east-1"
     prefix: "rotator/backups/"
+    # Leave unset for AWS S3. Set for S3-compatible providers, e.g.:
+    #   MinIO:            "https://minio.example.com"
+    #   Cloudflare R2:     "https://<account_id>.r2.cloudflarestorage.com"
+    endpoint_url: ""
+    # Credentials: leave unset to use the standard AWS credential chain
+    # (env vars, ~/.aws/credentials, instance/task role, etc.) — this
+    # is the recommended approach so keys never sit in this file.
+    # Only set these directly for non-AWS providers without their own
+    # credential-chain support, and prefer environment variables
+    # (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) over hardcoding here.
+    # access_key_id: ""
+    # secret_access_key: ""
+    # Upload a copy of every local backup as soon as it's created, in
+    # addition to periodic bulk sync. Off by default so enabling
+    # remote_backup doesn't silently add network calls to the
+    # rotation hot path until you're ready for it.
+    upload_on_create: false
+
+# Distributed coordination. Required once you run more than
+# one instance of secret-rotator at a time — the in-process lock used
+# automatically when this is disabled only protects against races
+# *within* one process, not across instances.
+distributed:
+  enabled: false
+  # Redis connection string. The REDIS_URL environment variable takes
+  # priority over this if both are set (same precedence pattern as
+  # web.secret_key / FLASK_SECRET_KEY elsewhere in this file) — prefer
+  # the env var so connection strings with embedded credentials don't
+  # sit in this file.
+  redis_url: "redis://localhost:6379/0"
+  # Seconds the master-key-rotation lock is held before Redis expires
+  # it automatically — a safety net if the holder crashes mid-rotation.
+  # Should comfortably exceed your slowest realistic rotation run.
+  master_key_lock_timeout: 600
+  # Same idea for a full rotate_all_secrets() sweep. Default assumes
+  # up to ~3500 jobs at the current 1s-per-job pacing; lower it if you
+  # have far fewer jobs and want a stuck sweep to free the lock sooner.
+  rotation_lock_timeout: 3600

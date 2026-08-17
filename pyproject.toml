@@ -52,7 +52,8 @@ databases = [
     "mysql-connector-python>=9.4.0",
 ]
 advanced = ["PyJWT>=2.13.0", "pyshamir>=1.0.4", "Requests>=2.32.5"]
-all = ["secret-rotator[dev,databases,advanced]"]
+distributed = ["redis>=5.0.0", "rq>=2.0.0", "boto3>=1.34.0"]
+all = ["secret-rotator[dev,databases,advanced,distributed]"]
 
 [project.urls]
 Homepage = "https://github.com/othaime-en/secret-rotator"
