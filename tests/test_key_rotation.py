@@ -7,12 +7,14 @@ from pathlib import Path
 
 from secret_rotator.encryption_manager import EncryptionManager
 from secret_rotator.providers.file_provider import FileSecretProvider
+from secret_rotator.distributed_lock import DistributedLock
 
 
 class TestMasterKeyRotation(unittest.TestCase):
     """Integration tests for master key rotation and two-phase commit"""
 
     def setUp(self):
+        DistributedLock.reset_local_locks()
         """Set up test environment before each test"""
         # Create temporary directory for test files
         self.test_dir = tempfile.mkdtemp()

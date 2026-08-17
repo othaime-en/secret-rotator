@@ -9,12 +9,14 @@ from secret_rotator.rotation_engine import RotationEngine
 from secret_rotator.backup_manager import BackupManager
 from secret_rotator.providers.file_provider import FileSecretProvider
 from secret_rotator.rotators.password_rotator import PasswordRotator
+from secret_rotator.distributed_lock import DistributedLock
 
 
 class TestIntegrationWithEncryption(unittest.TestCase):
     """Integration tests for complete rotation workflow with encryption"""
 
     def setUp(self):
+        DistributedLock.reset_local_locks()
         """Set up test fixtures"""
         self.temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
         self.temp_file.write("{}")
@@ -403,6 +405,7 @@ class TestIntegrationPlaintextMode(unittest.TestCase):
     """Integration tests without encryption for backward compatibility"""
 
     def setUp(self):
+        DistributedLock.reset_local_locks()
         """Set up test fixtures without encryption"""
         self.temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
         self.temp_file.write('{"db_password": "initial_password"}')

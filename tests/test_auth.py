@@ -6,6 +6,7 @@ from werkzeug.security import generate_password_hash
 from secret_rotator.rotation_engine import RotationEngine
 from secret_rotator.web.app import create_app
 from secret_rotator.web.rate_limit import limiter
+from secret_rotator.distributed_lock import DistributedLock
 
 TEST_USERNAME = "testadmin"
 TEST_PASSWORD = "correct-horse-battery-staple"
@@ -44,6 +45,7 @@ class TestAuthEnforcement(unittest.TestCase):
                 os.environ.pop(k, None)
 
     def setUp(self):
+        DistributedLock.reset_local_locks()
         engine = RotationEngine()
         app = create_app(engine)
         app.config["TESTING"] = True
