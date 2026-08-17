@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from datetime import datetime
 from secret_rotator.utils.logger import logger
+from secret_rotator.config.settings import settings
+from secret_rotator.distributed_lock import distributed_lock, LockAcquisitionError
 from datetime import datetime, timedelta
 
 
@@ -266,21 +268,54 @@ class EncryptionManager:
     def rotate_master_key(self, providers: Dict[str, Any] = None) -> bool:
         """
         Rotate the master encryption key with two-phase commit for data safety.
-        
+
+        Guarded by a distributed lock (S14 / Phase 3) so that two
+        instances can never run this concurrently and race on the
+        same key file and provider secret files. See
+        distributed_lock.py for how the lock is chosen: Redis when
+        `distributed.enabled` is true in config, an in-process lock
+        otherwise.
+
+        Args:
+            providers: Dictionary of provider instances that need re-encryption
+                    (passed from RotationEngine)
+
+        Returns:
+            True if rotation succeeded, False if failed (with automatic rollback)
+
+        Raises:
+            LockAcquisitionError: if the lock is already held — by
+                another instance, or by a concurrent call in this
+                process. No changes are made in this case; it's safe
+                to retry once the other rotation finishes.
+        """
+        timeout = settings.get("distributed.master_key_lock_timeout", 600)
+        lock = distributed_lock(
+            "master-key-rotation", timeout=timeout, blocking_timeout=5
+        )
+        try:
+            lock.acquire()
+        except LockAcquisitionError as e:
+            logger.error(f"Master key rotation refused: {e}")
+            raise
+
+        try:
+            return self._rotate_master_key_locked(providers=providers)
+        finally:
+            lock.release()
+
+    def _rotate_master_key_locked(self, providers: Dict[str, Any] = None) -> bool:
+        """The actual two-phase-commit rotation. Only ever called with
+        the master-key-rotation lock already held — see
+        rotate_master_key() above.
+
         This implementation uses a two-phase commit approach:
         1. Phase 1: Validate and prepare - read all secrets, re-encrypt to memory
         2. Phase 2: Verify - ensure all re-encrypted secrets can be decrypted
         3. Phase 3: Commit - atomically write all changes to disk
         4. Phase 4: Update in-memory state
-        
+
         If any phase fails, all changes are rolled back automatically.
-        
-        Args:
-            providers: Dictionary of provider instances that need re-encryption
-                    (passed from RotationEngine)
-        
-        Returns:
-            True if rotation succeeded, False if failed (with automatic rollback)
         """
         if not self.cipher:
             raise ValueError("No master key to rotate")
