@@ -74,7 +74,13 @@ web:
   # interpolation — leave this key unset and use FLASK_SECRET_KEY instead
   # unless you're intentionally hardcoding a value here.
   # secret_key: ""
-  threaded: true  # Enable multi-threaded request handling
+
+  # (S11) Size of the Waitress WSGI server's request-handling thread
+  # pool. Waitress runs in-process (not forked worker processes), so
+  # this is the concurrency knob available under the current
+  # single-instance architecture. Raise it if the dashboard feels slow
+  # under concurrent use; there's no need to lower it for a small team.
+  threads: 8
 
   # Dashboard login (S1). Required before the dashboard is reachable —
   # set with: secret-rotator --mode set-web-password

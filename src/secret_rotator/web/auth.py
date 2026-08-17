@@ -1,5 +1,5 @@
 """
-Session-based authentication for the Secret Rotator web dashboard.
+Session-based authentication for the web dashboard.
 """
 
 import os
@@ -20,6 +20,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from secret_rotator.config.settings import settings
 from secret_rotator.utils.logger import logger
 from secret_rotator.audit_log import audit_log
+from secret_rotator.web.rate_limit import limiter
 
 bp = Blueprint("auth", __name__)
 
@@ -99,7 +100,15 @@ def require_login():
 
 
 @bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per 5 minutes")
 def login():
+    """
+    Rate limited to 10 attempts per 5 minutes per IP. This is
+    real throttling against automated credential-guessing, on top of
+    (not instead of) the 0.5s delay already added on failed attempts
+    below — the delay alone was explicitly noted as insufficient when
+    it was added.
+    """
     error = None
 
     if request.method == "POST":
@@ -132,8 +141,8 @@ def login():
             audit_log.log("login_failed", username or "(empty)", success=False)
             error = "Invalid username or password"
             # Small, deliberate delay to add friction against rapid
-            # credential-guessing. Not a substitute for real rate
-            # limiting (tracked separately under S10).
+            # credential-guessing, on top of the real rate limit
+            # applied to this route above.
             time.sleep(0.5)
 
     return render_template(

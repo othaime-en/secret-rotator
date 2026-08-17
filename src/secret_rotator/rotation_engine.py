@@ -1,5 +1,6 @@
+import threading
 import time
-from typing import Dict, List, Any
+from typing import Callable, Dict, List, Any, Optional
 from secret_rotator.providers.base import SecretProvider
 from secret_rotator.rotators.base import SecretRotator
 from secret_rotator.utils.logger import logger
@@ -7,6 +8,27 @@ from secret_rotator.utils.retry import retry_with_backoff
 from secret_rotator.backup_manager import BackupManager
 from secret_rotator.config.settings import settings
 from secret_rotator.audit_log import audit_log
+
+
+class RotationInProgressError(Exception):
+    """
+    Raised by rotate_all_secrets() when a previous call is still
+    running.
+
+    RotationEngine only ever runs one full "rotate everything" sweep
+    at a time, in-process, regardless of what triggered it — the web
+    dashboard's manual "Rotate All" button, the background scheduler's
+    periodic run, or a CLI --run-once invocation all go through this
+    same guard. Before this, those paths had no coordination at all:
+    a manual trigger firing while the scheduler's own run was
+    mid-flight (or two manual triggers in quick succession) could
+    race on the same jobs.
+
+    This is an in-process lock only — it does not coordinate across
+    multiple instances of the app running at once. That's tracked
+    separately.
+    """
+    pass
 
 
 class RotationEngine:
@@ -19,6 +41,9 @@ class RotationEngine:
         self.backup_manager = BackupManager(
             backup_dir=settings.get("providers.file_storage.backup_path", "data/backup")
         )  # Use config or default
+        # Guards "one full rotate_all_secrets() sweep at a time" —
+        # see RotationInProgressError above for why.
+        self._rotation_lock = threading.Lock()
 
     def register_provider(self, provider: SecretProvider):
         self.providers[provider.name] = provider
@@ -149,25 +174,63 @@ class RotationEngine:
             )
             return False
 
-    def rotate_all_secrets(self, actor: str = "system") -> Dict[str, bool]:
+    def rotate_all_secrets(
+        self,
+        actor: str = "system",
+        on_job_complete: Optional[Callable[[str, bool, int, int], None]] = None,
+    ) -> Dict[str, bool]:
         """Rotate all configured secrets.
 
         Args:
             actor: who triggered this batch — passed through to each
                 rotate_secret() call for the audit log (S5).
+            on_job_complete: optional callback invoked after each
+                individual job finishes, as
+                on_job_complete(job_name, success, completed_count, total_count).
+                Lets callers (namely the web API's background job
+                tracker) report live progress instead of only learning
+                the outcome once the entire sweep finishes. Exceptions
+                raised by the callback are logged and otherwise
+                ignored — a broken progress reporter should never fail
+                the rotation itself.
+
+        Raises:
+            RotationInProgressError: if another call to this method
+                (from any source — manual API trigger, the scheduler,
+                a CLI run) is already in progress in this process.
         """
-        results = {}
-        logger.info(f"Starting rotation of {len(self.rotation_jobs)} secrets")
+        if not self._rotation_lock.acquire(blocking=False):
+            raise RotationInProgressError(
+                "A full rotation sweep is already running in this process; "
+                "try again once it finishes."
+            )
 
-        for job in self.rotation_jobs:
-            job_name = job["name"]
-            success = self.rotate_secret(job, actor=actor)
-            results[job_name] = success
+        try:
+            results = {}
+            total = len(self.rotation_jobs)
+            logger.info(f"Starting rotation of {total} secrets")
 
-            # Add delay between rotations to avoid overwhelming systems
-            time.sleep(1)
+            for index, job in enumerate(self.rotation_jobs, start=1):
+                job_name = job["name"]
+                success = self.rotate_secret(job, actor=actor)
+                results[job_name] = success
 
-        successful = sum(1 for result in results.values() if result)
-        logger.info(f"Rotation complete: {successful}/{len(results)} successful")
+                if on_job_complete is not None:
+                    try:
+                        on_job_complete(job_name, success, index, total)
+                    except Exception:
+                        logger.error(
+                            "on_job_complete callback raised an exception; "
+                            "continuing rotation",
+                            exc_info=True,
+                        )
 
-        return results
+                # Add delay between rotations to avoid overwhelming systems
+                time.sleep(1)
+
+            successful = sum(1 for result in results.values() if result)
+            logger.info(f"Rotation complete: {successful}/{len(results)} successful")
+
+            return results
+        finally:
+            self._rotation_lock.release()

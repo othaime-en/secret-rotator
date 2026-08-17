@@ -6,6 +6,7 @@ from werkzeug.security import generate_password_hash
 
 from secret_rotator.rotation_engine import RotationEngine
 from secret_rotator.web.app import create_app
+from secret_rotator.web.rate_limit import limiter
 
 TEST_USERNAME = "testadmin"
 TEST_PASSWORD = "correct-horse-battery-staple"
@@ -14,9 +15,7 @@ CSRF_META_RE = re.compile(r'<meta name="csrf-token" content="([^"]+)">')
 
 
 class TestCSRFProtection(unittest.TestCase):
-    """Regression tests for S4: /api/rotate, /api/restore,
-    /api/run-verification, and the login form had no CSRF protection —
-    once S1 added sessions, that meant any authenticated admin's
+    """The login form had no CSRF protection - that meant any authenticated admin's
     browser could be tricked by a malicious page into rotating or
     restoring secrets without their knowledge."""
 
@@ -53,6 +52,11 @@ class TestCSRFProtection(unittest.TestCase):
         # only matters for HTTPS requests, which the Flask test client
         # doesn't send, so it doesn't interfere here.
         self.client = app.test_client()
+        # See test_auth.py's setUp for why this is necessary: the rate
+        # limiter (S10) is a shared singleton across every test in this
+        # process, and this file alone makes enough /login and
+        # /api/rotate requests to trip real limits without a reset.
+        limiter.reset()
 
     def _get_csrf_token(self):
         """Fetch a real CSRF token the way a browser would: load a page
@@ -108,7 +112,12 @@ class TestCSRFProtection(unittest.TestCase):
         resp = self.client.post(
             "/api/rotate", headers={"X-CSRFToken": token}
         )
-        self.assertEqual(resp.status_code, 200)
+        # 202 Accepted: /api/rotate now starts a background job rather
+        # than rotating synchronously (roadmap Phase 2). The point of
+        # this test is that a valid CSRF token gets past CSRF checks,
+        # not the exact success status — 202 vs the old 200 either way
+        # confirms CSRF didn't reject it (that's a 400, tested above).
+        self.assertEqual(resp.status_code, 202)
 
     def test_restore_without_csrf_token_is_rejected(self):
         self._login()

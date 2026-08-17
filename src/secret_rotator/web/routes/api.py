@@ -14,6 +14,7 @@ from flask import Blueprint, jsonify, request, current_app, session
 from urllib.parse import unquote
 from secret_rotator.utils.logger import logger
 from secret_rotator.audit_log import audit_log
+from secret_rotator.web.rate_limit import limiter
 
 bp = Blueprint('api', __name__)
 
@@ -76,42 +77,96 @@ def jobs():
 
 
 @bp.route('/rotate', methods=['POST'])
+@limiter.limit("10 per minute")
 def rotate():
     """
-    Trigger rotation of all configured secrets.
-    
-    This endpoint initiates immediate rotation of all jobs,
-    regardless of their schedule. Use with caution.
-    
+    Start a background job that rotates all configured secrets.
+
+    This no longer runs rotation synchronously in the request thread. Rotating
+    every configured job with a 1-second delay between each — see
+    RotationEngine.rotate_all_secrets — could mean tens of seconds or
+    more blocking the HTTP request with no progress feedback, and
+    would eventually just time out on a large enough job list. This
+    endpoint now returns immediately with a job id; poll
+    GET /api/rotate/<job_id> for live progress and the final results.
+
+    Rate limited to 10/minute per user — raised from the
+    previous 3/minute now that this call itself is cheap (it only
+    enqueues work); the actual rotation work is still protected from
+    overlap by RotationEngine's own lock (see rotate_all_secrets),
+    which this endpoint surfaces as a 409 with the in-flight job's id
+    rather than starting a second sweep.
+
     Returns:
-        JSON with rotation results for each job
-    
+        202 Accepted with the new job's initial state, or
+        409 Conflict with the already-running job's state if a
+        rotation (triggered via this endpoint) is already in flight.
+
+    Example Response (202):
+        {
+            "job_id": "3f9c2e1a-...",
+            "status": "queued",
+            "actor": "alice",
+            "progress": {"completed": 0, "total": 8},
+            "status_url": "/api/rotate/3f9c2e1a-..."
+        }
+    """
+    actor = session.get('username', 'unknown')
+    logger.info(f"Manual rotation triggered via API by {actor}")
+
+    job = current_app.job_manager.start_rotation(actor=actor)
+    job['status_url'] = f"/api/rotate/{job['job_id']}"
+
+    if job.get('already_running', False):
+        logger.info(
+            f"Rotation requested by {actor} but job {job['job_id']} "
+            f"is already in progress; returning its status instead of "
+            f"starting a new one"
+        )
+        return jsonify(job), 409
+
+    return jsonify(job), 202
+
+
+@bp.route('/rotate/<job_id>')
+@limiter.limit("120 per minute")
+def rotate_job_status(job_id):
+    """
+    Poll the status of a background rotation job started via
+    POST /api/rotate.
+
+    Rate limited separately from the app default (200/hour): the
+    dashboard polls this every ~1.5s while a job is in flight, which
+    would otherwise trip the default limit within the first minute of
+    watching a single rotation run.
+
+    Returns:
+        200 with the job's current state, or 404 if job_id is unknown
+        (never existed, or aged out — jobs are retained for 1 hour
+        after completion).
+
     Example Response:
         {
+            "job_id": "3f9c2e1a-...",
+            "status": "running",
+            "actor": "alice",
+            "created_at": "2026-08-15T09:00:00+00:00",
+            "started_at": "2026-08-15T09:00:00+00:00",
+            "finished_at": null,
+            "progress": {"completed": 3, "total": 8},
             "results": {
                 "database_password": true,
                 "api_key": true,
                 "service_token": false
-            }
+            },
+            "error": null
         }
     """
-    engine = current_app.rotation_engine
-    actor = session.get('username', 'unknown')
-    
-    logger.info(f"Manual rotation triggered via API by {actor}")
-    
-    try:
-        results = engine.rotate_all_secrets(actor=actor)
-        successful = sum(1 for r in results.values() if r)
-        total = len(results)
-        
-        logger.info(f"Rotation complete: {successful}/{total} successful")
-        
-        return jsonify({'results': results})
-    
-    except Exception as e:
-        logger.error(f"Rotation failed: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
+    job = current_app.job_manager.get_job(job_id)
+    if job is None:
+        return jsonify({'error': 'Job not found'}), 404
+
+    return jsonify(job)
 
 
 @bp.route('/backups')
@@ -213,9 +268,14 @@ def backup_detail(backup_file):
 
 
 @bp.route('/restore', methods=['POST'])
+@limiter.limit("10 per minute")
 def restore():
     """
     Restore a secret from a backup.
+
+    Rate limited to 10/minute per user - restoring overwrites a
+    live secret with an old value, so this shouldn't be something a
+    script can loop on unnoticed.
     
     Request Body (JSON):
         {

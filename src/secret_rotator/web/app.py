@@ -11,6 +11,7 @@ from datetime import timedelta
 from flask_wtf.csrf import CSRFProtect, CSRFError
 from secret_rotator.utils.logger import logger
 from secret_rotator.web.secret_key import resolve_secret_key
+from secret_rotator.web.rate_limit import limiter, rate_limit_key
 
 
 def create_app(rotation_engine, config=None):
@@ -47,6 +48,14 @@ def create_app(rotation_engine, config=None):
         SESSION_COOKIE_SAMESITE='Lax',
         SESSION_COOKIE_SECURE=False,
         PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+        MAX_CONTENT_LENGTH=1 * 1024 * 1024,  # 1 MB
+        RATELIMIT_DEFAULT="200 per hour",
+        RATELIMIT_HEADERS_ENABLED=True,
+        # Explicit in-memory backend (Flask-Limiter's default, but set
+        # here so the choice is documented rather than implicit — see
+        # web/rate_limit.py for why this is the right call today and
+        # what changes it if/when multi-instance deployment lands).
+        RATELIMIT_STORAGE_URI="memory://",
     )
     
     # Apply custom configuration (e.g. web.secret_key plumbed through
@@ -61,6 +70,10 @@ def create_app(rotation_engine, config=None):
     
     # Store rotation engine reference for access in routes
     app.rotation_engine = rotation_engine
+
+    # Background job tracker for POST /api/rotate 
+    from secret_rotator.web.job_manager import RotationJobManager
+    app.job_manager = RotationJobManager(rotation_engine)
     
     from .routes import dashboard_bp, api_bp, health_bp
     from .auth import bp as auth_bp, require_login, credentials_configured
@@ -78,6 +91,11 @@ def create_app(rotation_engine, config=None):
     # CSRF protection on all state-changing requests
     csrf = CSRFProtect()
     csrf.init_app(app)
+
+    # Rate limiting. See web/rate_limit.py for the key function
+    # and per-route limits applied in routes/api.py, routes/health.py,
+    # and web/auth.py.
+    limiter.init_app(app)
     
     if not credentials_configured():
         import os
@@ -134,6 +152,34 @@ def register_error_handlers(app):
             'message': 'The method is not allowed for the requested URL'
         }), 405
     
+    @app.errorhandler(429)
+    def rate_limit_exceeded(error):
+        """
+        Handle rate limit breaches (S10).
+
+        Flask-Limiter raises RateLimitExceeded (a 429 TooManyRequests
+        subclass) when a request exceeds its configured limit — either
+        the app-wide RATELIMIT_DEFAULT or a stricter per-route
+        @limiter.limit(...). Flask-Limiter already sets Retry-After /
+        X-RateLimit-* response headers (RATELIMIT_HEADERS_ENABLED);
+        this just gives API callers a clean JSON body instead of the
+        default HTML error page, matching the other handlers here.
+        """
+        logger.warning(f"Rate limit exceeded for {request.path} ({rate_limit_key()})")
+
+        if request.path.startswith('/api/'):
+            return jsonify({
+                'error': 'Too Many Requests',
+                'message': str(error.description) if error.description else
+                           'Rate limit exceeded. Please slow down and try again shortly.'
+            }), 429
+
+        return render_template(
+            'login.html',
+            error="Too many attempts. Please wait a moment and try again.",
+            next=request.args.get('next', ''),
+        ), 429
+
     @app.errorhandler(CSRFError)
     def csrf_error(error):
         """
