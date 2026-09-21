@@ -23,6 +23,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          # Test-only: fakeredis lets test_distributed_lock.py and
+          # test_job_queue.py exercise the Phase 3 distributed lock
+          # and RQ job queue without a real Redis server. Deliberately
+          # NOT in requirements.txt (that file is what the Docker
+          # runtime image installs from — see Dockerfile — and
+          # fakeredis has no reason to ship in production).
+          pip install "fakeredis[lua]"
 
       - name: Run tests
         run: |
