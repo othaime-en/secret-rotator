@@ -1,0 +1,76 @@
+# Example override for running secret-rotator across multiple
+# instances with a shared Redis for distributed locking + the job
+# queue, plus a dedicated worker process consuming rotation jobs.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.distributed.yml up -d --scale secret-rotator=3
+#
+# This does NOT replace docker-compose.yml - it's applied on top of
+# it. The base file's single-instance setup remains the default; this
+# override is opt-in and requires distributed.enabled: true in your
+# mounted config.yaml (or DISTRIBUTED_ENABLED-equivalent env override,
+# if you've wired one up - this repo currently expects it in
+# config.yaml, see config/config.example.yaml).
+#
+# NOTE: multiple secret-rotator instances (via --scale) all publish to
+# the same host port here for simplicity — put a load balancer in
+# front in a real deployment rather than relying on this directly.
+
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: secret-rotator-redis
+    restart: unless-stopped
+    # No port published to the host on purpose — only services on
+    # secret-rotator-network need to reach this.
+    volumes:
+      - secret-rotator-redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - secret-rotator-network
+
+  secret-rotator:
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: secret-rotator:1.2.0
+    container_name: secret-rotator-worker
+    restart: unless-stopped
+    command: ["secret-rotator", "--mode", "worker"]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=${TZ:-UTC}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_STRUCTURED=${LOG_STRUCTURED:-true}
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - secret-rotator-data:/app/data
+      - secret-rotator-logs:/app/logs
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - secret-rotator-network
+    # Run more than one for parallel job execution:
+    #   docker compose ... up -d --scale worker=3
+
+volumes:
+  secret-rotator-redis-data:
+    driver: local

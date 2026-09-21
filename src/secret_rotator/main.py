@@ -5,14 +5,10 @@ import argparse
 from pathlib import Path
 
 from secret_rotator.config.settings import settings
-from secret_rotator.providers.file_provider import FileSecretProvider
-from secret_rotator.rotators.password_rotator import PasswordRotator
-from secret_rotator.rotation_engine import RotationEngine
+from secret_rotator import bootstrap
 from secret_rotator.scheduler import RotationScheduler
 from secret_rotator.web_interface import WebServer
 from secret_rotator.utils.logger import logger
-from secret_rotator.encryption_manager import EncryptionManager
-from secret_rotator.backup_manager import BackupManager
 from secret_rotator.distributed_lock import LockAcquisitionError
 
 
@@ -31,13 +27,16 @@ class SecretRotationApp:
         """Set up the application components"""
         logger.info("Setting up Secret Rotation System")
 
-        # Initialize encryption manager if enabled
-        encryption_enabled = settings.get("security.encryption.enabled", True)
-        if encryption_enabled:
-            key_file = settings.get("security.encryption.master_key_file", "data/.master.key")
-            self.encryption_manager = EncryptionManager(key_file=key_file)
-            logger.info("Encryption initialized")
+        # Engine + providers + rotators + jobs + encryption/backup
+        # managers all come from bootstrap.build_rotation_engine() now
+        # (Phase 3) — the same function an RQ worker process calls to
+        # build its own copy of this engine when executing a queued
+        # rotation job. See bootstrap.py for why that sharing matters.
+        self.engine, self.encryption_manager, self.backup_manager = (
+            bootstrap.build_rotation_engine()
+        )
 
+        if self.encryption_manager:
             # Check if master key needs rotation
             rotate_days = settings.get("security.encryption.rotate_master_key_days", 90)
             if self.encryption_manager.should_rotate_key(rotate_days):
@@ -45,21 +44,6 @@ class SecretRotationApp:
                     f"Master key is older than {rotate_days} days and should be rotated. "
                     "Run: secret-rotator --mode rotate-master-key"
                 )
-        else:
-            logger.warning("Encryption is DISABLED - secrets will be stored in plaintext!")
-
-        # Initialize backup manager
-        encrypt_backups = settings.get("backup.encrypt_backups", True)
-        backup_dir = settings.get("backup.storage_path", "data/backup")
-        self.backup_manager = BackupManager(backup_dir=backup_dir, encrypt_backups=encrypt_backups)
-
-        # Initialize rotation engine
-        self.engine = RotationEngine()
-        self.engine.backup_manager = self.backup_manager
-
-        self._setup_providers()
-        self._setup_rotators()
-        self._setup_rotation_jobs()
 
         # Set up scheduler with backup manager
         schedule_config = settings.get("rotation.schedule", "daily")
@@ -73,77 +57,6 @@ class SecretRotationApp:
         logger.info("Setup complete")
         self._print_security_status()
         self._print_backup_health()
-
-    def _setup_providers(self):
-        """Set up secret providers from configuration"""
-        providers_config = settings.get("providers", {})
-
-        for provider_name, provider_config in providers_config.items():
-            provider_type = provider_config.get("type")
-
-            if provider_type == "file":
-                encrypt_secrets = settings.get("security.encryption.enabled", True)
-                file_provider = FileSecretProvider(
-                    name=provider_name,
-                    config={
-                        "file_path": provider_config.get("file_path", "data/secrets.json"),
-                        "encrypt_secrets": encrypt_secrets,
-                        "encryption_key_file": settings.get(
-                            "security.encryption.master_key_file", "data/.master.key"
-                        ),
-                    },
-                )
-                self.engine.register_provider(file_provider)
-
-                if file_provider.validate_connection():
-                    logger.info(f"Provider '{provider_name}' validated successfully")
-                else:
-                    logger.error(f"Provider '{provider_name}' validation failed!")
-
-            # Add support for other provider types here (AWS, Azure, etc.)
-            elif provider_type == "aws":
-                logger.warning(f"AWS provider '{provider_name}' not yet implemented")
-            else:
-                logger.warning(f"Unknown provider type '{provider_type}' for '{provider_name}'")
-
-    def _setup_rotators(self):
-        """Set up secret rotators from configuration"""
-        rotators_config = settings.get("rotators", {})
-
-        for rotator_name, rotator_config in rotators_config.items():
-            rotator_type = rotator_config.get("type")
-
-            if rotator_type == "password":
-                password_rotator = PasswordRotator(name=rotator_name, config=rotator_config)
-                self.engine.register_rotator(password_rotator)
-
-            # Add support for other rotator types
-            elif rotator_type == "api_key":
-                from secret_rotator.rotators.advanced_rotators import APIKeyRotator
-
-                api_rotator = APIKeyRotator(name=rotator_name, config=rotator_config)
-                self.engine.register_rotator(api_rotator)
-
-            elif rotator_type == "jwt_secret":
-                from secret_rotator.rotators.advanced_rotators import JWTSecretRotator
-
-                jwt_rotator = JWTSecretRotator(name=rotator_name, config=rotator_config)
-                self.engine.register_rotator(jwt_rotator)
-
-            else:
-                logger.warning(f"Unknown rotator type '{rotator_type}' for '{rotator_name}'")
-
-    def _setup_rotation_jobs(self):
-        """Set up rotation jobs from configuration"""
-        jobs = settings.get("jobs", [])
-
-        if jobs:
-            for job in jobs:
-                if self.engine.add_rotation_job(job):
-                    logger.debug(f"Added job: {job['name']}")
-            logger.info(f"Loaded {len(jobs)} rotation jobs from config")
-        else:
-            logger.warning("No rotation jobs configured. Add jobs to config/config.yaml")
 
     def _print_security_status(self):
         """Print security configuration status"""
@@ -695,6 +608,10 @@ Examples:
 
   # Set (or change) the web dashboard admin password
   secret-rotator --mode set-web-password
+
+  # Run an RQ worker that executes queued rotation jobs (only used
+  # when distributed.enabled: true in config.yaml - see job_queue.py)
+  secret-rotator --mode worker
         """,
     )
 
@@ -710,6 +627,7 @@ Examples:
             "cleanup-backups",
             "status",
             "set-web-password",
+            "worker",
         ],
         default="daemon",
         help="Run mode (default: daemon)",
@@ -741,6 +659,15 @@ Examples:
     # SecretRotationApp.
     if args.mode == "set-web-password":
         set_web_password()
+        sys.exit(0)
+
+    # worker mode starts an RQ worker rather than the daemon (no
+    # scheduler, no web server, no SecretRotationApp needed at all —
+    # see job_queue.run_worker()).
+    if args.mode == "worker":
+        from secret_rotator.job_queue import run_worker
+
+        run_worker()
         sys.exit(0)
 
     # Create and run app

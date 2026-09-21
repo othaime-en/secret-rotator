@@ -1,6 +1,24 @@
 """
 Background job tracking for full-rotation sweeps triggered via the
 web API.
+
+Two modes, chosen by `distributed.enabled` in config (same switch
+distributed_lock.py uses):
+
+  - Local (default, distributed.enabled: false): a rotation runs in a
+    background thread of *this* process, tracked in an in-memory dict.
+    Unchanged from Phase 2 — single-instance deployments need no new
+    infrastructure.
+  - Distributed (distributed.enabled: true): a rotation is enqueued as
+    an RQ job in Redis (see job_queue.py) and executed by whichever
+    `secret-rotator --mode worker` process picks it up next — possibly
+    on a different instance entirely. Job state lives in Redis, not in
+    this process's memory, so GET /api/rotate/<job_id> answers
+    correctly regardless of which instance handles the request.
+
+Either way, routes/api.py calls exactly the same two methods
+(start_rotation, get_job) and gets back the exact same dict shape —
+the mode switch is invisible above this class.
 """
 
 import threading
@@ -10,6 +28,7 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+from secret_rotator.config.settings import settings
 from secret_rotator.rotation_engine import RotationInProgressError
 from secret_rotator.utils.logger import logger
 
@@ -24,21 +43,24 @@ JOB_RETENTION_SECONDS = 60 * 60  # 1 hour
 
 class RotationJobManager:
     """
-    Runs RotationEngine.rotate_all_secrets() in a background thread
-    per invocation and tracks status/progress for polling.
+    Starts and tracks full-rotation-sweep jobs triggered via
+    POST /api/rotate. See module docstring for the two modes.
 
-    Storage is an in-memory, insertion-ordered dict — like the
-    RotationEngine and scheduler it wraps, job history does not
-    survive a process restart, which is consistent with this app's
-    existing single-instance, in-memory design (see the same trade-off
-    documented in web/__init__.py for the WSGI server and
-    web/rate_limit.py for rate limiting).
+    Local-mode storage is an in-memory, insertion-ordered dict — like
+    the RotationEngine and scheduler it wraps, job history does not
+    survive a process restart in this mode. Distributed mode's job
+    history lives in Redis instead (see job_queue.py) and survives
+    this process restarting, though not Redis data loss.
     """
 
     def __init__(self, engine):
         self.engine = engine
         self._jobs: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
-        self._lock = threading.Lock()  # guards self._jobs only
+        self._lock = threading.Lock()  # guards self._jobs only (local mode)
+
+    @staticmethod
+    def _distributed_enabled() -> bool:
+        return bool(settings.get("distributed.enabled", False))
 
     def _prune_locked(self) -> None:
         """Drop expired/excess finished jobs. Caller must hold self._lock."""
@@ -67,14 +89,40 @@ class RotationJobManager:
 
     def start_rotation(self, actor: str) -> Dict[str, Any]:
         """
-        Start a new full-rotation job in the background.
+        Start a new full-rotation job.
 
         Returns immediately with the new job's initial state
-        (status: "queued"). If a rotation started via this manager is
-        already queued/running, returns that job's current state
-        instead (with an added "already_running": True) rather than
-        starting a second overlapping sweep.
+        (status: "queued"). If a rotation is already queued/running —
+        tracked here in local mode, or anywhere in the cluster in
+        distributed mode — returns that job's current state instead
+        (with an added "already_running": True) rather than starting a
+        second overlapping sweep.
+        """
+        if self._distributed_enabled():
+            return self._start_rotation_distributed(actor)
+        return self._start_rotation_local(actor)
 
+    def _start_rotation_distributed(self, actor: str) -> Dict[str, Any]:
+        from secret_rotator.job_queue import enqueue_rotation, find_in_flight_job, get_queue, job_to_view
+
+        queue = get_queue()
+        existing = find_in_flight_job(queue)
+        if existing is not None:
+            view = job_to_view(existing)
+            view["already_running"] = True
+            logger.info(
+                f"Rotation requested by {actor} but job {view['job_id']} "
+                f"is already in progress; returning its status instead of "
+                f"enqueuing a new one"
+            )
+            return view
+
+        job = enqueue_rotation(actor)
+        logger.info(f"Enqueued rotation job {job.id} for {actor}")
+        return job_to_view(job)
+
+    def _start_rotation_local(self, actor: str) -> Dict[str, Any]:
+        """
         Note this only catches overlap with *other API-triggered*
         jobs tracked here. A rotation triggered independently by the
         scheduler isn't tracked by this manager at all — that case is
@@ -166,8 +214,31 @@ class RotationJobManager:
 
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Return the current state of a job, or None if job_id is
-        unknown (never existed, or has aged out — see
-        JOB_RETENTION_SECONDS / MAX_RETAINED_JOBS)."""
+        unknown (never existed, or has aged out).
+
+        Local mode: aged out means past JOB_RETENTION_SECONDS /
+        MAX_RETAINED_JOBS. Distributed mode: aged out means past
+        job_queue.JOB_RETENTION_SECONDS in Redis (result_ttl/failure_ttl
+        on the RQ job), or the job never existed in this Redis at all.
+        """
+        if self._distributed_enabled():
+            return self._get_job_distributed(job_id)
+        return self._get_job_local(job_id)
+
+    def _get_job_distributed(self, job_id: str) -> Optional[Dict[str, Any]]:
+        from rq.exceptions import NoSuchJobError
+        from rq.job import Job
+
+        from secret_rotator.job_queue import get_queue, job_to_view
+
+        queue = get_queue()
+        try:
+            job = Job.fetch(job_id, connection=queue.connection)
+        except NoSuchJobError:
+            return None
+        return job_to_view(job)
+
+    def _get_job_local(self, job_id: str) -> Optional[Dict[str, Any]]:
         with self._lock:
             job = self._jobs.get(job_id)
             return None if job is None else self._public_view(job)

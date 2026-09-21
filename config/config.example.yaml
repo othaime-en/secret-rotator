@@ -235,7 +235,7 @@ backup:
     # rotation hot path until you're ready for it.
     upload_on_create: false
 
-# Distributed coordination. Required once you run more than
+# Distributed coordination (Phase 3). Required once you run more than
 # one instance of secret-rotator at a time — the in-process lock used
 # automatically when this is disabled only protects against races
 # *within* one process, not across instances.
@@ -255,3 +255,12 @@ distributed:
   # up to ~3500 jobs at the current 1s-per-job pacing; lower it if you
   # have far fewer jobs and want a stuck sweep to free the lock sooner.
   rotation_lock_timeout: 3600
+  # Redis list name RQ uses for queued rotation jobs. Only relevant
+  # when enabled: true; every instance and every `secret-rotator
+  # --mode worker` process must agree on this name (they all default
+  # to the same value, so you only need to set this if you're running
+  # more than one secret-rotator deployment against the same Redis).
+  queue_name: "secret-rotator-rotations"
+  # Max seconds an RQ worker lets a single rotation-sweep job run
+  # before killing it. Same sizing logic as rotation_lock_timeout above.
+  job_timeout: 3600
