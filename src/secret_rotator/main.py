@@ -13,6 +13,7 @@ from secret_rotator.web_interface import WebServer
 from secret_rotator.utils.logger import logger
 from secret_rotator.encryption_manager import EncryptionManager
 from secret_rotator.backup_manager import BackupManager
+from secret_rotator.distributed_lock import LockAcquisitionError
 
 
 class SecretRotationApp:
@@ -500,9 +501,18 @@ class SecretRotationApp:
         print("Starting rotation... (this may take a few moments)")
         print("=" * 70)
         
-        success = self.encryption_manager.rotate_master_key(
-            providers=self.engine.providers
-        )
+        try:
+            success = self.encryption_manager.rotate_master_key(
+                providers=self.engine.providers
+            )
+        except LockAcquisitionError as e:
+            print("\n" + "=" * 70)
+            print("✗ ROTATION REFUSED: another instance is already rotating the key")
+            print("=" * 70)
+            print(f"\n{e}")
+            print("\nNo changes were made. Wait for the other rotation to finish")
+            print("(or investigate if none is actually running) and try again.")
+            return
 
         if success:
             print("\n" + "=" * 70)

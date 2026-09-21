@@ -8,6 +8,7 @@ from secret_rotator.providers.file_provider import FileSecretProvider
 from secret_rotator.rotation_engine import RotationEngine, RotationInProgressError
 from secret_rotator.rotators.password_rotator import PasswordRotator
 from secret_rotator.web.job_manager import RotationJobManager
+from secret_rotator.distributed_lock import DistributedLock
 
 
 def _wait_until(predicate, timeout=5, interval=0.05):
@@ -25,6 +26,7 @@ class TestRotationJobManager(unittest.TestCase):
     progress, and never let two sweeps overlap in the same process."""
 
     def setUp(self):
+        DistributedLock.reset_local_locks()
         self.engine = RotationEngine()
 
         self.temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)

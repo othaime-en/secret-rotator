@@ -7,11 +7,13 @@ from unittest.mock import patch
 from secret_rotator.rotation_engine import RotationEngine
 from secret_rotator.providers.file_provider import FileSecretProvider
 from secret_rotator.rotators.password_rotator import PasswordRotator
+from secret_rotator.distributed_lock import DistributedLock
 
 
 class TestRotationEngine(unittest.TestCase):
 
     def setUp(self):
+        DistributedLock.reset_local_locks()
         """Set up test fixtures"""
         self.engine = RotationEngine()
 
