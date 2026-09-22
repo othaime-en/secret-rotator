@@ -370,6 +370,41 @@ class SecretRotationApp:
 
         print("=" * 60)
 
+    def sync_backups(self):
+        """Run a bulk remote-backup sync on demand (Phase 3)."""
+        if not self.engine:
+            self.setup()
+
+        print("\n" + "=" * 60)
+        print("REMOTE BACKUP SYNC")
+        print("=" * 60)
+
+        if self.backup_manager.remote_backup_client is None:
+            print(
+                "\nbackup.remote_backup.enabled is not true (or is "
+                "misconfigured — check the logs above for a specific "
+                "error) — nothing to sync."
+            )
+            print("=" * 60)
+            return
+
+        report = self.backup_manager.sync_to_remote()
+
+        print(f"\nChecked: {report['checked']}")
+        print(f"Uploaded: {report['uploaded']}")
+        print(f"Already synced: {report['already_synced']}")
+        print(f"Failed: {report['failed']}")
+
+        if report["failed"] > 0:
+            print(f"\n⚠️  {report['failed']} backup(s) failed to upload:")
+            for name in report["failed_files"]:
+                print(f"  - {name}")
+            print("(Local backups are unaffected — see logs for the specific error(s).)")
+        else:
+            print("\n✓ All local backups are synced to remote storage")
+
+        print("=" * 60)
+
     def rotate_master_key(self):
         """Rotate the master encryption key"""
         if not self.engine:
@@ -606,6 +641,11 @@ Examples:
   # Cleanup old backups
   secret-rotator --mode cleanup-backups
 
+  # Push local backups to remote storage now, instead of waiting for
+  # the daily scheduled sync (only used when backup.remote_backup.enabled:
+  # true in config.yaml - see remote_backup.py)
+  secret-rotator --mode sync-backups
+
   # Set (or change) the web dashboard admin password
   secret-rotator --mode set-web-password
 
@@ -625,6 +665,7 @@ Examples:
             "verify-backups",
             "rotate-master-key",
             "cleanup-backups",
+            "sync-backups",
             "status",
             "set-web-password",
             "worker",
@@ -687,6 +728,8 @@ Examples:
             app.rotate_master_key()
         elif args.mode == "cleanup-backups":
             app.cleanup_old_backups()
+        elif args.mode == "sync-backups":
+            app.sync_backups()
         elif args.mode == "status":
             app.show_status()
         else:  # daemon mode
