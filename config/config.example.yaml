@@ -75,14 +75,14 @@ web:
   # unless you're intentionally hardcoding a value here.
   # secret_key: ""
 
-  # (S11) Size of the Waitress WSGI server's request-handling thread
+  # Size of the Waitress WSGI server's request-handling thread
   # pool. Waitress runs in-process (not forked worker processes), so
   # this is the concurrency knob available under the current
   # single-instance architecture. Raise it if the dashboard feels slow
   # under concurrent use; there's no need to lower it for a small team.
   threads: 8
 
-  # Dashboard login (S1). Required before the dashboard is reachable —
+  # Dashboard login. Required before the dashboard is reachable —
   # set with: secret-rotator --mode set-web-password
   # (or set SECRET_ROTATOR_ADMIN_USERNAME / SECRET_ROTATOR_ADMIN_PASSWORD_HASH
   # env vars instead, which take priority over these if both are present)
@@ -234,8 +234,13 @@ backup:
     # remote_backup doesn't silently add network calls to the
     # rotation hot path until you're ready for it.
     upload_on_create: false
+    # Daily bulk sync time (regardless of upload_on_create) — catches
+    # backups made before remote sync was enabled, and anything
+    # upload_on_create missed due to a transient failure. Only
+    # scheduled at all when enabled: true above.
+    sync_time: "01:00"
 
-# Distributed coordination (Phase 3). Required once you run more than
+# Distributed coordination. Required once you run more than
 # one instance of secret-rotator at a time — the in-process lock used
 # automatically when this is disabled only protects against races
 # *within* one process, not across instances.
