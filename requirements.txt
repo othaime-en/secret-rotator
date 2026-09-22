@@ -1,6 +1,6 @@
 cryptography==50.0.1
 mysql-connector-python==9.4.0
-psycopg2-binary==2.9.12
+psycopg2-binary==2.9.13
 PyJWT==2.14.0
 pymongo==4.18.0
 pyshamir==1.1.0
