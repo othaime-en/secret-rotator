@@ -82,13 +82,20 @@ def create_config(config_dir, data_dir, log_dir):
     print("  4. Custom")
 
     choice = input("Select schedule [1]: ").strip() or "1"
+    # NOTE: the "4" (custom) value is only prompted for lazily, on demand.
+    # A dict literal evaluates every value eagerly, so building
+    # {"4": input(...)} unconditionally would ask "Enter custom schedule"
+    # on every run regardless of what the user picked for 1/2/3, and then
+    # silently discard that answer.
     schedule_map = {
         "1": "daily",
         "2": "weekly",
         "3": "every_12_hours",
-        "4": input("  Enter custom schedule (e.g., every_30_minutes): "),
     }
-    schedule = schedule_map.get(choice, "daily")
+    if choice == "4":
+        schedule = input("  Enter custom schedule (e.g., every_30_minutes): ").strip() or "daily"
+    else:
+        schedule = schedule_map.get(choice, "daily")
 
     # Create configuration
     config = {
