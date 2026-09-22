@@ -30,6 +30,9 @@ jobs:
           # runtime image installs from — see Dockerfile — and
           # fakeredis has no reason to ship in production).
           pip install "fakeredis[lua]"
+          # Test-only, same reasoning: moto mocks S3 for
+          # test_remote_backup.py without a real bucket.
+          pip install moto
 
       - name: Run tests
         run: |

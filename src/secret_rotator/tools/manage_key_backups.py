@@ -441,6 +441,70 @@ def export_instructions(args):
         sys.exit(1)
 
 
+def sync_remote(args):
+    """Upload encrypted (.enc) master-key backups to remote storage.
+
+    Deliberately excludes two backup types even though they live in
+    the same backup_dir — see remote_backup.py's module docstring for
+    the full reasoning:
+
+      - Plaintext backups (.key): never leave the host, encrypted or
+        not.
+      - Shamir key shares (.share): syncing every share to one bucket
+        defeats the reason shares exist (no single location should
+        hold enough of them to reconstruct the key). If you want
+        off-host share storage, upload individual shares to distinct
+        locations/custodians yourself — that has to be a deliberate
+        per-share decision, not something this tool automates.
+    """
+    from secret_rotator.remote_backup import RemoteBackupClient
+
+    client = RemoteBackupClient.from_config()
+
+    print("\n" + "=" * 70)
+    print("SYNC ENCRYPTED MASTER KEY BACKUPS TO REMOTE STORAGE")
+    print("=" * 70)
+
+    if client is None:
+        print(
+            "\nbackup.remote_backup.enabled is not true (or is misconfigured "
+            "— check the logs above for a specific error) in config.yaml — "
+            "nothing to sync."
+        )
+        sys.exit(1)
+
+    backup_dir = Path(args.backup_dir)
+    # subpath="key-backups" keeps these under their own prefix in the
+    # bucket, separate from secret rotation backups (which sync to the
+    # bucket root of backup.remote_backup.prefix) — same bucket is
+    # fine, same key namespace is not, or listing/restore tooling on
+    # either side has to guess which kind of backup a given key is.
+    report = client.sync_directory(backup_dir, subpath="key-backups", pattern="*.enc")
+
+    print(f"\nChecked: {report['checked']}")
+    print(f"Uploaded: {report['uploaded']}")
+    print(f"Already synced: {report['already_synced']}")
+    print(f"Failed: {report['failed']}")
+
+    share_count = len(list(backup_dir.glob("*.share")))
+    plaintext_count = len(list(backup_dir.glob("*.key")))
+    if share_count or plaintext_count:
+        print(
+            f"\nNote: {share_count} Shamir share file(s) and "
+            f"{plaintext_count} plaintext backup(s) in {backup_dir} were "
+            f"NOT synced — see this command's --help for why."
+        )
+
+    if report["failed"] > 0:
+        print(f"\n⚠️  {report['failed']} backup(s) failed to upload:")
+        for name in report["failed_files"]:
+            print(f"  - {name}")
+        print("(Local backups are unaffected — see logs for the specific error(s).)")
+        sys.exit(1)
+    else:
+        print("\n✓ All local .enc backups are synced to remote storage")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Manage master encryption key backups",
@@ -467,7 +531,13 @@ Examples:
   
   # Export backup and recovery instructions
   secret-rotator-backup export-instructions --output KEY_BACKUP_INSTRUCTIONS.txt
-  
+
+  # Push encrypted (.enc) backups to remote storage (only used when
+  # backup.remote_backup.enabled: true in config.yaml - see
+  # remote_backup.py; deliberately does NOT sync .share or .key files,
+  # see --help on this subcommand for why)
+  secret-rotator-backup sync-remote
+
         """,
     )
 
@@ -544,6 +614,18 @@ Examples:
         "--output", default="KEY_BACKUP_INSTRUCTIONS.txt", help="Output file path"
     )
 
+    # Sync encrypted backups to remote (S3-compatible) storage
+    subparsers.add_parser(
+        "sync-remote",
+        help=(
+            "Upload .enc backups to remote storage (backup.remote_backup in "
+            "config.yaml). Deliberately does NOT sync .share files (would "
+            "defeat Shamir secret-sharing's whole point — see module docs "
+            "in remote_backup.py) or .key plaintext backups (a plaintext "
+            "master key should never leave the host)."
+        ),
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -560,6 +642,7 @@ Examples:
         "restore": restore_backup,
         "restore-split": restore_split_backup,
         "export-instructions": export_instructions,
+        "sync-remote": sync_remote,
     }
 
     commands[args.command](args)

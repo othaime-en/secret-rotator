@@ -46,6 +46,7 @@ dev = [
     "build>=1.0.0",
     "twine>=4.0.0",
     "fakeredis>=2.20.0",
+    "moto>=5.0.0",
 ]
 databases = [
     "psycopg2-binary>=2.9.12",

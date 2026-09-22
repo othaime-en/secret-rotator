@@ -47,7 +47,21 @@ def build_encryption_manager() -> Optional[EncryptionManager]:
 def build_backup_manager() -> BackupManager:
     encrypt_backups = settings.get("backup.encrypt_backups", True)
     backup_dir = settings.get("backup.storage_path", "data/backup")
-    return BackupManager(backup_dir=backup_dir, encrypt_backups=encrypt_backups)
+
+    # RemoteBackupClient.from_config() returns None when
+    # backup.remote_backup.enabled is false (the default) or
+    # misconfigured — BackupManager treats that exactly like "remote
+    # backup isn't a thing" everywhere else in this codebase, so
+    # nothing downstream needs its own None-check for this.
+    from secret_rotator.remote_backup import RemoteBackupClient
+
+    remote_backup_client = RemoteBackupClient.from_config()
+
+    return BackupManager(
+        backup_dir=backup_dir,
+        encrypt_backups=encrypt_backups,
+        remote_backup_client=remote_backup_client,
+    )
 
 
 def _setup_providers(engine: RotationEngine) -> None:
