@@ -272,7 +272,18 @@ class MasterKeyBackupManager:
 
         # Split the key and save each share
         shares = split(key_bytes, num_shares, threshold)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        created_at_dt = datetime.now()
+        # Microsecond precision + a short random suffix: two split-key
+        # backups created within the same second previously produced
+        # identical filenames (second-precision timestamp only), so the
+        # later batch silently overwrote the earlier batch's share files.
+        # Computed once and reused for every share in this batch: list_backups()
+        # also groups share files by created_at to reconstruct a "backup
+        # set", so calling datetime.now() again per-share would give each
+        # share a distinct timestamp and the group would never be seen
+        # as complete.
+        timestamp = created_at_dt.strftime("%Y%m%d_%H%M%S_%f") + f"_{secrets.token_hex(3)}"
+        created_at = created_at_dt.isoformat()
         share_files = []
 
         for i, share in enumerate(shares, 1):
@@ -288,7 +299,7 @@ class MasterKeyBackupManager:
                 "share_number": i,
                 "total_shares": num_shares,
                 "threshold": threshold,
-                "created_at": datetime.now().isoformat(),
+                "created_at": created_at,
                 "share_data": share_base64,
                 "key_id": key_data.get("metadata", {}).get("key_id"),
             }
