@@ -62,6 +62,17 @@ class RotationScheduler:
             schedule.every(6).hours.do(self._verify_backup_checksums)
             logger.info("Scheduled checksum verification: every 6 hours")
 
+        # Schedule remote backup sync, if configured (Phase 3). This is
+        # what catches backups made before remote sync was turned on,
+        # and anything upload_on_create missed due to a transient S3
+        # failure — see remote_backup.py. A no-op (never scheduled) when
+        # backup.remote_backup.enabled is false, so this adds nothing
+        # for deployments that haven't set up off-host backups.
+        if settings.get("backup.remote_backup.enabled", False):
+            remote_sync_time = settings.get("backup.remote_backup.sync_time", "01:00")
+            schedule.every().day.at(remote_sync_time).do(self._sync_remote_backups)
+            logger.info(f"Scheduled remote backup sync: daily at {remote_sync_time}")
+
         logger.info(f"Scheduled rotation: {schedule_config}")
         logger.info(f"Scheduled backup cleanup: daily at {cleanup_time}")
 
@@ -176,6 +187,33 @@ class RotationScheduler:
 
         except Exception as e:
             logger.error(f"Error in scheduled checksum verification: {e}")
+
+    def _sync_remote_backups(self):
+        """Run a bulk remote-backup sync (Phase 3). Best-effort by
+        design — see BackupManager.sync_to_remote() /
+        RemoteBackupClient: a failure here is logged and never allowed
+        to affect rotations, local backups, or anything else the
+        scheduler does."""
+        try:
+            logger.info("Starting scheduled remote backup sync")
+            report = self.backup_manager.sync_to_remote()
+            if report is None:
+                # Remote backup was disabled between schedule setup and
+                # this tick firing (e.g. config reloaded) — nothing to do.
+                return
+            logger.info(
+                f"Remote backup sync complete: {report['uploaded']} uploaded, "
+                f"{report['already_synced']} already synced, "
+                f"{report['failed']} failed"
+            )
+            if report["failed"] > 0:
+                logger.warning(
+                    f"{report['failed']} backup(s) failed to sync to remote storage: "
+                    f"{report['failed_files']}. Local backups are unaffected; "
+                    f"these will be retried on the next scheduled sync."
+                )
+        except Exception as e:
+            logger.error(f"Error in scheduled remote backup sync: {e}")
 
     def start(self):
         """Start the scheduler in a background thread"""
