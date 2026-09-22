@@ -10,16 +10,61 @@ from secret_rotator.encryption_manager import EncryptionManager, SecretMasker
 class BackupManager:
     """Handle backup and recovery of secrets with encryption support"""
 
-    def __init__(self, backup_dir: str = "data/backup", encrypt_backups: bool = True):
+    def __init__(
+        self,
+        backup_dir: str = "data/backup",
+        encrypt_backups: bool = True,
+        remote_backup_client=None,
+    ):
         self.backup_dir = Path(backup_dir)
         self.backup_dir.mkdir(parents=True, exist_ok=True)
         self.encrypt_backups = encrypt_backups
+
+        # Optional RemoteBackupClient (Phase 3) — built from config by
+        # bootstrap.py and injected here, rather than this class
+        # reading config itself, so BackupManager stays easy to unit
+        # test without needing S3 config at all. None means remote
+        # backup is simply off; every method below already treats
+        # that as the normal case.
+        self.remote_backup_client = remote_backup_client
+        self.upload_on_create = False
+        if self.remote_backup_client is not None:
+            from secret_rotator.config.settings import settings
+
+            self.upload_on_create = settings.get("backup.remote_backup.upload_on_create", False)
 
         # Initialize encryption manager if encryption is enabled
         self.encryption_manager = None
         if self.encrypt_backups:
             self.encryption_manager = EncryptionManager()
             logger.info("Backup encryption enabled")
+
+    def _maybe_upload_to_remote(self, backup_path: Path) -> None:
+        """Best-effort: upload a freshly-created backup immediately if
+        `backup.remote_backup.upload_on_create` is true. Never raises
+        — a remote upload failure must never fail the backup
+        operation that's the actual safety-critical part. Anything
+        missed here (upload_on_create off, or this upload itself
+        failing) is caught by the next sync_to_remote() sweep, whether
+        that's triggered manually (`secret-rotator --mode
+        sync-backups`) or by the scheduler."""
+        if self.remote_backup_client is None or not self.upload_on_create:
+            return
+        self.remote_backup_client.upload_file(backup_path)
+
+    def sync_to_remote(self) -> Optional[Dict[str, Any]]:
+        """Upload every local backup not yet present in remote
+        storage. Returns None if remote backup isn't configured, or a
+        report dict from RemoteBackupClient.sync_directory() —
+        {"checked", "uploaded", "already_synced", "failed", "failed_files"}.
+
+        Safe to call regardless of `upload_on_create`: this is what
+        catches backups created before remote sync was enabled, and
+        any upload that failed transiently when upload_on_create fired
+        it in the hot path."""
+        if self.remote_backup_client is None:
+            return None
+        return self.remote_backup_client.sync_directory(self.backup_dir, pattern="*.json")
 
     def create_backup(self, secret_id: str, old_value: str, new_value: str) -> str:
         """Create an encrypted backup of the old secret value"""
@@ -52,6 +97,7 @@ class BackupManager:
                 json.dump(backup_data, f, indent=2)
 
             logger.info(f"Created backup for {secret_id}: {backup_path}")
+            self._maybe_upload_to_remote(backup_path)
             return str(backup_path)
 
         except Exception as e:
@@ -275,6 +321,7 @@ class BackupManager:
                 json.dump(backup_data, f, indent=2)
 
             logger.info(f"Created backup with checksum for {secret_id}: {backup_path}")
+            self._maybe_upload_to_remote(backup_path)
             return str(backup_path)
 
         except Exception as e:
