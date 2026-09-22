@@ -2,7 +2,7 @@ cryptography==50.0.1
 mysql-connector-python==9.4.0
 psycopg2-binary==2.9.12
 PyJWT==2.14.0
-pymongo==4.18.0
+pymongo==4.18.1
 pyshamir==1.1.0
 PyYAML==6.0.3
 Requests==2.32.5
