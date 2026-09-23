@@ -9,20 +9,26 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # pyproject.toml classifiers claim 3.9-3.12 support; until now only
+        # 3.9 was ever actually exercised in CI.
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v7
         with:
-          python-version: "3.9"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -e ".[dev]"
           # Test-only: fakeredis lets test_distributed_lock.py and
           # test_job_queue.py exercise the Phase 3 distributed lock
           # and RQ job queue without a real Redis server. Deliberately
@@ -33,15 +39,70 @@ jobs:
           # Test-only, same reasoning: moto mocks S3 for
           # test_remote_backup.py without a real bucket.
           pip install moto
+          # Optional extras exercised by dedicated tests (advanced
+          # rotators' connection tests degrade gracefully without
+          # these, but installing them lets the real success/failure
+          # paths run too, not just the "driver missing" fallback).
+          pip install rq redis pyshamir
 
-      - name: Run tests
+      - name: Run tests with coverage
         run: |
-          cd tests
-          python run_tests.py
+          # Run from repo root, not tests/: coverage.py only auto-discovers
+          # pyproject.toml's [tool.coverage.*] config (the web_interface.py
+          # omit, the exclude_also patterns) relative to the current
+          # directory, and pytest's own addopts (--cov-fail-under=64) is
+          # what actually gates the build — the old `cd tests &&
+          # python run_tests.py` invocation used a plain unittest runner
+          # that never touched coverage or enforced any floor at all.
+          pytest tests/
 
-      - name: Test summary
-        if: always()
-        run: echo "Tests completed. Check the logs above for results."
+      - name: Upload coverage HTML (Python 3.12 run only)
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: htmlcov/
+          retention-days: 14
+
+  lint:
+    # Formatting/style/type gates, split from the test matrix so a lint
+    # failure is reported distinctly from a real test failure and doesn't
+    # need to run four times (once per Python version).
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install project + lint tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: black --check (formatting)
+        run: black --check src/ tests/
+
+      - name: flake8 (style / obvious bugs)
+        run: flake8 src/secret_rotator tests
+
+      - name: mypy (static typing)
+        # Informational for now, not a hard gate: this is the *first*
+        # mypy pass this codebase has ever had. 23 pre-existing type
+        # errors remain (down from 48 — see commit history), scattered
+        # across encryption_manager.py, backup_manager.py, distributed_lock.py,
+        # and a few others. Each one needs individual review before a
+        # fix lands (this is security-critical crypto/backup code — see
+        # the Phase 1 audit) rather than a bulk mechanical pass, so this
+        # job surfaces the count/detail in every PR without blocking
+        # merges until that cleanup is done. Flip continue-on-error to
+        # false once the backlog reaches zero.
+        run: mypy src/secret_rotator --exclude 'web_interface.py'
+        continue-on-error: true
 
   security-scan:
     # This app runs with access to database credentials and a
