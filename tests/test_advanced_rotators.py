@@ -33,7 +33,29 @@ class TestDatabasePasswordRotator(unittest.TestCase):
 
     def test_generated_password_meets_its_own_validator(self):
         rotator = self._rotator()
+        # generate_new_secret() only *probabilistically* included a digit
+        # before this was fixed (~1% of 32-char passwords had none, ~2%
+        # at length 12) - many iterations catch that a single call won't.
+        for _ in range(500):
+            password = rotator.generate_new_secret()
+            self.assertTrue(rotator.validate_secret(password))
+
+    def test_generated_password_always_contains_a_digit(self):
+        """Regression test for the specific failure mode: the guaranteed
+        digit could shuffle into position 0 and then get silently
+        overwritten by the 'must start with a letter' fix-up."""
+        rotator = self._rotator(length=12)
+        for _ in range(500):
+            password = rotator.generate_new_secret()
+            self.assertTrue(any(c.isdigit() for c in password), password)
+
+    def test_generate_below_validation_minimum_falls_back_to_minimum_length(self):
+        """validate_secret() unconditionally requires len >= 12; a
+        configured length below that must not produce an unvalidatable
+        password."""
+        rotator = self._rotator(length=5)
         password = rotator.generate_new_secret()
+        self.assertGreaterEqual(len(password), 12)
         self.assertTrue(rotator.validate_secret(password))
 
     def test_generated_password_respects_configured_length(self):

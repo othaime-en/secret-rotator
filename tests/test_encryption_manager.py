@@ -123,7 +123,7 @@ class TestTamperAndCorruptionDetection(EncryptionManagerTestCase):
     def test_master_key_integrity_check_failure_raises(self):
         """If the key file's stored key_id no longer matches a hash of the
         key bytes, loading must refuse rather than silently trust it."""
-        em = self._new_manager()  # writes a valid key file first
+        self._new_manager()  # writes a valid key file first
         with open(self.key_file, "r") as f:
             key_data = json.load(f)
 
