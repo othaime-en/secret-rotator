@@ -84,6 +84,13 @@ The container automatically handles:
 docker cp secret-rotator:/app/data/.master.key ./backup/
 ```
 
+**Also important:** set `SECRET_ROTATOR_ADMIN_PASSWORD_HASH` in `.env`
+before exposing port 8080 beyond your own machine — there is no
+default password — and put a TLS-terminating reverse proxy in front of
+it for anything beyond `localhost`. See
+[docs/HARDENING_GUIDE.md](docs/HARDENING_GUIDE.md) for both, including
+a ready-to-use Caddy example.
+
 ### Production Deployment (Custom Config)
 
 ```bash
@@ -162,13 +169,26 @@ jobs:
 
 ### Running the Application
 
+Before starting in anything beyond local dev, set an admin password and
+a Flask secret key — the dashboard requires login and refuses to start
+in production mode without both configured:
+
+```bash
+secret-rotator --mode set-web-password
+export FLASK_SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
+```
+
 Start the daemon with web interface and scheduler:
 
 ```bash
 secret-rotator
 ```
 
-The web interface will be available at `http://localhost:8080`
+The web interface will be available at `http://localhost:8080`. See
+[docs/HARDENING_GUIDE.md](docs/HARDENING_GUIDE.md) before exposing it
+beyond `localhost` — in particular, nothing in this application
+terminates TLS, so a reverse proxy is required for anything outside a
+trusted local network.
 
 ### One-Time Rotation
 
@@ -269,23 +289,30 @@ Access the dashboard at `http://localhost:8080` when the application is running.
 ### Encryption
 
 - Fernet symmetric encryption (AES-128 in CBC mode with HMAC authentication)
-- Master key rotation capability with automatic re-encryption
-- Encrypted backups with integrity verification
-- Secure key derivation from passphrases using PBKDF2
+- Master key rotation capability with automatic re-encryption (two-phase commit with rollback on failure)
+- Encrypted backups with integrity verification, including Shamir's Secret Sharing split-key backups
+- Secure key derivation from passphrases using PBKDF2 (600,000 iterations)
 
-### Access Controls
+### Web Dashboard Security
 
-- File-based permissions (0600) for sensitive files
-- Configurable access policies for secrets
-- Audit logging of all secret access and modifications
-- Sensitive data masking in logs
+- Session-based authentication (no default password — see [Running the Application](#running-the-application))
+- CSRF protection on all state-changing endpoints
+- Rate limiting on dashboard and API routes
+- Path-traversal protection on backup restore endpoints
+- Served via a production WSGI server (waitress), not Flask's development server
 
-### Backup Integrity
+### Audit & Backup Integrity
 
-- Automatic checksum verification
-- Scheduled integrity checks
-- Corruption detection and alerting
-- Backup health monitoring
+- Append-only audit log of rotations, restores, logins, and login failures
+- Automatic checksum verification for backups, with scheduled integrity checks
+- File-based permissions (0600) for sensitive files (master key, backups, config)
+- Best-effort sensitive-data masking in application logs (see the hardening guide for its limits)
+
+**Not currently included:** per-secret access policies / RBAC (one
+admin login covers the whole dashboard) and TLS termination (bring your
+own reverse proxy). See [docs/HARDENING_GUIDE.md](docs/HARDENING_GUIDE.md)
+for the full picture — what's handled for you, what's on you to set up,
+and what's genuinely not built yet — before any production deployment.
 
 ## Development
 
@@ -306,13 +333,13 @@ pytest tests/ --cov=secret_rotator --cov-report=html
 
 ```bash
 # Format code
-black src/
+black src/ tests/
 
-# Type checking
-mypy src/
+# Linting (enforced in CI)
+flake8 src/secret_rotator tests
 
-# Linting
-flake8 src/
+# Type checking (informational in CI - see CONTRIBUTING.md)
+mypy src/secret_rotator --exclude 'web_interface.py'
 ```
 
 ## Configuration Reference
@@ -343,6 +370,16 @@ logging:
   separate_error_log: true # Separate file for errors
 ```
 
+## Documentation
+
+- [docs/HARDENING_GUIDE.md](docs/HARDENING_GUIDE.md) — what to set up before a production deployment (read this first)
+- [docs/BACKUP_ARCHITECTURE.md](docs/BACKUP_ARCHITECTURE.md) — how master-key backup and disaster recovery work
+- [docs/BACKUP_QUICK_REFERENCE.md](docs/BACKUP_QUICK_REFERENCE.md) — command reference for `secret-rotator-backup`
+- [docs/DOCKER_QUICKSTART.md](docs/DOCKER_QUICKSTART.md) — detailed Docker deployment guide
+- [SECURITY.md](SECURITY.md) — vulnerability disclosure policy
+- [CONTRIBUTING.md](CONTRIBUTING.md) — development setup and contribution guidelines
+- [CHANGELOG.md](CHANGELOG.md) — release history
+
 ## Troubleshooting
 
 ### Common Issues
@@ -363,14 +400,16 @@ logging:
 
 ## Contributing
 
-Contributions are welcome! Please ensure:
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for
+full setup instructions, coding standards, and PR guidelines. Short
+version:
 
-1. All tests pass: `pytest tests/ -v`
-2. Code follows style guidelines: `black src/` and `flake8 src/`
-3. Documentation is updated for new features
-4. Commit messages are clear and descriptive
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+1. All tests pass: `pytest tests/`
+2. Code follows style guidelines: `black src/ tests/` and `flake8 src/secret_rotator tests`
+3. Changes to encryption, backup, auth, or the plugin loader get extra
+   scrutiny — see [CONTRIBUTING.md's security-sensitive-changes section](CONTRIBUTING.md#security-sensitive-changes)
+4. Documentation is updated for new features
+5. Commit messages are clear and descriptive
 
 ## License
 
@@ -378,24 +417,31 @@ This project is licensed under the MIT License. See the [LICENSE.md](LICENSE.md)
 
 ## Security Considerations
 
-This tool handles sensitive credentials. Ensure proper security measures:
+This tool handles sensitive credentials. Before deploying beyond a
+trusted local network, read
+[docs/HARDENING_GUIDE.md](docs/HARDENING_GUIDE.md) — it covers what's
+handled for you out of the box (authentication, CSRF protection, rate
+limiting, path-traversal protection), what you need to configure
+(admin password, `FLASK_SECRET_KEY`, TLS via a reverse proxy), and what
+isn't built yet (per-secret access policies, guaranteed log masking).
 
-- **File Permissions**: Restrict access to configuration files and key files
-- **Master Key**: Backup the master encryption key securely using provided tools
-- **Network Security**: Use HTTPS/TLS in production environments
-- **Access Control**: Implement appropriate access controls for the web interface
-- **Audit Logs**: Regularly review audit logs for suspicious activity
-- **Key Rotation**: Rotate the master encryption key periodically (recommended: every 90 days)
+Quick summary:
 
-For security issues, please report privately to the maintainers rather than creating public issues.
+- **Master Key**: back up using `secret-rotator-backup`, store backups
+  in a different failure domain than your primary data volume
+- **TLS**: this application does not terminate TLS itself — put a
+  reverse proxy in front of it for anything beyond `localhost`
+  (example in the hardening guide)
+- **Key Rotation**: rotate the master encryption key periodically
+  (recommended: every 90 days) with `secret-rotator --mode rotate-master-key`
+- **Plugins**: the plugin system runs arbitrary code with full process
+  privileges — only install plugins you trust as much as the core
+  codebase
 
-## Acknowledgments
-
-Built with:
-
-- [cryptography](https://cryptography.io/) for encryption
-- [PyYAML](https://pyyaml.org/) for configuration management
-- [schedule](https://schedule.readthedocs.io/) for job scheduling
+For security issues, please report privately via [GitHub Security
+Advisories](https://github.com/othaime-en/secret-rotator/security/advisories/new)
+rather than creating a public issue — see [SECURITY.md](SECURITY.md)
+for the full disclosure policy and response timeline.
 
 ## Changelog
 
