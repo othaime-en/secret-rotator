@@ -1,0 +1,102 @@
+name: Release
+
+# Triggered by pushing a version tag (v1.2.3, etc.) - see CONTRIBUTING.md's
+# release checklist for the full cut-a-release procedure. This replaces
+# the previous manual `python -m build && twine upload` process.
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-version:
+    # Refuses to proceed if pyproject.toml, version.py, and the git tag
+    # don't all agree, or if CHANGELOG.md has no entry for this version.
+    # Both of these have drifted before this pipeline existed (see
+    # scripts/check_version.py's docstring) - this is the enforcement
+    # that stops it happening silently again.
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Extract version from tag
+        id: extract
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Verify version consistency (pyproject.toml / version.py / tag)
+        run: python scripts/check_version.py "${{ steps.extract.outputs.version }}"
+
+      - name: Verify CHANGELOG.md has an entry for this version
+        run: python scripts/extract_release_notes.py "${{ steps.extract.outputs.version }}" > /dev/null
+
+  test:
+    needs: verify-version
+    # Re-runs the exact same test+lint+security-scan suite that gates
+    # every PR - a release is not exempt from the checks a normal merge
+    # would have to pass, including the pip-audit/bandit security scan.
+    uses: ./.github/workflows/test.yml
+
+  build-and-publish:
+    needs: [verify-version, test]
+    runs-on: ubuntu-latest
+    environment:
+      # Configure this environment in GitHub repo settings with required
+      # reviewers for a manual approval gate before anything actually
+      # publishes - see CONTRIBUTING.md. Also configure a matching
+      # Trusted Publisher on PyPI scoped to this environment name (see
+      # below) so publishing needs no long-lived API token secret at all.
+      name: pypi
+      url: https://pypi.org/project/secret-rotator/${{ needs.verify-version.outputs.version }}/
+    permissions:
+      # id-token: write is what makes OIDC/Trusted Publishing work -
+      # PyPI verifies this workflow's identity directly with GitHub,
+      # so there is no PYPI_API_TOKEN secret to leak, rotate, or scope.
+      id-token: write
+      contents: write # to create the GitHub Release below
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip build twine
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Validate distribution metadata
+        run: twine check dist/*
+
+      - name: Publish to PyPI (Trusted Publishing, no token needed)
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Extract this version's changelog section
+        run: |
+          python scripts/extract_release_notes.py \
+            "${{ needs.verify-version.outputs.version }}" > release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ needs.verify-version.outputs.version }}
+          body_path: release_notes.md
+          files: dist/*
+          generate_release_notes: false
