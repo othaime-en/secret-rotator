@@ -29,10 +29,20 @@ def _build_test_engine(file_path: str) -> RotationEngine:
     )
     engine.register_rotator(rotator)
     engine.add_rotation_job(
-        {"name": "job_a", "provider": "test_provider", "rotator": "test_rotator", "secret_id": "secret_a"}
+        {
+            "name": "job_a",
+            "provider": "test_provider",
+            "rotator": "test_rotator",
+            "secret_id": "secret_a",
+        }
     )
     engine.add_rotation_job(
-        {"name": "job_b", "provider": "test_provider", "rotator": "test_rotator", "secret_id": "secret_b"}
+        {
+            "name": "job_b",
+            "provider": "test_provider",
+            "rotator": "test_rotator",
+            "secret_id": "secret_b",
+        }
     )
     return engine
 

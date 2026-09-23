@@ -8,14 +8,14 @@ Jinja2 templates for the dashboard and related pages.
 from flask import Blueprint, render_template, current_app, session
 from secret_rotator.utils.logger import logger
 
-bp = Blueprint('dashboard', __name__)
+bp = Blueprint("dashboard", __name__)
 
 
-@bp.route('/')
+@bp.route("/")
 def index():
     """
     Main dashboard page.
-    
+
     Serves the primary UI with tabs for:
     - Rotation Jobs
     - Backups
@@ -23,25 +23,25 @@ def index():
     - Activity Logs
     """
     logger.info("Dashboard page accessed")
-    
+
     # Get basic stats for initial page load
     engine = current_app.rotation_engine
     stats = {
-        'total_jobs': len(engine.rotation_jobs),
-        'total_providers': len(engine.providers),
-        'total_rotators': len(engine.rotators),
+        "total_jobs": len(engine.rotation_jobs),
+        "total_providers": len(engine.providers),
+        "total_rotators": len(engine.rotators),
     }
-    
-    return render_template('dashboard.html', stats=stats, username=session.get('username'))
+
+    return render_template("dashboard.html", stats=stats, username=session.get("username"))
 
 
-@bp.route('/health')
+@bp.route("/health")
 def health_page():
     """
     Dedicated backup health monitoring page.
-    
+
     Provides detailed view of backup system health,
     verification history, and integrity status.
     """
     logger.info("Health page accessed")
-    return render_template('health.html')
+    return render_template("health.html")

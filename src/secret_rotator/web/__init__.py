@@ -11,7 +11,7 @@ from secret_rotator.utils.logger import logger
 class FlaskWebServer:
     """
     Flask-based web server for the Secret Rotation dashboard.
-    
+
     This server runs in a background thread and provides:
     - RESTful API endpoints for rotation operations
     - Real-time backup health monitoring
@@ -35,11 +35,11 @@ class FlaskWebServer:
     Waitress's request-handling thread pool, which is the concurrency
     knob available under this single-process model.
     """
-    
-    def __init__(self, rotation_engine, port=8081, host='localhost', config=None, threads=8):
+
+    def __init__(self, rotation_engine, port=8081, host="localhost", config=None, threads=8):
         """
         Initialize Flask web server.
-        
+
         Args:
             rotation_engine: RotationEngine instance to manage
             port: Port to listen on (default: 8081 for parallel testing)
@@ -49,31 +49,31 @@ class FlaskWebServer:
                 (default: 8). Comes from web.threads in config.yaml.
         """
         from .app import create_app
-        
+
         self.rotation_engine = rotation_engine
         self.port = port
         self.host = host
         self.config = config or {}
         self.threads = threads
-        
+
         # Create Flask app
         self.app = create_app(rotation_engine, self.config)
-        
+
         # Server instance (created on start)
         self.server = None
         self.thread = None
-    
+
     def start(self):
         """
         Start the Flask server in a background thread.
-        
+
         This allows the server to run without blocking the main application.
         Uses Waitress, a production-grade pure-Python WSGI server (S11).
         """
         if self.server is not None:
             logger.warning("Flask server already running")
             return
-        
+
         # Create Waitress server. `_quiet=False` (default) lets it log
         # its own startup banner; we mirror the key details below via
         # our own logger so they land in structured logs too.
@@ -83,36 +83,36 @@ class FlaskWebServer:
             port=self.port,
             threads=self.threads,
         )
-        
+
         # Start in daemon thread (will stop when main thread exits)
         self.thread = Thread(target=self.server.run, daemon=True, name="FlaskServer")
         self.thread.start()
-        
+
         logger.info(
             f"Flask web server started on http://{self.host}:{self.port} "
             f"(waitress, {self.threads} threads)"
         )
         logger.info(f"Dashboard available at http://{self.host}:{self.port}/")
-    
+
     def stop(self):
         """
         Gracefully shutdown the Flask server.
-        
+
         Stops the Waitress server and waits for the thread to terminate.
         """
         if self.server is None:
             logger.warning("Flask server not running")
             return
-        
+
         logger.info("Shutting down Flask web server...")
         self.server.close()
-        
+
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=5)
-        
+
         self.server = None
         self.thread = None
         logger.info("Flask web server stopped")
 
 
-__all__ = ['FlaskWebServer']
+__all__ = ["FlaskWebServer"]

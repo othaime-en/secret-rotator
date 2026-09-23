@@ -25,9 +25,7 @@ class TestRateLimiting(unittest.TestCase):
             )
         }
         os.environ["SECRET_ROTATOR_ADMIN_USERNAME"] = TEST_USERNAME
-        os.environ["SECRET_ROTATOR_ADMIN_PASSWORD_HASH"] = generate_password_hash(
-            TEST_PASSWORD
-        )
+        os.environ["SECRET_ROTATOR_ADMIN_PASSWORD_HASH"] = generate_password_hash(TEST_PASSWORD)
         os.environ["FLASK_SECRET_KEY"] = "test-secret-key-not-for-prod"
 
     @classmethod
@@ -66,10 +64,9 @@ class TestRateLimiting(unittest.TestCase):
         attempt is exactly this shape anyway: repeated failed guesses
         against one anonymous, IP-keyed bucket.
         """
+
         def _bad_login():
-            return self.client.post(
-                "/login", data={"username": TEST_USERNAME, "password": "wrong"}
-            )
+            return self.client.post("/login", data={"username": TEST_USERNAME, "password": "wrong"})
 
         responses = [_bad_login() for _ in range(10)]
         for resp in responses:

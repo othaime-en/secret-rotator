@@ -103,7 +103,12 @@ class RotationJobManager:
         return self._start_rotation_local(actor)
 
     def _start_rotation_distributed(self, actor: str) -> Dict[str, Any]:
-        from secret_rotator.job_queue import enqueue_rotation, find_in_flight_job, get_queue, job_to_view
+        from secret_rotator.job_queue import (
+            enqueue_rotation,
+            find_in_flight_job,
+            get_queue,
+            job_to_view,
+        )
 
         queue = get_queue()
         existing = find_in_flight_job(queue)
@@ -178,9 +183,7 @@ class RotationJobManager:
                 job["progress"] = {"completed": completed, "total": total}
 
         try:
-            results = self.engine.rotate_all_secrets(
-                actor=actor, on_job_complete=on_job_complete
-            )
+            results = self.engine.rotate_all_secrets(actor=actor, on_job_complete=on_job_complete)
             with self._lock:
                 job = self._jobs[job_id]
                 job["status"] = "completed"

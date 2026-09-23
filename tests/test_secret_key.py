@@ -13,8 +13,7 @@ class TestResolveSecretKey(unittest.TestCase):
         # Make sure ambient env vars from a real environment don't leak
         # into these tests.
         self._saved_env = {
-            k: os.environ.pop(k, None)
-            for k in ("FLASK_SECRET_KEY", "SECRET_ROTATOR_ENV")
+            k: os.environ.pop(k, None) for k in ("FLASK_SECRET_KEY", "SECRET_ROTATOR_ENV")
         }
 
     def tearDown(self):

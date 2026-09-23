@@ -56,9 +56,7 @@ class TestPluginRegistry(unittest.TestCase):
 
     def test_list_available_plugins_shape(self):
         listing = PluginRegistry().list_available_plugins()
-        self.assertEqual(
-            set(listing.keys()), {"providers", "rotators", "notifiers", "validators"}
-        )
+        self.assertEqual(set(listing.keys()), {"providers", "rotators", "notifiers", "validators"})
         self.assertEqual(listing["providers"], [])
 
     def test_registering_same_name_twice_overwrites(self):

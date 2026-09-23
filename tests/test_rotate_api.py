@@ -42,9 +42,7 @@ class TestRotateEndpoint(unittest.TestCase):
             )
         }
         os.environ["SECRET_ROTATOR_ADMIN_USERNAME"] = TEST_USERNAME
-        os.environ["SECRET_ROTATOR_ADMIN_PASSWORD_HASH"] = generate_password_hash(
-            TEST_PASSWORD
-        )
+        os.environ["SECRET_ROTATOR_ADMIN_PASSWORD_HASH"] = generate_password_hash(TEST_PASSWORD)
         os.environ["FLASK_SECRET_KEY"] = "test-secret-key-not-for-prod"
 
     @classmethod
@@ -93,8 +91,7 @@ class TestRotateEndpoint(unittest.TestCase):
         job_id = self.client.post("/api/rotate").get_json()["job_id"]
 
         completed = _wait_until(
-            lambda: self.client.get(f"/api/rotate/{job_id}").get_json()["status"]
-            == "completed"
+            lambda: self.client.get(f"/api/rotate/{job_id}").get_json()["status"] == "completed"
         )
         self.assertTrue(completed)
 

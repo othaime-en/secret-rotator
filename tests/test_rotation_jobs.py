@@ -34,31 +34,43 @@ class TestRotationJobManager(unittest.TestCase):
         self.temp_file.close()
         self.temp_backup_dir = tempfile.mkdtemp()
 
-        self.provider = FileSecretProvider(
-            "test_provider", {"file_path": self.temp_file.name}
-        )
+        self.provider = FileSecretProvider("test_provider", {"file_path": self.temp_file.name})
         self.engine.register_provider(self.provider)
 
         self.rotator = PasswordRotator(
             "test_rotator",
-            {"length": 12, "use_symbols": True, "use_numbers": True,
-             "use_uppercase": True, "use_lowercase": True},
+            {
+                "length": 12,
+                "use_symbols": True,
+                "use_numbers": True,
+                "use_uppercase": True,
+                "use_lowercase": True,
+            },
         )
         self.engine.register_rotator(self.rotator)
 
-        self.engine.add_rotation_job({
-            "name": "job_a", "provider": "test_provider",
-            "rotator": "test_rotator", "secret_id": "secret_a",
-        })
-        self.engine.add_rotation_job({
-            "name": "job_b", "provider": "test_provider",
-            "rotator": "test_rotator", "secret_id": "secret_b",
-        })
+        self.engine.add_rotation_job(
+            {
+                "name": "job_a",
+                "provider": "test_provider",
+                "rotator": "test_rotator",
+                "secret_id": "secret_a",
+            }
+        )
+        self.engine.add_rotation_job(
+            {
+                "name": "job_b",
+                "provider": "test_provider",
+                "rotator": "test_rotator",
+                "secret_id": "secret_b",
+            }
+        )
 
         # rotate_all_secrets sleeps 1s between jobs by design (avoid
         # overwhelming downstream systems) — not worth waiting out in
         # every test, so speed it up here.
         import secret_rotator.rotation_engine as rotation_engine_module
+
         self._orig_sleep = rotation_engine_module.time.sleep
         rotation_engine_module.time.sleep = lambda _seconds: None
 
@@ -66,6 +78,7 @@ class TestRotationJobManager(unittest.TestCase):
 
     def tearDown(self):
         import secret_rotator.rotation_engine as rotation_engine_module
+
         rotation_engine_module.time.sleep = self._orig_sleep
 
         os.unlink(self.temp_file.name)
@@ -84,9 +97,7 @@ class TestRotationJobManager(unittest.TestCase):
         job = self.manager.start_rotation(actor="alice")
         job_id = job["job_id"]
 
-        completed = _wait_until(
-            lambda: self.manager.get_job(job_id)["status"] == "completed"
-        )
+        completed = _wait_until(lambda: self.manager.get_job(job_id)["status"] == "completed")
         self.assertTrue(completed, "job did not complete in time")
 
         final = self.manager.get_job(job_id)

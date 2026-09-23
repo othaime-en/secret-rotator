@@ -20,7 +20,7 @@ class TestMasterKeyRotation(unittest.TestCase):
         self.test_dir = tempfile.mkdtemp()
         self.key_file = Path(self.test_dir) / ".master.key"
         self.secrets_file = Path(self.test_dir) / "secrets.json"
-        
+
         # Helper to cleanup in tearDown
         self.addCleanup(self._cleanup)
 

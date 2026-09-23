@@ -95,7 +95,16 @@ class TestCreateConfig(SetupWizardTestCase):
         with open(config_file) as f:
             config = yaml.safe_load(f)
 
-        for section in ("rotation", "logging", "web", "providers", "rotators", "security", "backup", "jobs"):
+        for section in (
+            "rotation",
+            "logging",
+            "web",
+            "providers",
+            "rotators",
+            "security",
+            "backup",
+            "jobs",
+        ):
             self.assertIn(section, config)
         self.assertEqual(config["rotation"]["schedule"], "daily")
 
@@ -238,14 +247,11 @@ class TestSetupBackupPassphrase(SetupWizardTestCase):
 
 class TestMainEntryPoint(SetupWizardTestCase):
     def test_declining_initial_confirmation_exits_without_creating_anything(self):
-        with mock.patch(
-            "secret_rotator.setup_wizard.get_config_dir", return_value=self.config_dir
-        ), mock.patch(
-            "secret_rotator.setup_wizard.get_data_dir", return_value=self.data_dir
-        ), mock.patch(
-            "secret_rotator.setup_wizard.get_log_dir", return_value=self.log_dir
-        ), mock.patch(
-            "builtins.input", return_value="no"
+        with (
+            mock.patch("secret_rotator.setup_wizard.get_config_dir", return_value=self.config_dir),
+            mock.patch("secret_rotator.setup_wizard.get_data_dir", return_value=self.data_dir),
+            mock.patch("secret_rotator.setup_wizard.get_log_dir", return_value=self.log_dir),
+            mock.patch("builtins.input", return_value="no"),
         ):
             with self.assertRaises(SystemExit) as cm:
                 setup_wizard.main()

@@ -121,8 +121,7 @@ class RemoteBackupClient:
             region=settings.get("backup.remote_backup.region"),
             endpoint_url=settings.get("backup.remote_backup.endpoint_url") or None,
             access_key_id=(
-                os.getenv("AWS_ACCESS_KEY_ID")
-                or settings.get("backup.remote_backup.access_key_id")
+                os.getenv("AWS_ACCESS_KEY_ID") or settings.get("backup.remote_backup.access_key_id")
             ),
             secret_access_key=(
                 os.getenv("AWS_SECRET_ACCESS_KEY")

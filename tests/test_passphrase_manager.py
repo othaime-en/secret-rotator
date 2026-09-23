@@ -1,7 +1,7 @@
 """
 Unit tests for utils/passphrase_manager.py.
 
-Covers the full priority chain (CLI file > config > 
+Covers the full priority chain (CLI file > config >
 standard locations > env var > stdin > interactive), file
 permission handling, and the help-message / interactive-prompt paths.
 

@@ -188,14 +188,14 @@ class TestListVerifyRestore(CliTestCase):
         cli.verify_backup(args)  # no SystemExit raised => success path
 
     def test_verify_missing_backup_exits_nonzero(self):
-        args = self._ns(
-            backup_file=str(Path(self.test_dir) / "nope.key"), passphrase_file=None
-        )
+        args = self._ns(backup_file=str(Path(self.test_dir) / "nope.key"), passphrase_file=None)
         with self.assertRaises(SystemExit):
             cli.verify_backup(args)
 
     def test_verify_encrypted_with_passphrase_file(self):
-        backup_file = self._manager().create_encrypted_key_backup(passphrase="correct horse battery!!")
+        backup_file = self._manager().create_encrypted_key_backup(
+            passphrase="correct horse battery!!"
+        )
         pass_file = Path(self.test_dir) / "pass.txt"
         pass_file.write_text("correct horse battery!!")
 
@@ -203,7 +203,9 @@ class TestListVerifyRestore(CliTestCase):
         cli.verify_backup(args)  # no SystemExit => verified successfully
 
     def test_verify_encrypted_with_wrong_passphrase_exits_nonzero(self):
-        backup_file = self._manager().create_encrypted_key_backup(passphrase="correct horse battery!!")
+        backup_file = self._manager().create_encrypted_key_backup(
+            passphrase="correct horse battery!!"
+        )
         pass_file = Path(self.test_dir) / "wrong.txt"
         pass_file.write_text("totally-wrong-passphrase")
 
@@ -212,7 +214,9 @@ class TestListVerifyRestore(CliTestCase):
             cli.verify_backup(args)
 
     def test_restore_declining_confirmation_does_not_restore(self):
-        backup_file = self._manager().create_encrypted_key_backup(passphrase="correct horse battery!!")
+        backup_file = self._manager().create_encrypted_key_backup(
+            passphrase="correct horse battery!!"
+        )
         before = self.key_file.read_text()
 
         args = self._ns(backup_file=backup_file, passphrase_file=None)

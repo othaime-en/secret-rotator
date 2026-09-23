@@ -2,11 +2,11 @@
 # DEPRECATION NOTICE
 # ============================================================================
 # This file is DEPRECATED as of version 1.3.0
-# 
+#
 # Migration Status: REPLACED by Flask implementation
 # New Implementation: src/secret_rotator/web/
 # Removal Date: Scheduled for version 1.4.0
-# 
+#
 # This code is kept temporarily for:
 # 1. Emergency rollback capability
 # 2. Reference during migration period
@@ -16,11 +16,12 @@
 # ============================================================================
 
 import warnings
+
 warnings.warn(
     "web_interface.py is deprecated and will be removed in version 1.4.0. "
     "Use the Flask implementation in src/secret_rotator/web/ instead.",
     DeprecationWarning,
-    stacklevel=2
+    stacklevel=2,
 )
 
 import json

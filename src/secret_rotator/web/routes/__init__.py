@@ -11,4 +11,4 @@ from .dashboard import bp as dashboard_bp
 from .api import bp as api_bp
 from .health import bp as health_bp
 
-__all__ = ['dashboard_bp', 'api_bp', 'health_bp']
+__all__ = ["dashboard_bp", "api_bp", "health_bp"]

@@ -16,9 +16,7 @@ class AuditLog:
     """Append-only structured log of security-relevant events."""
 
     def __init__(self, audit_file: Optional[str] = None):
-        self.audit_file = Path(
-            audit_file or settings.get("audit.log_file", "logs/audit.log")
-        )
+        self.audit_file = Path(audit_file or settings.get("audit.log_file", "logs/audit.log"))
         self.audit_file.parent.mkdir(parents=True, exist_ok=True)
 
     def log(
@@ -61,10 +59,7 @@ class AuditLog:
             logger.error(f"Failed to write audit event to {self.audit_file}: {e}")
 
         level = logger.info if success else logger.warning
-        level(
-            f"AUDIT action={action} actor={actor} secret_id={secret_id} "
-            f"success={success}"
-        )
+        level(f"AUDIT action={action} actor={actor} secret_id={secret_id} " f"success={success}")
 
     def get_recent_events(
         self,

@@ -70,7 +70,9 @@ class TestEncryptedBackup(KeyBackupManagerTestCase):
     def test_restore_with_wrong_passphrase_raises(self):
         backup_file = self.manager.create_encrypted_key_backup(passphrase="correct horse battery!!")
         with self.assertRaises(InvalidToken):
-            self.manager.restore_from_encrypted_backup(backup_file, passphrase="wrong passphrase!!!!")
+            self.manager.restore_from_encrypted_backup(
+                backup_file, passphrase="wrong passphrase!!!!"
+            )
 
     def test_verify_only_does_not_modify_master_key_file(self):
         backup_file = self.manager.create_encrypted_key_backup(passphrase="correct horse battery!!")
@@ -84,7 +86,9 @@ class TestEncryptedBackup(KeyBackupManagerTestCase):
 
     def test_restore_creates_pre_restore_safety_copy(self):
         backup_file = self.manager.create_encrypted_key_backup(passphrase="correct horse battery!!")
-        self.manager.restore_from_encrypted_backup(backup_file, passphrase="correct horse battery!!")
+        self.manager.restore_from_encrypted_backup(
+            backup_file, passphrase="correct horse battery!!"
+        )
 
         pre_restore = self.master_key_file.with_suffix(".key.pre_restore")
         self.assertTrue(pre_restore.exists())
@@ -102,7 +106,9 @@ class TestEncryptedBackup(KeyBackupManagerTestCase):
             json.dump(package, f)
 
         with self.assertRaises(ValueError):
-            self.manager.restore_from_encrypted_backup(backup_file, passphrase="correct horse battery!!")
+            self.manager.restore_from_encrypted_backup(
+                backup_file, passphrase="correct horse battery!!"
+            )
 
     def test_restore_missing_file_raises(self):
         with self.assertRaises(FileNotFoundError):
@@ -238,7 +244,9 @@ class TestListAndVerifyBackups(KeyBackupManagerTestCase):
 
     def test_verify_encrypted_backup_with_correct_passphrase(self):
         backup_file = self.manager.create_encrypted_key_backup(passphrase="correct horse battery!!")
-        self.assertTrue(self.manager.verify_backup(backup_file, passphrase="correct horse battery!!"))
+        self.assertTrue(
+            self.manager.verify_backup(backup_file, passphrase="correct horse battery!!")
+        )
 
     def test_verify_plaintext_backup(self):
         backup_file = self.manager.create_plaintext_backup()
