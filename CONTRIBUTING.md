@@ -148,7 +148,60 @@ infrastructure), consider contributing it upstream via a normal PR
 rather than keeping it as a local plugin — it'll get test coverage and
 maintenance from the project going forward.
 
-## Questions
+## Cutting a release
+
+Releases are built and published entirely by
+`.github/workflows/release.yml`, triggered by pushing a `vX.Y.Z` tag —
+there is no manual `python -m build && twine upload` step anymore.
+Publishing uses [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/)
+(OIDC), so no `PYPI_API_TOKEN` secret exists to leak or rotate.
+
+### One-time setup (already done if you're not setting this up for the first time)
+
+1. On [pypi.org](https://pypi.org), under the project's _Publishing_
+   settings, add a Trusted Publisher: this GitHub repo, workflow file
+   `release.yml`, environment name `pypi`.
+2. In the GitHub repo settings, create an _Environment_ named `pypi`
+   and add required reviewers to it. This makes every release publish
+   wait for a manual approval click, even though the tag push already
+   happened — a deliberate speed bump before anything irreversible.
+
+### Every release
+
+1. Decide the new version number (semver — see
+   [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) /
+   [SemVer](https://semver.org/)).
+2. Update **both** version declarations to match:
+   - `pyproject.toml`'s `[project] version = "..."`
+   - `src/secret_rotator/version.py`'s `__version__ = "..."`
+
+   These have drifted before (see `scripts/check_version.py`'s
+   docstring) — the release pipeline will refuse to publish if they
+   don't match each other and the tag, but it's still worth
+   double-checking before you push the tag rather than finding out
+   from a failed CI run.
+
+3. Add a new `## [X.Y.Z] - YYYY-MM-DD` section to the top of
+   `CHANGELOG.md`, under the existing "Keep a Changelog" format. The
+   release pipeline extracts this section verbatim as the GitHub
+   Release notes and will refuse to publish if it can't find one for
+   the version you're tagging.
+4. Commit those changes to `main` (a normal PR, reviewed like anything
+   else).
+5. Tag the commit and push the tag:
+   ```bash
+   git tag v1.3.0
+   git push origin v1.3.0
+   ```
+6. Watch the _Release_ workflow in GitHub Actions. It will, in order:
+   verify the version is consistent everywhere and that a changelog
+   entry exists, re-run the full test/lint/security-scan suite, wait
+   for a reviewer to approve the `pypi` environment, build the sdist
+   and wheel, validate them with `twine check`, publish to PyPI, and
+   create a GitHub Release with the changelog section attached.
+
+If any step fails, nothing downstream of it runs — in particular, a
+failed test run or a version mismatch means nothing gets published.
 
 Open a [GitHub Discussion](https://github.com/othaime-en/secret-rotator/discussions)
 for anything that isn't a specific bug report or feature request.
