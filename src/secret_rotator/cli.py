@@ -2,6 +2,7 @@
 """
 CLI entry point for Secret Rotation System
 """
+
 import sys
 
 
