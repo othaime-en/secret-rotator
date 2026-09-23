@@ -1,6 +1,4 @@
 import unittest
-import sys
-from pathlib import Path
 
 
 class TestRetryDecorator(unittest.TestCase):

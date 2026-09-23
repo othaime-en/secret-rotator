@@ -7,7 +7,6 @@ import time
 
 from flask import (
     Blueprint,
-    current_app,
     jsonify,
     redirect,
     render_template,
@@ -35,15 +34,11 @@ EXEMPT_ENDPOINTS = {
 
 
 def _get_configured_username() -> str:
-    return os.getenv("SECRET_ROTATOR_ADMIN_USERNAME") or settings.get(
-        "web.auth.username", "admin"
-    )
+    return os.getenv("SECRET_ROTATOR_ADMIN_USERNAME") or settings.get("web.auth.username", "admin")
 
 
 def _get_configured_password_hash():
-    return os.getenv("SECRET_ROTATOR_ADMIN_PASSWORD_HASH") or settings.get(
-        "web.auth.password_hash"
-    )
+    return os.getenv("SECRET_ROTATOR_ADMIN_PASSWORD_HASH") or settings.get("web.auth.password_hash")
 
 
 def credentials_configured() -> bool:
@@ -145,9 +140,7 @@ def login():
             # applied to this route above.
             time.sleep(0.5)
 
-    return render_template(
-        "login.html", error=error, next=request.args.get("next", "")
-    )
+    return render_template("login.html", error=error, next=request.args.get("next", ""))
 
 
 @bp.route("/logout", methods=["GET", "POST"])

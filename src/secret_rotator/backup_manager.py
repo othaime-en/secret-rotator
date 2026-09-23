@@ -135,9 +135,7 @@ class BackupManager:
         try:
             resolved.relative_to(backup_dir)
         except ValueError:
-            raise ValueError(
-                f"Backup path escapes backup directory: {backup_file!r}"
-            ) from None
+            raise ValueError(f"Backup path escapes backup directory: {backup_file!r}") from None
 
         return resolved
 
@@ -395,7 +393,7 @@ class BackupIntegrityChecker:
         """
         logger.info("Starting scheduled backup integrity verification")
 
-        report = {
+        report: Dict[str, Any] = {
             "timestamp": datetime.now().isoformat(),
             "total_backups": 0,
             "verified": 0,
@@ -488,7 +486,7 @@ class BackupIntegrityChecker:
         Verify backup checksums if they exist.
         More lightweight than full decryption verification.
         """
-        report = {
+        report: Dict[str, Any] = {
             "timestamp": datetime.now().isoformat(),
             "backups_checked": 0,
             "checksum_matches": 0,

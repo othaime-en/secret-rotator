@@ -31,9 +31,7 @@ class TestAuthEnforcement(unittest.TestCase):
             )
         }
         os.environ["SECRET_ROTATOR_ADMIN_USERNAME"] = TEST_USERNAME
-        os.environ["SECRET_ROTATOR_ADMIN_PASSWORD_HASH"] = generate_password_hash(
-            TEST_PASSWORD
-        )
+        os.environ["SECRET_ROTATOR_ADMIN_PASSWORD_HASH"] = generate_password_hash(TEST_PASSWORD)
         os.environ["FLASK_SECRET_KEY"] = "test-secret-key-not-for-prod"
 
     @classmethod
@@ -63,9 +61,7 @@ class TestAuthEnforcement(unittest.TestCase):
         limiter.reset()
 
     def _login(self, username=TEST_USERNAME, password=TEST_PASSWORD):
-        return self.client.post(
-            "/login", data={"username": username, "password": password}
-        )
+        return self.client.post("/login", data={"username": username, "password": password})
 
     # ---- unauthenticated access ----
 
@@ -185,9 +181,7 @@ class TestAuthNotConfigured(unittest.TestCase):
         app.config["WTF_CSRF_ENABLED"] = False
         client = app.test_client()
 
-        resp = client.post(
-            "/login", data={"username": "admin", "password": "anything"}
-        )
+        resp = client.post("/login", data={"username": "admin", "password": "anything"})
         self.assertEqual(resp.status_code, 200)
 
         # Confirm no session was established.

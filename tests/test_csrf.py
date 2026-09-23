@@ -32,9 +32,7 @@ class TestCSRFProtection(unittest.TestCase):
             )
         }
         os.environ["SECRET_ROTATOR_ADMIN_USERNAME"] = TEST_USERNAME
-        os.environ["SECRET_ROTATOR_ADMIN_PASSWORD_HASH"] = generate_password_hash(
-            TEST_PASSWORD
-        )
+        os.environ["SECRET_ROTATOR_ADMIN_PASSWORD_HASH"] = generate_password_hash(TEST_PASSWORD)
         os.environ["FLASK_SECRET_KEY"] = "test-secret-key-not-for-prod"
 
     @classmethod
@@ -111,9 +109,7 @@ class TestCSRFProtection(unittest.TestCase):
     def test_rotate_with_csrf_header_succeeds(self):
         self._login()
         token = self._get_csrf_token()
-        resp = self.client.post(
-            "/api/rotate", headers={"X-CSRFToken": token}
-        )
+        resp = self.client.post("/api/rotate", headers={"X-CSRFToken": token})
         # 202 Accepted: /api/rotate now starts a background job rather
         # than rotating synchronously (roadmap Phase 2). The point of
         # this test is that a valid CSRF token gets past CSRF checks,
@@ -153,9 +149,7 @@ class TestCSRFProtection(unittest.TestCase):
 
     def test_stale_token_is_rejected(self):
         self._login()
-        resp = self.client.post(
-            "/api/rotate", headers={"X-CSRFToken": "not-a-real-token"}
-        )
+        resp = self.client.post("/api/rotate", headers={"X-CSRFToken": "not-a-real-token"})
         self.assertEqual(resp.status_code, 400)
 
 

@@ -29,13 +29,58 @@ class DatabasePasswordRotator(SecretRotator):
         self.test_connection = config.get("test_connection", True)
 
     def generate_new_secret(self) -> str:
-        """Generate a strong database password"""
-        chars = string.ascii_letters + string.digits + "!@#$%^&*"
-        password = "".join(secrets.choice(chars) for _ in range(self.length))
+        """Generate a strong database password.
 
-        # Ensure it starts with a letter (some DBs require this)
-        if not password[0].isalpha():
-            password = secrets.choice(string.ascii_letters) + password[1:]
+        Guarantees at least one uppercase, one lowercase, and one digit
+        (so the result always passes this class's own validate_secret()),
+        and that it starts with a letter (some DBs require this).
+
+        These two guarantees interact: an earlier version picked a
+        guaranteed digit, shuffled it to a random position, and *then*
+        overwrote position 0 with a random letter if needed - which
+        silently destroyed the guaranteed digit whenever it landed in
+        position 0 and no other digit was drawn by chance (~2% of
+        generations with length=12). Fixed by reserving position 0 for a
+        letter from the start, and guaranteeing upper/lower/digit only
+        within the remaining positions, which the start-of-string
+        requirement never touches.
+        """
+        if self.length < 12:
+            # validate_secret() unconditionally requires len(secret) >= 12
+            # (see below) - anything shorter would always fail its own
+            # validation, so fall back to a safe minimum instead.
+            logger.error(
+                f"Configured password length {self.length} is below the minimum "
+                "of 12 required by validate_secret() - using 12 instead"
+            )
+            self.length = 12
+
+        letters_upper = string.ascii_uppercase
+        letters_lower = string.ascii_lowercase
+        digits = string.digits
+        symbols = "!@#$%^&*"
+        all_chars = letters_upper + letters_lower + digits + symbols
+
+        first_char = secrets.choice(letters_upper + letters_lower)
+
+        # Guaranteed independently of what first_char is - even if
+        # first_char happens to already be uppercase, still guaranteeing
+        # an uppercase here is harmless and keeps the logic simple and
+        # obviously correct.
+        rest_chars = [
+            secrets.choice(letters_upper),
+            secrets.choice(letters_lower),
+            secrets.choice(digits),
+        ]
+        rest_chars += [secrets.choice(all_chars) for _ in range(self.length - 4)]
+
+        # secrets doesn't expose a shuffle; Fisher-Yates using
+        # secrets.randbelow keeps every position cryptographically random.
+        for i in range(len(rest_chars) - 1, 0, -1):
+            j = secrets.randbelow(i + 1)
+            rest_chars[i], rest_chars[j] = rest_chars[j], rest_chars[i]
+
+        password = first_char + "".join(rest_chars)
 
         logger.info(f"Generated new {self.db_type} password")
         return password
@@ -309,7 +354,7 @@ class CertificateRotator(SecretRotator):
         """Generate self-signed certificate"""
         try:
             from cryptography import x509
-            from cryptography.x509.oid import NameOID, ExtensionOID
+            from cryptography.x509.oid import NameOID
             from cryptography.hazmat.primitives import hashes
             from cryptography.hazmat.primitives.asymmetric import rsa
             from cryptography.hazmat.primitives import serialization

@@ -14,11 +14,10 @@ import hashlib
 import secrets
 from pathlib import Path
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from secret_rotator.utils.logger import logger
 from secret_rotator.config.settings import settings
 from secret_rotator.distributed_lock import distributed_lock, LockAcquisitionError
-from datetime import datetime, timedelta
 
 
 class EncryptionManager:
@@ -33,7 +32,7 @@ class EncryptionManager:
             - Proper separation of config vs runtime data
         """
         self.key_file = Path(key_file)
-        self.cipher = None
+        self.cipher: Optional[Fernet] = None
         self.key_metadata: Dict[str, Any] = {}
         self._initialize_encryption()
 
@@ -137,6 +136,12 @@ class EncryptionManager:
         if not plaintext:
             return ""
 
+        # self.cipher is only None if __init__'s key loading/generation
+        # somehow failed to run - defensive guard, matches the existing
+        # check in rotate_master_key() below.
+        if self.cipher is None:
+            raise RuntimeError("EncryptionManager has no active cipher; key was not initialized")
+
         try:
             encrypted_bytes = self.cipher.encrypt(plaintext.encode("utf-8"))
             ciphertext = base64.b64encode(encrypted_bytes).decode("utf-8")
@@ -169,6 +174,9 @@ class EncryptionManager:
         """
         if not ciphertext:
             return ""
+
+        if self.cipher is None:
+            raise RuntimeError("EncryptionManager has no active cipher; key was not initialized")
 
         try:
             # Try to parse as JSON first (if it has associated data)
@@ -290,9 +298,7 @@ class EncryptionManager:
                 to retry once the other rotation finishes.
         """
         timeout = settings.get("distributed.master_key_lock_timeout", 600)
-        lock = distributed_lock(
-            "master-key-rotation", timeout=timeout, blocking_timeout=5
-        )
+        lock = distributed_lock("master-key-rotation", timeout=timeout, blocking_timeout=5)
         try:
             lock.acquire()
         except LockAcquisitionError as e:
@@ -327,7 +333,7 @@ class EncryptionManager:
         new_key = Fernet.generate_key()
         new_cipher = Fernet(new_key)
         old_cipher = self.cipher  # Keep reference to old cipher
-        
+
         new_metadata = {
             "version": self.key_metadata.get("version", 0) + 1,
             "created_at": datetime.now().isoformat(),
@@ -343,56 +349,59 @@ class EncryptionManager:
         try:
             # PHASE 0: Create backups BEFORE any changes
             logger.info("Phase 0: Creating safety backups...")
-            
+
             # Backup master key file
             key_backup_path = self.key_file.with_suffix(".key.rotation_backup")
             if self.key_file.exists():
                 import shutil
+
                 shutil.copy2(self.key_file, key_backup_path)
                 backup_files.append(key_backup_path)
                 logger.info(f"✓ Backed up master key to {key_backup_path}")
 
             # PHASE 1: Prepare - Re-encrypt all secrets to memory
             logger.info("Phase 1: Re-encrypting all secrets (in memory)...")
-            
+
             if not providers:
-                logger.warning("No providers provided - only rotating key, no secrets to re-encrypt")
+                logger.warning(
+                    "No providers provided - only rotating key, no secrets to re-encrypt"
+                )
                 re_encrypted_data = {}
             else:
                 re_encrypted_data = {}
-                
+
                 for provider_name, provider in providers.items():
                     if not hasattr(provider, "encryption_manager"):
                         logger.debug(f"Provider {provider_name} has no encryption - skipping")
                         continue
-                    
+
                     if not hasattr(provider, "file_path"):
                         logger.warning(f"Provider {provider_name} is not file-based - skipping")
                         continue
-                    
+
                     logger.info(f"Processing provider: {provider_name}")
-                    
+
                     # Backup provider's secrets file
                     provider_backup = provider.file_path.with_suffix(".json.rotation_backup")
                     if provider.file_path.exists():
                         import shutil
+
                         shutil.copy2(provider.file_path, provider_backup)
                         backup_files.append(provider_backup)
                         logger.info(f"  ✓ Backed up secrets file to {provider_backup}")
-                    
+
                     # Read encrypted secrets from file
-                    import json
                     try:
                         with open(provider.file_path, "r") as f:
                             encrypted_secrets = json.load(f)
                     except (FileNotFoundError, json.JSONDecodeError) as e:
                         logger.error(f"  ✗ Failed to read secrets file: {e}")
                         raise
-                    
+
                     logger.info(f"  Found {len(encrypted_secrets)} secrets to re-encrypt")
-                    
+
                     provider_re_encrypted = {}
-                    
+
                     for secret_id, encrypted_value in encrypted_secrets.items():
                         try:
                             # Decrypt with OLD cipher directly
@@ -407,93 +416,95 @@ class EncryptionManager:
                             except (json.JSONDecodeError, TypeError):
                                 # Plain base64 format
                                 ciphertext_b64 = encrypted_value
-                            
+
                             # Decode base64 and decrypt
                             encrypted_bytes = base64.b64decode(ciphertext_b64.encode("utf-8"))
                             decrypted_bytes = old_cipher.decrypt(encrypted_bytes)
                             decrypted_value = decrypted_bytes.decode("utf-8")
-                            
+
                             # Encrypt with NEW cipher
-                            new_encrypted_bytes = new_cipher.encrypt(decrypted_value.encode("utf-8"))
-                            new_ciphertext_b64 = base64.b64encode(new_encrypted_bytes).decode("utf-8")
-                            
+                            new_encrypted_bytes = new_cipher.encrypt(
+                                decrypted_value.encode("utf-8")
+                            )
+                            new_ciphertext_b64 = base64.b64encode(new_encrypted_bytes).decode(
+                                "utf-8"
+                            )
+
                             provider_re_encrypted[secret_id] = new_ciphertext_b64
-                            
+
                             logger.debug(f"  ✓ Re-encrypted secret: {secret_id}")
-                            
+
                         except Exception as e:
                             logger.error(f"  ✗ Failed to re-encrypt secret {secret_id}: {e}")
                             raise ValueError(f"Re-encryption failed for {secret_id}: {e}")
-                    
+
                     re_encrypted_data[provider_name] = {
                         "secrets": provider_re_encrypted,
-                        "file_path": provider.file_path
+                        "file_path": provider.file_path,
                     }
-                    
-                    logger.info(f"  ✓ Re-encrypted {len(provider_re_encrypted)} secrets for {provider_name}")
+
+                    logger.info(
+                        f"  ✓ Re-encrypted {len(provider_re_encrypted)} secrets for {provider_name}"
+                    )
 
             # PHASE 2: Verify - Test decryption with new cipher
             logger.info("Phase 2: Verifying re-encrypted secrets...")
-            
+
             for provider_name, data in re_encrypted_data.items():
                 logger.info(f"Verifying provider: {provider_name}")
-                
+
                 for secret_id, encrypted_value in data["secrets"].items():
                     try:
                         # Decode and decrypt with NEW cipher
                         encrypted_bytes = base64.b64decode(encrypted_value.encode("utf-8"))
                         decrypted_bytes = new_cipher.decrypt(encrypted_bytes)
                         decrypted_value = decrypted_bytes.decode("utf-8")
-                        
+
                         # Basic sanity check
                         if not decrypted_value:
                             raise ValueError(f"Decrypted value is empty for {secret_id}")
-                        
+
                         logger.debug(f"  ✓ Verified secret: {secret_id}")
-                        
+
                     except Exception as e:
                         logger.error(f"  ✗ Verification failed for {secret_id}: {e}")
                         raise ValueError(f"Verification failed for {secret_id}: {e}")
-                
+
                 logger.info(f"  ✓ All secrets verified for {provider_name}")
 
             # PHASE 3: Commit - Atomically write all changes
             logger.info("Phase 3: Committing changes to disk...")
-            
+
             # Write re-encrypted secrets to provider files
             for provider_name, data in re_encrypted_data.items():
                 try:
-                    import json
                     with open(data["file_path"], "w") as f:
                         json.dump(data["secrets"], f, indent=2)
                     logger.info(f"  ✓ Updated secrets file for {provider_name}")
                 except Exception as e:
                     logger.error(f"  ✗ Failed to write secrets for {provider_name}: {e}")
                     raise
-            
+
             # Write new master key file
-            key_data = {
-                "key": new_key.decode("utf-8"),
-                "metadata": new_metadata
-            }
-            
+            key_data = {"key": new_key.decode("utf-8"), "metadata": new_metadata}
+
             try:
                 with open(self.key_file, "w") as f:
                     json.dump(key_data, f, indent=2)
                 os.chmod(self.key_file, 0o600)
-                logger.info(f"  ✓ Updated master key file")
+                logger.info("  ✓ Updated master key file")
             except Exception as e:
                 logger.error(f"  ✗ Failed to write new master key: {e}")
                 raise
 
             # PHASE 4: Update in-memory state
             logger.info("Phase 4: Updating in-memory state...")
-            
+
             # Update this encryption manager's state
             self.cipher = new_cipher
             self.key_metadata = new_metadata
             logger.info("  ✓ Updated encryption manager cipher")
-            
+
             # Update provider encryption managers
             if providers:
                 for provider_name, provider in providers.items():
@@ -518,7 +529,7 @@ class EncryptionManager:
             logger.info(f"  Rotated from: {new_metadata.get('rotated_from', 'N/A')}")
             logger.info(f"  Providers updated: {len(re_encrypted_data)}")
             logger.info("=" * 70)
-            
+
             return True
 
         except Exception as e:
@@ -527,31 +538,33 @@ class EncryptionManager:
             logger.error(f"✗ MASTER KEY ROTATION FAILED: {e}")
             logger.error("=" * 70)
             logger.info("Rolling back all changes...")
-            
+
             rollback_success = True
-            
+
             # Restore master key from backup
             if key_backup_path.exists():
                 try:
                     import shutil
+
                     shutil.copy2(key_backup_path, self.key_file)
                     logger.info("  ✓ Restored master key from backup")
                 except Exception as rollback_error:
                     logger.error(f"  ✗ Failed to restore master key: {rollback_error}")
                     rollback_success = False
-            
+
             # Restore provider secrets from backups
             for backup_file in backup_files:
                 if backup_file.exists() and backup_file.suffix == ".rotation_backup":
                     try:
                         original_file = backup_file.with_suffix("")
                         import shutil
+
                         shutil.copy2(backup_file, original_file)
                         logger.info(f"  ✓ Restored {original_file.name}")
                     except Exception as rollback_error:
                         logger.error(f"  ✗ Failed to restore {backup_file}: {rollback_error}")
                         rollback_success = False
-            
+
             # Reload old key and cipher
             try:
                 key = self._load_existing_key()
@@ -560,18 +573,17 @@ class EncryptionManager:
             except Exception as reload_error:
                 logger.critical(f"  ✗ CRITICAL: Failed to reload old cipher: {reload_error}")
                 rollback_success = False
-            
+
             if rollback_success:
                 logger.info("✓ Rollback completed successfully - system restored to previous state")
             else:
                 logger.critical("✗ ROLLBACK FAILED - Manual intervention required!")
                 logger.critical(f"  Backup files are preserved in: {self.key_file.parent}")
                 logger.critical("  Contact support immediately!")
-            
-            logger.info("=" * 70)
-            
-            return False
 
+            logger.info("=" * 70)
+
+            return False
 
     @staticmethod
     def derive_key_from_passphrase(

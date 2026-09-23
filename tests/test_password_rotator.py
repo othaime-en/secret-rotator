@@ -1,6 +1,4 @@
 import unittest
-import sys
-from pathlib import Path
 from secret_rotator.rotators.password_rotator import PasswordRotator
 
 
@@ -27,12 +25,12 @@ class TestPasswordRotatorDeterministic(unittest.TestCase):
             if not is_valid:
                 assessment = rotator.get_strength_assessment(password)
                 self.fail(
-                    f"Iteration {i+1}: Generated password failed validation\n"
+                    f"Iteration {i + 1}: Generated password failed validation\n"
                     f"Password: {password}\n"
                     f"Assessment: {assessment}"
                 )
 
-            self.assertTrue(is_valid, f"Iteration {i+1} failed")
+            self.assertTrue(is_valid, f"Iteration {i + 1} failed")
 
     def test_generate_always_validates_three_types(self):
         """Test with only 3 character types enabled"""
@@ -47,7 +45,7 @@ class TestPasswordRotatorDeterministic(unittest.TestCase):
 
         for i in range(50):
             password = rotator.generate_new_secret()
-            self.assertTrue(rotator.validate_secret(password), f"Iteration {i+1} failed")
+            self.assertTrue(rotator.validate_secret(password), f"Iteration {i + 1} failed")
             # Ensure no symbols are present
             self.assertFalse(any(c in "!@#$%^&*" for c in password))
 
@@ -64,7 +62,7 @@ class TestPasswordRotatorDeterministic(unittest.TestCase):
 
         for i in range(50):
             password = rotator.generate_new_secret()
-            self.assertTrue(rotator.validate_secret(password), f"Iteration {i+1} failed")
+            self.assertTrue(rotator.validate_secret(password), f"Iteration {i + 1} failed")
 
     def test_generate_minimum_length_equals_types(self):
         """Test when length exactly equals number of required types"""
@@ -80,7 +78,7 @@ class TestPasswordRotatorDeterministic(unittest.TestCase):
         for i in range(50):
             password = rotator.generate_new_secret()
             self.assertEqual(len(password), 4)
-            self.assertTrue(rotator.validate_secret(password), f"Iteration {i+1} failed")
+            self.assertTrue(rotator.validate_secret(password), f"Iteration {i + 1} failed")
 
     def test_each_generated_password_contains_all_required_types(self):
         """Explicitly verify each character type is present"""
@@ -101,10 +99,10 @@ class TestPasswordRotatorDeterministic(unittest.TestCase):
             has_digit = any(c.isdigit() for c in password)
             has_symbol = any(c in "!@#$%^&*" for c in password)
 
-            self.assertTrue(has_lower, f"Iteration {i+1}: Missing lowercase in {password}")
-            self.assertTrue(has_upper, f"Iteration {i+1}: Missing uppercase in {password}")
-            self.assertTrue(has_digit, f"Iteration {i+1}: Missing digit in {password}")
-            self.assertTrue(has_symbol, f"Iteration {i+1}: Missing symbol in {password}")
+            self.assertTrue(has_lower, f"Iteration {i + 1}: Missing lowercase in {password}")
+            self.assertTrue(has_upper, f"Iteration {i + 1}: Missing uppercase in {password}")
+            self.assertTrue(has_digit, f"Iteration {i + 1}: Missing digit in {password}")
+            self.assertTrue(has_symbol, f"Iteration {i + 1}: Missing symbol in {password}")
 
 
 class TestPasswordRotatorValidation(unittest.TestCase):
@@ -194,7 +192,9 @@ class TestPasswordRotatorAmbiguousChars(unittest.TestCase):
             password = rotator.generate_new_secret()
             for char in password:
                 self.assertNotIn(
-                    char, ambiguous, f"Iteration {i+1}: Found ambiguous char '{char}' in {password}"
+                    char,
+                    ambiguous,
+                    f"Iteration {i + 1}: Found ambiguous char '{char}' in {password}",
                 )
             # Should still validate
             self.assertTrue(rotator.validate_secret(password))

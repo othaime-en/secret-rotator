@@ -115,9 +115,7 @@ class TestRemoteBackupClient(unittest.TestCase):
         self.client.upload_file(local_file)
 
         download_target = self.temp_dir / "downloaded.json"
-        self.assertTrue(
-            self.client.download_file(local_file.name, download_target)
-        )
+        self.assertTrue(self.client.download_file(local_file.name, download_target))
         self.assertEqual(download_target.read_text(), "hello world")
 
     def test_download_missing_file_fails_without_raising(self):

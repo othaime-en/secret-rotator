@@ -56,9 +56,7 @@ class TestFlaskWebServer(unittest.TestCase):
         time.sleep(0.2)
 
         port = self.server.server.effective_port
-        with urllib.request.urlopen(
-            f"http://127.0.0.1:{port}/api/healthz", timeout=3
-        ) as resp:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/healthz", timeout=3) as resp:
             self.assertEqual(resp.status, 200)
             self.assertIn(b'"status":"ok"', resp.read())
 
@@ -91,9 +89,7 @@ class TestFlaskWebServer(unittest.TestCase):
         try:
             second.start()
             time.sleep(0.2)
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/api/healthz", timeout=3
-            ) as resp:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/healthz", timeout=3) as resp:
                 self.assertEqual(resp.status, 200)
         finally:
             second.stop()

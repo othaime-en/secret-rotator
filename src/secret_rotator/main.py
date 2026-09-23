@@ -7,7 +7,6 @@ from pathlib import Path
 from secret_rotator.config.settings import settings
 from secret_rotator import bootstrap
 from secret_rotator.scheduler import RotationScheduler
-from secret_rotator.web_interface import WebServer
 from secret_rotator.utils.logger import logger
 from secret_rotator.distributed_lock import LockAcquisitionError
 
@@ -120,7 +119,7 @@ class SecretRotationApp:
         web_enabled = settings.get("web.enabled", True)
         if not web_enabled:
             return
-        
+
         # After
         web_port = settings.get("web.port", 8080)
         web_host = settings.get("web.host", "localhost")
@@ -128,6 +127,7 @@ class SecretRotationApp:
         flask_config = self._build_flask_config()
 
         from secret_rotator.web import FlaskWebServer
+
         self.web_server = FlaskWebServer(
             self.engine,
             port=web_port,
@@ -135,10 +135,10 @@ class SecretRotationApp:
             config=flask_config,
             threads=web_threads,
         )
-    
+
         self.engine.scheduler = self.scheduler
         logger.info(f"Flask web interface: http://{web_host}:{web_port}")
-    
+
     def start(self):
         """Start all components"""
         if not self.engine:
@@ -151,17 +151,15 @@ class SecretRotationApp:
         # Start web server if enabled
         if self.web_server:
             self.web_server.start()
-            web_host = settings.get('web.host', 'localhost')
-            web_port = settings.get('web.port', 8080)
+            web_host = settings.get("web.host", "localhost")
+            web_port = settings.get("web.port", 8080)
             use_flask = settings.get("web.use_flask", False)
 
             server_type = "Flask" if use_flask else "Legacy"
-            logger.info(
-                f"{server_type} web interface: http://{web_host}:{web_port}"
-            )
+            logger.info(f"{server_type} web interface: http://{web_host}:{web_port}")
 
         # Start Flask test server if enabled
-        if hasattr(self, 'flask_test_server') and self.flask_test_server:
+        if hasattr(self, "flask_test_server") and self.flask_test_server:
             self.flask_test_server.start()
             logger.info("Flask test server: http://localhost:8081")
 
@@ -191,7 +189,7 @@ class SecretRotationApp:
             self.web_server.stop()
 
         # Stop Flask test server if running
-        if hasattr(self, 'flask_test_server') and self.flask_test_server:
+        if hasattr(self, "flask_test_server") and self.flask_test_server:
             self.flask_test_server.stop()
 
         logger.info("Secret Rotation System stopped")
@@ -448,11 +446,9 @@ class SecretRotationApp:
         print("\n" + "=" * 70)
         print("Starting rotation... (this may take a few moments)")
         print("=" * 70)
-        
+
         try:
-            success = self.encryption_manager.rotate_master_key(
-                providers=self.engine.providers
-            )
+            success = self.encryption_manager.rotate_master_key(providers=self.engine.providers)
         except LockAcquisitionError as e:
             print("\n" + "=" * 70)
             print("✗ ROTATION REFUSED: another instance is already rotating the key")
@@ -486,7 +482,6 @@ class SecretRotationApp:
             print("  tail -f logs/rotation.log")
             print("\nIf you need assistance, the backup files are preserved in:")
             print(f"  {self.encryption_manager.key_file.parent}")
-            
 
     def cleanup_old_backups(self):
         """Manually trigger backup cleanup"""

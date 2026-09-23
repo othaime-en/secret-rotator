@@ -11,6 +11,7 @@ Usage:
     secret-rotator-backup restore-split share1.share share2.share share3.share
     secret-rotator-backup export-instructions --output KEY_BACKUP_INSTRUCTIONS.txt
 """
+
 import os
 import sys
 import argparse
@@ -28,18 +29,19 @@ def create_encrypted_backup(args):
     print("\n" + "=" * 70)
     print("CREATE ENCRYPTED MASTER KEY BACKUP")
     print("=" * 70)
-    
+
     # Initialize passphrase manager with config
     from secret_rotator.config.settings import settings
+
     passphrase_mgr = PassphraseManager(config_manager=settings)
-    
+
     # Get passphrase using unified system
     passphrase, source = passphrase_mgr.get_passphrase(
-        cli_file=getattr(args, 'passphrase_file', None),
+        cli_file=getattr(args, "passphrase_file", None),
         allow_interactive=True,
-        purpose="master key backup encryption"
+        purpose="master key backup encryption",
     )
-    
+
     # Handle different source results
     if source == "interactive_required":
         # Show helpful information before prompting
@@ -51,44 +53,44 @@ def create_encrypted_backup(args):
         print("  - Store the passphrase in a secure password manager")
         print("  - Without this passphrase, the backup CANNOT be recovered")
         print("\nTo avoid entering passphrase each time, you can create a passphrase file:")
-        
+
         # Platform-specific hint
-        if os.path.exists('/.dockerenv') or os.path.exists('/run/secrets'):
-            print("  docker exec secret-rotator bash -c 'echo \"passphrase\" > /app/data/.backup-passphrase'")
+        if os.path.exists("/.dockerenv") or os.path.exists("/run/secrets"):
+            print(
+                "  docker exec secret-rotator bash -c 'echo \"passphrase\" > /app/data/.backup-passphrase'"
+            )
             print("  docker exec secret-rotator chmod 600 /app/data/.backup-passphrase")
         else:
             print("  echo 'your-passphrase' > ~/.config/secret-rotator/.backup-passphrase")
             print("  chmod 600 ~/.config/secret-rotator/.backup-passphrase")
-        
+
         try:
             passphrase = passphrase_mgr.prompt_interactive(
-                purpose="master key backup encryption",
-                min_length=20,
-                require_confirmation=True
+                purpose="master key backup encryption", min_length=20, require_confirmation=True
             )
         except KeyboardInterrupt:
             print("\n\nCancelled by user")
             sys.exit(0)
-    
+
     elif source == "non_interactive_no_source":
         # No source found and we're non-interactive
         passphrase_mgr.print_help_message()
         sys.exit(1)
-    
+
     elif passphrase is None:
         # Some other error
         print(f"ERROR: {source}", file=sys.stderr)
         sys.exit(1)
-    
+
     else:
         # Got passphrase from non-interactive source
         print(f"✓ Using passphrase from: {source}", file=sys.stderr)
-    
+
     # Validate passphrase
     if not passphrase or len(passphrase) < 8:
         print("ERROR: Passphrase must be at least 8 characters", file=sys.stderr)
         sys.exit(1)
-    
+
     # Create the backup
     try:
         backup_file = manager.create_encrypted_key_backup(
@@ -100,13 +102,13 @@ def create_encrypted_backup(args):
         print("\nNext steps:")
         print("  1. Store the passphrase in a secure password manager")
         print("  2. Copy the backup file to external storage:")
-        
-        if os.path.exists('/.dockerenv') or os.path.exists('/run/secrets'):
+
+        if os.path.exists("/.dockerenv") or os.path.exists("/run/secrets"):
             print(f"     docker cp secret-rotator:{backup_file} ./external-backup/")
             print("     # Then upload to S3, Azure, or other secure storage")
         else:
             print(f"     cp {backup_file} /path/to/external/storage/")
-        
+
         print("  3. Test restoration in non-production environment:")
         print(f"     secret-rotator-backup verify {backup_file}")
         print("\n  Recommended external storage options:")
@@ -118,6 +120,7 @@ def create_encrypted_backup(args):
     except Exception as e:
         print(f"\n✗ ERROR: Failed to create backup: {e}")
         sys.exit(1)
+
 
 def create_split_backup(args):
     """Create a split key backup using Shamir's Secret Sharing"""
@@ -164,7 +167,7 @@ def create_split_backup(args):
         print("       • Share 5: Cloud storage (AWS S3, encrypted)")
         print("  2. Document who has each share (but keep this document secure)")
         print(f"  3. Test restoration with {args.threshold} shares:")
-        print(f"     secret-rotator-backup restore-split share1.share share2.share share3.share")
+        print("     secret-rotator-backup restore-split share1.share share2.share share3.share")
         print("\n  For Docker deployments, copy shares out of container:")
         for i, share_file in enumerate(share_files, 1):
             print(f"     docker cp secret-rotator:{share_file} ./share{i}/")
@@ -265,14 +268,15 @@ def verify_backup(args):
     if args.backup_file.endswith(".enc"):
 
         from secret_rotator.config.settings import settings
+
         passphrase_mgr = PassphraseManager(config_manager=settings)
-        
+
         passphrase, source = passphrase_mgr.get_passphrase(
-            cli_file=getattr(args, 'passphrase_file', None),
+            cli_file=getattr(args, "passphrase_file", None),
             allow_interactive=True,
-            purpose="backup verification"
+            purpose="backup verification",
         )
-        
+
         if source == "interactive_required":
             try:
                 passphrase = getpass.getpass("\nEnter passphrase: ")
@@ -337,14 +341,15 @@ def restore_backup(args):
     # Check if encrypted backup
     if args.backup_file.endswith(".enc"):
         from secret_rotator.config.settings import settings
+
         passphrase_mgr = PassphraseManager(config_manager=settings)
-        
+
         passphrase, source = passphrase_mgr.get_passphrase(
-            cli_file=getattr(args, 'passphrase_file', None),
+            cli_file=getattr(args, "passphrase_file", None),
             allow_interactive=True,
-            purpose="backup restoration"
+            purpose="backup restoration",
         )
-        
+
         if source == "interactive_required":
             try:
                 passphrase = getpass.getpass("\nEnter passphrase: ")
@@ -513,22 +518,22 @@ def main():
 Examples:
   # Create encrypted backup (recommended)
   secret-rotator-backup create-encrypted
-  
+
   # Create split key backup (5 shares, need 3 to restore)
   secret-rotator-backup create-split --shares 5 --threshold 3
-  
+
   # List all backups
   secret-rotator-backup list
-  
+
   # Verify an encrypted backup
   secret-rotator-backup verify backup.enc
-  
+
   # Restore from encrypted backup
   secret-rotator-backup restore backup.enc
-  
+
   # Restore from split key shares
   secret-rotator-backup restore-split share1.share share2.share share3.share
-  
+
   # Export backup and recovery instructions
   secret-rotator-backup export-instructions --output KEY_BACKUP_INSTRUCTIONS.txt
 
@@ -562,8 +567,7 @@ Examples:
     parser_encrypted.add_argument("--name", help="Optional backup name")
 
     parser_encrypted.add_argument(
-        "--passphrase-file",
-        help="File containing passphrase (overrides other sources)"
+        "--passphrase-file", help="File containing passphrase (overrides other sources)"
     )
 
     # Create split key backup
@@ -588,17 +592,13 @@ Examples:
     parser_verify = subparsers.add_parser("verify", help="Verify a backup")
     parser_verify.add_argument("backup_file", help="Path to backup file")
     parser_verify.add_argument(
-        "--passphrase-file",
-        help="File containing passphrase (for encrypted backups)"
+        "--passphrase-file", help="File containing passphrase (for encrypted backups)"
     )
 
     # Restore from backup
     parser_restore = subparsers.add_parser("restore", help="Restore from encrypted backup")
     parser_restore.add_argument("backup_file", help="Path to backup file")
-    parser_restore.add_argument(
-        "--passphrase-file",
-        help="File containing passphrase"
-    )
+    parser_restore.add_argument("--passphrase-file", help="File containing passphrase")
 
     # Restore from split
     parser_restore_split = subparsers.add_parser(

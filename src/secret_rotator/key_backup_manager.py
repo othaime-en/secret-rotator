@@ -272,15 +272,24 @@ class MasterKeyBackupManager:
 
         # Split the key and save each share
         shares = split(key_bytes, num_shares, threshold)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        created_at_dt = datetime.now()
+        # Microsecond precision + a short random suffix: two split-key
+        # backups created within the same second previously produced
+        # identical filenames (second-precision timestamp only), so the
+        # later batch silently overwrote the earlier batch's share files.
+        # Computed once and reused for every share in this batch: list_backups()
+        # also groups share files by created_at to reconstruct a "backup
+        # set", so calling datetime.now() again per-share would give each
+        # share a distinct timestamp and the group would never be seen
+        # as complete.
+        timestamp = created_at_dt.strftime("%Y%m%d_%H%M%S_%f") + f"_{secrets.token_hex(3)}"
+        created_at = created_at_dt.isoformat()
         share_files = []
 
         for i, share in enumerate(shares, 1):
             share_file = self.backup_dir / f"master_key_share_{i}_of_{num_shares}_{timestamp}.share"
 
             # Convert share bytes to base64 for JSON storage
-            import base64
-
             share_base64 = base64.b64encode(share).decode("utf-8")
 
             share_package = {
@@ -288,7 +297,7 @@ class MasterKeyBackupManager:
                 "share_number": i,
                 "total_shares": num_shares,
                 "threshold": threshold,
-                "created_at": datetime.now().isoformat(),
+                "created_at": created_at,
                 "share_data": share_base64,
                 "key_id": key_data.get("metadata", {}).get("key_id"),
             }
@@ -348,8 +357,6 @@ class MasterKeyBackupManager:
                 share_package = json.load(f)
 
             # Convert base64 back to bytes
-            import base64
-
             share_bytes = base64.b64decode(share_package["share_data"])
             shares_bytes.append(share_bytes)
 
@@ -611,12 +618,12 @@ AVAILABLE BACKUP TYPES
    - Different physical safes in different buildings
    - Different cloud storage providers/regions
    - With trusted individuals in different locations
-   
+
    Example: 5 shares with threshold of 3:
    - Share 1: Company safe (HQ)
    - Share 2: Backup facility (different city)
    - Share 3: CEO's personal safe
-   - Share 4: CTO's personal safe  
+   - Share 4: CTO's personal safe
    - Share 5: Cloud storage (AWS S3, different region)
 
 3. PLAINTEXT BACKUP (Use only for immediate physical storage)
@@ -633,7 +640,7 @@ When running in Docker/containers:
 
 1. The backup directory ({self.backup_dir}) is in the data volume
 2. Encrypted backups (.enc files) are safe to copy out of container:
-   
+
    docker cp secret-rotator:/app/data/key_backups/backup.enc ./external-storage/
 
 3. For production, automate copying backups to external storage:

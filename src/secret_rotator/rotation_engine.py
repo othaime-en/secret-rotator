@@ -28,7 +28,6 @@ class RotationInProgressError(Exception):
     Redis-backed lock across instances when `distributed.enabled` is
     true, and falls back to a plain in-process lock otherwise.
     """
-    pass
 
 
 class RotationEngine:
@@ -98,7 +97,10 @@ class RotationEngine:
         if not provider:
             logger.error(f"Provider '{provider_name}' not found")
             audit_log.log(
-                "rotate", actor, secret_id=secret_id, success=False,
+                "rotate",
+                actor,
+                secret_id=secret_id,
+                success=False,
                 details={"job": job_name, "reason": f"provider '{provider_name}' not found"},
             )
             return False
@@ -106,7 +108,10 @@ class RotationEngine:
         if not rotator:
             logger.error(f"Rotator '{rotator_name}' not found")
             audit_log.log(
-                "rotate", actor, secret_id=secret_id, success=False,
+                "rotate",
+                actor,
+                secret_id=secret_id,
+                success=False,
                 details={"job": job_name, "reason": f"rotator '{rotator_name}' not found"},
             )
             return False
@@ -129,7 +134,10 @@ class RotationEngine:
                 except Exception as e:
                     logger.error(f"Backup failed for {job_name}, aborting rotation: {e}")
                     audit_log.log(
-                        "rotate", actor, secret_id=secret_id, success=False,
+                        "rotate",
+                        actor,
+                        secret_id=secret_id,
+                        success=False,
                         details={"job": job_name, "reason": f"backup failed: {e}"},
                     )
                     return False
@@ -143,7 +151,10 @@ class RotationEngine:
             if not new_secret:
                 logger.error(f"Failed to generate new secret for {job_name}")
                 audit_log.log(
-                    "rotate", actor, secret_id=secret_id, success=False,
+                    "rotate",
+                    actor,
+                    secret_id=secret_id,
+                    success=False,
                     details={"job": job_name, "reason": "secret generation failed"},
                 )
                 return False
@@ -152,7 +163,10 @@ class RotationEngine:
             if not rotator.validate_secret(new_secret):
                 logger.error(f"Generated secret failed validation for {job_name}")
                 audit_log.log(
-                    "rotate", actor, secret_id=secret_id, success=False,
+                    "rotate",
+                    actor,
+                    secret_id=secret_id,
+                    success=False,
                     details={"job": job_name, "reason": "generated secret failed validation"},
                 )
                 return False
@@ -162,14 +176,20 @@ class RotationEngine:
             if success:
                 logger.info(f"Successfully rotated secret for {job_name}")
                 audit_log.log(
-                    "rotate", actor, secret_id=secret_id, success=True,
+                    "rotate",
+                    actor,
+                    secret_id=secret_id,
+                    success=True,
                     details={"job": job_name, "provider": provider_name, "rotator": rotator_name},
                 )
                 return True
             else:
                 logger.error(f"Failed to update secret for {job_name}")
                 audit_log.log(
-                    "rotate", actor, secret_id=secret_id, success=False,
+                    "rotate",
+                    actor,
+                    secret_id=secret_id,
+                    success=False,
                     details={"job": job_name, "reason": "provider update_secret returned False"},
                 )
                 return False
@@ -177,7 +197,10 @@ class RotationEngine:
         except Exception as e:
             logger.error(f"Error during rotation of {job_name}: {e}")
             audit_log.log(
-                "rotate", actor, secret_id=secret_id, success=False,
+                "rotate",
+                actor,
+                secret_id=secret_id,
+                success=False,
                 details={"job": job_name, "reason": str(e)},
             )
             return False
@@ -231,8 +254,7 @@ class RotationEngine:
                         on_job_complete(job_name, success, index, total)
                     except Exception:
                         logger.error(
-                            "on_job_complete callback raised an exception; "
-                            "continuing rotation",
+                            "on_job_complete callback raised an exception; " "continuing rotation",
                             exc_info=True,
                         )
 

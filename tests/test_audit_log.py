@@ -1,5 +1,4 @@
 import json
-import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -72,7 +71,10 @@ class TestAuditLog(unittest.TestCase):
 
     def test_no_secret_values_are_ever_logged(self):
         self.audit_log.log(
-            "rotate", "admin", secret_id="db", success=True,
+            "rotate",
+            "admin",
+            secret_id="db",
+            success=True,
             details={"job": "db_rotation"},
         )
         raw = self.audit_file.read_text()
@@ -87,31 +89,33 @@ class TestRotationEngineAudit(unittest.TestCase):
 
         # Patch the module-level singleton used inside rotation_engine.py
         import secret_rotator.rotation_engine as re_mod
+
         self._orig_audit_log = re_mod.audit_log
         re_mod.audit_log = AuditLog(audit_file=str(self.audit_file))
 
         self.engine = RotationEngine()
         self.engine.register_provider(FakeProvider())
         self.engine.register_rotator(FakeRotator())
-        self.engine.add_rotation_job({
-            "name": "test_job",
-            "provider": "fake_provider",
-            "rotator": "fake_rotator",
-            "secret_id": "svc",
-        })
+        self.engine.add_rotation_job(
+            {
+                "name": "test_job",
+                "provider": "fake_provider",
+                "rotator": "fake_rotator",
+                "secret_id": "svc",
+            }
+        )
 
     def tearDown(self):
         import secret_rotator.rotation_engine as re_mod
+
         re_mod.audit_log = self._orig_audit_log
 
     def test_successful_rotation_is_audited_with_actor(self):
-        result = self.engine.rotate_secret(
-            self.engine.rotation_jobs[0], actor="alice"
-        )
+        result = self.engine.rotate_secret(self.engine.rotation_jobs[0], actor="alice")
         self.assertTrue(result)
 
         lines = self.audit_file.read_text().strip().splitlines()
-        events = [json.loads(l) for l in lines]
+        events = [json.loads(line) for line in lines]
         rotate_events = [e for e in events if e["action"] == "rotate"]
         self.assertEqual(len(rotate_events), 1)
         self.assertEqual(rotate_events[0]["actor"], "alice")
@@ -120,7 +124,7 @@ class TestRotationEngineAudit(unittest.TestCase):
 
     def test_default_actor_is_system(self):
         self.engine.rotate_secret(self.engine.rotation_jobs[0])
-        events = [json.loads(l) for l in self.audit_file.read_text().strip().splitlines()]
+        events = [json.loads(line) for line in self.audit_file.read_text().strip().splitlines()]
         self.assertEqual(events[0]["actor"], "system")
 
     def test_missing_provider_is_audited_as_failure(self):
@@ -133,7 +137,7 @@ class TestRotationEngineAudit(unittest.TestCase):
         result = self.engine.rotate_secret(bad_job, actor="alice")
         self.assertFalse(result)
 
-        events = [json.loads(l) for l in self.audit_file.read_text().strip().splitlines()]
+        events = [json.loads(line) for line in self.audit_file.read_text().strip().splitlines()]
         self.assertEqual(len(events), 1)
         self.assertFalse(events[0]["success"])
 
