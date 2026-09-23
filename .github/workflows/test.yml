@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Lets release.yml gate a publish on this exact same test+lint+security
+  # suite via `uses: ./.github/workflows/test.yml`, rather than just
+  # trusting that main's last push happened to pass it.
+  workflow_call:
 
 jobs:
   test:
@@ -12,8 +16,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # pyproject.toml classifiers claim 3.9-3.12 support; until now only
-        # 3.9 was ever actually exercised in CI.
         python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
@@ -96,8 +98,7 @@ jobs:
         # errors remain (down from 48 — see commit history), scattered
         # across encryption_manager.py, backup_manager.py, distributed_lock.py,
         # and a few others. Each one needs individual review before a
-        # fix lands (this is security-critical crypto/backup code — see
-        # the Phase 1 audit) rather than a bulk mechanical pass, so this
+        # fix lands rather than a bulk mechanical pass, so this
         # job surfaces the count/detail in every PR without blocking
         # merges until that cleanup is done. Flip continue-on-error to
         # false once the backlog reaches zero.
