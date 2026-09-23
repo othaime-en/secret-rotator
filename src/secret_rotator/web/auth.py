@@ -7,7 +7,6 @@ import time
 
 from flask import (
     Blueprint,
-    current_app,
     jsonify,
     redirect,
     render_template,

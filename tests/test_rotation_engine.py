@@ -1,7 +1,5 @@
 import unittest
 import tempfile
-import sys
-from pathlib import Path
 from unittest.mock import patch
 
 from secret_rotator.rotation_engine import RotationEngine

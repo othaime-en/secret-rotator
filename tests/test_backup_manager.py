@@ -1,7 +1,6 @@
 import unittest
 import tempfile
 import json
-import sys
 import time
 import os
 from pathlib import Path

@@ -2,12 +2,9 @@ import unittest
 import tempfile
 import json
 import os
-import sys
-from pathlib import Path
 from cryptography.fernet import Fernet
 
 from secret_rotator.providers.file_provider import FileSecretProvider
-from secret_rotator.encryption_manager import EncryptionManager
 
 
 class TestFileProviderWithEncryption(unittest.TestCase):

@@ -290,8 +290,6 @@ class MasterKeyBackupManager:
             share_file = self.backup_dir / f"master_key_share_{i}_of_{num_shares}_{timestamp}.share"
 
             # Convert share bytes to base64 for JSON storage
-            import base64
-
             share_base64 = base64.b64encode(share).decode("utf-8")
 
             share_package = {
@@ -359,8 +357,6 @@ class MasterKeyBackupManager:
                 share_package = json.load(f)
 
             # Convert base64 back to bytes
-            import base64
-
             share_bytes = base64.b64decode(share_package["share_data"])
             shares_bytes.append(share_bytes)
 
@@ -622,12 +618,12 @@ AVAILABLE BACKUP TYPES
    - Different physical safes in different buildings
    - Different cloud storage providers/regions
    - With trusted individuals in different locations
-   
+
    Example: 5 shares with threshold of 3:
    - Share 1: Company safe (HQ)
    - Share 2: Backup facility (different city)
    - Share 3: CEO's personal safe
-   - Share 4: CTO's personal safe  
+   - Share 4: CTO's personal safe
    - Share 5: Cloud storage (AWS S3, different region)
 
 3. PLAINTEXT BACKUP (Use only for immediate physical storage)
@@ -644,7 +640,7 @@ When running in Docker/containers:
 
 1. The backup directory ({self.backup_dir}) is in the data volume
 2. Encrypted backups (.enc files) are safe to copy out of container:
-   
+
    docker cp secret-rotator:/app/data/key_backups/backup.enc ./external-storage/
 
 3. For production, automate copying backups to external storage:

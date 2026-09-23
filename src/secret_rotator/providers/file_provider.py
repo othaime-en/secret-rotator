@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from secret_rotator.providers.base import SecretProvider
 from secret_rotator.utils.logger import logger
 from secret_rotator.utils.retry import retry_with_backoff

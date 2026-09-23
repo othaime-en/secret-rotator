@@ -7,7 +7,6 @@ from pathlib import Path
 from secret_rotator.config.settings import settings
 from secret_rotator import bootstrap
 from secret_rotator.scheduler import RotationScheduler
-from secret_rotator.web_interface import WebServer
 from secret_rotator.utils.logger import logger
 from secret_rotator.distributed_lock import LockAcquisitionError
 
