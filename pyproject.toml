@@ -8,12 +8,11 @@ version = "1.2.0"
 description = "Automated secret rotation system with encryption and backup management"
 readme = "README.md"
 authors = [{ name = "othaimeen", email = "othaimeen.dev@gmail.com" }]
-license = { text = "MIT" }
+license = "MIT"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
@@ -104,11 +103,6 @@ target-version = ['py39']
 include = '\.pyi?$'
 
 [tool.mypy]
-# mypy itself dropped support for checking against the 3.9 language target;
-# the *package* still supports and is tested on 3.9 (see the CI matrix and
-# classifiers above) via pytest across 3.9-3.12 - this setting only affects
-# which language-level mypy checks against, and 3.10-vs-3.9 semantics don't
-# meaningfully differ for the constructs this codebase uses.
 python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
