@@ -784,9 +784,9 @@ rq==2.1.0 \
     --hash=sha256:3c6892c6ca848e5fb47c1875399a66f13656bf0e123bf725d9aa9a12718e2fdf \
     --hash=sha256:764585b6cab69ef1412f4aee523347e5aa7ece3ca175c118b1d92223dd8c2826
     # via -r requirements.txt
-s3transfer==0.11.3 \
-    --hash=sha256:ca855bdeb885174b5ffa95b9913622459d4ad8e331fc98eb01e6d5eb6a30655d \
-    --hash=sha256:edae4977e3a122445660c7c114bba949f9d191bae3b34a096f18a1c8c354527a
+s3transfer==0.19.2 \
+    --hash=sha256:ba0309fd86be3c27dbf78cdd813c13c5e1df16e5874b99d2535ebbdfb9892993 \
+    --hash=sha256:d8168eccca828cbb2cd573675333f3bddd254313a9c42494b84c76b539e8ba25
     # via boto3
 schedule==1.2.2 \
     --hash=sha256:15fe9c75fe5fd9b9627f3f19cc0ef1420508f9f9a46f45cd0769ef75ede5f0b7 \
