@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
 from secret_rotator.utils.logger import logger
 from secret_rotator.encryption_manager import EncryptionManager, SecretMasker
+from secret_rotator.remote_backup import RemoteBackupClient
 
 
 class BackupManager:
@@ -14,7 +15,7 @@ class BackupManager:
         self,
         backup_dir: str = "data/backup",
         encrypt_backups: bool = True,
-        remote_backup_client=None,
+        remote_backup_client: Optional[RemoteBackupClient] = None,
     ):
         self.backup_dir = Path(backup_dir)
         self.backup_dir.mkdir(parents=True, exist_ok=True)
@@ -148,7 +149,7 @@ class BackupManager:
 
         try:
             with open(backup_path, "r") as f:
-                backup_data = json.load(f)
+                backup_data: Dict[str, Any] = json.load(f)
 
             # Decrypt values if backup was encrypted and decryption is requested
             is_encrypted = backup_data.get("encrypted", False)
