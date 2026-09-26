@@ -33,7 +33,8 @@ being down must surface as "the operation was refused," not as
 
 import os
 import threading
-from typing import Dict, Optional
+from types import TracebackType
+from typing import Any, Dict, Optional, Type
 
 from secret_rotator.config.settings import settings
 from secret_rotator.utils.logger import logger
@@ -92,7 +93,9 @@ class DistributedLock:
         self.name = f"secret-rotator:lock:{name}"
         self.timeout = timeout
         self.blocking_timeout = blocking_timeout
-        self._redis_lock = None
+        # Typed Any: redis-py's Lock class isn't reliably importable as a
+        # type when the optional `redis` extra isn't installed.
+        self._redis_lock: Optional[Any] = None
         self._local_lock: Optional[threading.Lock] = None
         self._acquired = False
 
@@ -209,9 +212,13 @@ class DistributedLock:
         self.acquire()
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc: Optional[BaseException],
+        tb: Optional[TracebackType],
+    ) -> None:
         self.release()
-        return False
 
 
 def distributed_lock(
