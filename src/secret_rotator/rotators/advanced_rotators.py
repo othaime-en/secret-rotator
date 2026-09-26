@@ -145,7 +145,7 @@ class DatabasePasswordRotator(SecretRotator):
             elif self.db_type == "mongodb":
                 from pymongo import MongoClient
 
-                client = MongoClient(
+                client: Any = MongoClient(
                     host=self.host,
                     port=self.port or 27017,
                     username=self.username,
