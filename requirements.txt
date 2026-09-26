@@ -14,5 +14,5 @@ Flask-WTF==1.2.2
 waitress==3.0.2
 Flask-Limiter>=3.11.0
 redis==5.2.1
-rq==2.1.0
+rq==2.12.0
 boto3==1.36.1
