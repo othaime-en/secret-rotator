@@ -94,7 +94,7 @@ jobs:
             "${{ needs.verify-version.outputs.version }}" > release_notes.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: v${{ needs.verify-version.outputs.version }}
           body_path: release_notes.md
