@@ -346,8 +346,8 @@ class MasterKeyBackupManager:
 
         # Read all shares
         shares_bytes = []
-        threshold = None
-        key_id = None
+        threshold: Optional[int] = None
+        key_id: Optional[str] = None
 
         for share_file in share_files:
             if not Path(share_file).exists():
@@ -365,6 +365,9 @@ class MasterKeyBackupManager:
 
             if key_id is None:
                 key_id = share_package.get("key_id")
+
+        if threshold is None:
+            raise ValueError("Unable to determine threshold from provided share files")
 
         if len(shares_bytes) < threshold:
             raise ValueError(f"Insufficient shares: need {threshold}, have {len(shares_bytes)}")
