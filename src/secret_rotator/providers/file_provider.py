@@ -39,7 +39,7 @@ class FileSecretProvider(SecretProvider):
         """Retrieve and decrypt a secret from file"""
         try:
             with open(self.file_path, "r") as f:
-                secrets = json.load(f)
+                secrets: Dict[str, str] = json.load(f)
                 encrypted_value = secrets.get(secret_id, "")
 
                 if not encrypted_value:

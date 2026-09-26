@@ -23,6 +23,12 @@ from secret_rotator.distributed_lock import distributed_lock, LockAcquisitionErr
 class EncryptionManager:
     """Handle encryption/decryption of secrets using a master key"""
 
+    # Declared here (rather than inferred solely from __init__) because
+    # create_from_passphrase() builds an instance via __new__ and sets
+    # this to None: a passphrase-derived manager has no backing key
+    # file on disk at all.
+    key_file: Optional[Path]
+
     def __init__(self, key_file: str = "data/.master.key"):
         """
         Architecture Note (v1.2.0):
@@ -38,6 +44,7 @@ class EncryptionManager:
 
     def _initialize_encryption(self):
         """Initialize encryption cipher with master key"""
+        assert self.key_file is not None, "key_file must be set before _initialize_encryption()"
         if self.key_file.exists():
             key = self._load_existing_key()
             logger.info("Loaded existing master encryption key")
@@ -49,12 +56,13 @@ class EncryptionManager:
 
     def _load_existing_key(self) -> bytes:
         """Load existing key from file with metadata validation"""
+        assert self.key_file is not None, "key_file must be set before loading a key from disk"
         try:
             with open(self.key_file, "r") as f:
                 key_data = json.load(f)
 
             # Extract key and metadata
-            key_str = key_data["key"]
+            key_str: str = key_data["key"]
             self.key_metadata = key_data.get("metadata", {})
 
             # Convert string back to bytes
@@ -88,6 +96,7 @@ class EncryptionManager:
 
     def _generate_and_save_key(self) -> bytes:
         """Generate a new encryption key and save it securely with metadata"""
+        assert self.key_file is not None, "key_file must be set before generating a key on disk"
         # Generate cryptographically secure random key
         key = Fernet.generate_key()  # Already base64-encoded bytes
 
@@ -210,8 +219,9 @@ class EncryptionManager:
             Metadata dict if present, None otherwise
         """
         try:
-            package = json.loads(ciphertext)
-            return package.get("metadata")
+            package: Dict[str, Any] = json.loads(ciphertext)
+            metadata: Optional[Dict[str, Any]] = package.get("metadata")
+            return metadata
         except json.JSONDecodeError:
             return None
 
@@ -273,7 +283,7 @@ class EncryptionManager:
             logger.error(f"Error checking key age: {e}")
             return True  # Err on the side of caution
 
-    def rotate_master_key(self, providers: Dict[str, Any] = None) -> bool:
+    def rotate_master_key(self, providers: Optional[Dict[str, Any]] = None) -> bool:
         """
         Rotate the master encryption key with two-phase commit for data safety.
 
@@ -310,7 +320,7 @@ class EncryptionManager:
         finally:
             lock.release()
 
-    def _rotate_master_key_locked(self, providers: Dict[str, Any] = None) -> bool:
+    def _rotate_master_key_locked(self, providers: Optional[Dict[str, Any]] = None) -> bool:
         """The actual two-phase-commit rotation. Only ever called with
         the master-key-rotation lock already held — see
         rotate_master_key() above.
@@ -325,6 +335,12 @@ class EncryptionManager:
         """
         if not self.cipher:
             raise ValueError("No master key to rotate")
+        if self.key_file is None:
+            raise ValueError(
+                "This EncryptionManager has no backing key file (it was created "
+                "from a passphrase via create_from_passphrase) and cannot be "
+                "used with file-based master key rotation."
+            )
 
         logger.info("=" * 70)
         logger.info("Starting master key rotation with two-phase commit")
@@ -366,7 +382,7 @@ class EncryptionManager:
                 logger.warning(
                     "No providers provided - only rotating key, no secrets to re-encrypt"
                 )
-                re_encrypted_data = {}
+                re_encrypted_data: Dict[str, Dict[str, Any]] = {}
             else:
                 re_encrypted_data = {}
 
@@ -590,7 +606,7 @@ class EncryptionManager:
         passphrase: str,
         salt: Optional[bytes] = None,
         iterations: int = 600000,  # OWASP 2023 recommendation
-    ) -> Dict[str, str]:
+    ) -> Dict[str, Any]:
         """
         Derive an encryption key from a passphrase using PBKDF2.
         Useful for environments where you can't store a key file.

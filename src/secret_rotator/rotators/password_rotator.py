@@ -163,7 +163,7 @@ class PasswordRotator(SecretRotator):
                 checks.append((False, "no_ambiguous_chars"))
 
         # Check for invalid characters (not in any allowed pool)
-        allowed_chars = set()
+        allowed_chars: set[str] = set()
         pools = self._build_character_pools()
         for pool in pools.values():
             allowed_chars.update(pool)

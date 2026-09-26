@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from secret_rotator.config.settings import settings
-from secret_rotator.rotation_engine import RotationInProgressError
+from secret_rotator.rotation_engine import RotationEngine, RotationInProgressError
 from secret_rotator.utils.logger import logger
 
 # How many finished (completed/failed) jobs to keep around for
@@ -53,7 +53,7 @@ class RotationJobManager:
     this process restarting, though not Redis data loss.
     """
 
-    def __init__(self, engine):
+    def __init__(self, engine: RotationEngine) -> None:
         self.engine = engine
         self._jobs: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
         self._lock = threading.Lock()  # guards self._jobs only (local mode)
@@ -145,7 +145,7 @@ class RotationJobManager:
                     return view
 
             job_id = str(uuid.uuid4())
-            job: Dict[str, Any] = {
+            new_job: Dict[str, Any] = {
                 "job_id": job_id,
                 "status": "queued",
                 "actor": actor,
@@ -157,7 +157,7 @@ class RotationJobManager:
                 "error": None,
                 "_finished_monotonic": None,
             }
-            self._jobs[job_id] = job
+            self._jobs[job_id] = new_job
 
         thread = threading.Thread(
             target=self._run,
@@ -167,7 +167,7 @@ class RotationJobManager:
         )
         thread.start()
 
-        return self._public_view(job)
+        return self._public_view(new_job)
 
     def _run(self, job_id: str, actor: str) -> None:
         with self._lock:
