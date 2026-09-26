@@ -12,9 +12,9 @@ blinker==1.9.0 \
     --hash=sha256:b4ce2265a7abece45e7cc896e98dbebe6cead56bcf805a3d23136d145f5445bf \
     --hash=sha256:ba0efaa9080b619ff2f3459d1d500c57bddea4a6b424b60a91141db6fd2f08bc
     # via flask
-boto3==1.36.1 \
-    --hash=sha256:258ab77225a81d3cf3029c9afe9920cd9dec317689dfadec6f6f0a23130bb60a \
-    --hash=sha256:eb21380d73fec6645439c0d802210f72a0cdb3295b02953f246ff53f512faa8f
+boto3==1.43.101 \
+    --hash=sha256:49f3eb750f70e050df9929a7e9392e67896c97d7d0a448f13ed3354c634268bd \
+    --hash=sha256:8a899b0ea94df3f2fab6d0c69caf2791f2971449696834374d8e88ced01c7ef3
     # via -r requirements.txt
 botocore==1.36.26 \
     --hash=sha256:4a63bcef7ecf6146fd3a61dc4f9b33b7473b49bdaf1770e9aaca6eee0c9eab62 \
