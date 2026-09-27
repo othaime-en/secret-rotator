@@ -128,3 +128,7 @@ module = [
     "rq.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["deprecated.*"]
+follow_imports = "skip"
