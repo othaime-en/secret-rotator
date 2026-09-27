@@ -5,9 +5,16 @@ Advanced secret rotators for different secret types.
 import secrets
 import string
 import json
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING, Union
 from secret_rotator.rotators.base import SecretRotator
 from secret_rotator.utils.logger import logger
+
+if TYPE_CHECKING:
+    # Only imported for type-checking; the real import stays lazy (see
+    # SSHKeyRotator.generate_new_secret) so a missing `cryptography`
+    # install surfaces as the module's own friendly ImportError message.
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 
 class DatabasePasswordRotator(SecretRotator):
@@ -138,7 +145,7 @@ class DatabasePasswordRotator(SecretRotator):
             elif self.db_type == "mongodb":
                 from pymongo import MongoClient
 
-                client = MongoClient(
+                client: Any = MongoClient(
                     host=self.host,
                     port=self.port or 27017,
                     username=self.username,
@@ -169,7 +176,7 @@ class APIKeyRotator(SecretRotator):
 
     def __init__(self, name: str, config: Dict[str, Any]):
         super().__init__(name, config)
-        self.length = config.get("length", 32)
+        self.length: int = config.get("length", 32)
         self.format = config.get("format", "hex")  # hex, base64, alphanumeric
         self.prefix = config.get("prefix", "")  # e.g., "sk_live_"
         self.include_checksum = config.get("include_checksum", False)
@@ -257,7 +264,7 @@ class JWTSecretRotator(SecretRotator):
             test_payload = {"test": "data"}
             token = jwt.encode(test_payload, secret, algorithm=self.algorithm)
             decoded = jwt.decode(token, secret, algorithms=[self.algorithm])
-            return decoded == test_payload
+            return bool(decoded == test_payload)
         except ImportError:
             logger.warning("PyJWT not installed, skipping JWT validation")
             return True
@@ -287,6 +294,7 @@ class SSHKeyRotator(SecretRotator):
             from cryptography.hazmat.primitives import serialization
             from cryptography.hazmat.backends import default_backend
 
+            private_key: Union["RSAPrivateKey", "Ed25519PrivateKey"]
             if self.key_type == "rsa":
                 private_key = rsa.generate_private_key(
                     public_exponent=65537, key_size=self.key_size, backend=default_backend()

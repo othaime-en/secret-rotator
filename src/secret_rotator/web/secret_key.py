@@ -17,6 +17,7 @@ app via ``main.py``, direct use of ``FlaskWebServer``, or tests calling
 
 import os
 import secrets
+from typing import Optional
 
 from secret_rotator.utils.logger import logger
 
@@ -39,7 +40,7 @@ def _looks_like_unexpanded_placeholder(value: str) -> bool:
     return value.startswith("${") and value.endswith("}")
 
 
-def resolve_secret_key(explicit_key: str = None) -> str:
+def resolve_secret_key(explicit_key: Optional[str] = None) -> str:
     """
     Resolve a real Flask SECRET_KEY.
 

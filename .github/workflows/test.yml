@@ -93,17 +93,7 @@ jobs:
         run: flake8 src/secret_rotator tests
 
       - name: mypy (static typing)
-        # Informational for now, not a hard gate: this is the *first*
-        # mypy pass this codebase has ever had. 23 pre-existing type
-        # errors remain (down from 48 — see commit history), scattered
-        # across encryption_manager.py, backup_manager.py, distributed_lock.py,
-        # and a few others. Each one needs individual review before a
-        # fix lands rather than a bulk mechanical pass, so this
-        # job surfaces the count/detail in every PR without blocking
-        # merges until that cleanup is done. Flip continue-on-error to
-        # false once the backlog reaches zero.
         run: mypy src/secret_rotator --exclude 'web_interface.py'
-        continue-on-error: true
 
   security-scan:
     # This app runs with access to database credentials and a

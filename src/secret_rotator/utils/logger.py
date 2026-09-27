@@ -207,6 +207,7 @@ class LoggerManager:
             handler.setFormatter(StructuredFormatter())
         else:
             # Simpler format for console (more readable)
+            formatter: logging.Formatter
             if self._supports_color():
                 formatter = ColoredFormatter(
                     "%(asctime)s - %(levelname)s - %(message)s", datefmt="%H:%M:%S"

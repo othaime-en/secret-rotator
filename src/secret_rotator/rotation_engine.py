@@ -33,7 +33,7 @@ class RotationInProgressError(Exception):
 class RotationEngine:
     """This is the main engine that orchestrates secret rotation"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.providers: Dict[str, SecretProvider] = {}
         self.rotators: Dict[str, SecretRotator] = {}
         self.rotation_jobs: List[Dict[str, Any]] = []
