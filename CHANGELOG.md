@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Resolved the full mypy backlog (23 pre-existing type errors across
+  13 files) and made `mypy` a hard gate in CI instead of
+  informational-only. Two of the fixes were real (small) bugs beyond
+  type-checker noise: a variable-name collision in
+  `web/job_manager.py`'s job-creation path, and an unguarded
+  possibly-unset `threshold` comparison in `key_backup_manager.py`'s
+  Shamir-share restore.
+- The Docker runtime image now installs from the hash-pinned
+  `requirements.lock.txt` (via `pip install --require-hashes`)
+  instead of the unpinned `requirements.txt`. The lock file has been
+  generated since the 1.3.0 supply-chain work but nothing actually
+  installed from it until now.
+- Corrected the Docker image's `LABEL version` (was still `1.2.0`,
+  three releases stale).
+- Updated README.md/CONTRIBUTING.md, which still described `mypy` as
+  informational-only in CI.
+
 ## [1.3.0] - 2026-09-25
 
 This release closes out the four-phase security/quality roadmap from
