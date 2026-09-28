@@ -14,20 +14,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY requirements.lock.txt .
 COPY pyproject.toml .
 COPY README.md .
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Install from the hash-pinned lock file, not requirements.txt: this is
+# the whole point of generating requirements.lock.txt with
+# `pip-compile --generate-hashes` (see CI's dependency-management docs) -
+# --require-hashes refuses to install anything (including a transitive
+# dependency) that doesn't match a pinned hash, closing the same
+# dependency-confusion/supply-chain gap the mysql_connector_repackaged
+# fix addressed. Until now the lock file was generated but never
+# actually installed from anywhere.
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir --require-hashes -r requirements.lock.txt
 
 COPY src/ ./src/
 COPY config/config.example.yaml ./config/
 
-RUN pip install --no-cache-dir .
+# --no-deps: dependencies are already satisfied, hash-pinned, above.
+# Without it, this step would let pip re-resolve pyproject.toml's
+# unpinned `>=` ranges and silently pull in a newer, unhashed version
+# of something the lock file just pinned.
+RUN pip install --no-cache-dir --no-deps .
 
 # Verify installation in builder
 RUN python -c "import secret_rotator; print(f'Builder: secret_rotator {secret_rotator.__version__} installed')"
@@ -37,7 +49,10 @@ FROM python:3.11-slim AS runtime
 
 LABEL maintainer="othaimeen.dev@gmail.com"
 LABEL description="Secret Rotation System - Production Runtime"
-LABEL version="1.2.0"
+# Bump alongside the version in pyproject.toml on every release - this
+# is intentionally static rather than derived at build time, so keep
+# `docker build` and `bumpversion`/release steps in the same commit.
+LABEL version="1.3.0"
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
