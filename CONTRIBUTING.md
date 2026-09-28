@@ -66,14 +66,9 @@ flake8 src/secret_rotator tests   # lint
 mypy src/secret_rotator --exclude 'web_interface.py'   # type check
 ```
 
-`black` and `flake8` are enforced in CI and will block merging.
-
-`mypy` currently runs as **informational only** in CI (not a hard gate)
-— this codebase's first mypy pass surfaced a real backlog of
-pre-existing type errors that need individual review rather than a bulk
-fix. If your change fixes one, great; if it introduces a new one,
-please fix it before opening the PR anyway — the check is
-non-blocking for the existing backlog, not an invitation to add to it.
+`black`, `flake8`, and `mypy` are all enforced in CI and will block
+merging. mypy is a hard gate now like the other two, so a
+new type error should be caught locally before it reaches a PR.
 
 `web_interface.py` is excluded from both flake8 and mypy — it's
 deprecated and scheduled for removal in 1.4.0 (see `CHANGELOG.md`), and

@@ -338,7 +338,7 @@ black src/ tests/
 # Linting (enforced in CI)
 flake8 src/secret_rotator tests
 
-# Type checking (informational in CI - see CONTRIBUTING.md)
+# Type checking (enforced in CI)
 mypy src/secret_rotator --exclude 'web_interface.py'
 ```
 
