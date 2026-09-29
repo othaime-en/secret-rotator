@@ -115,6 +115,28 @@ class TestAPIKeyRotator(unittest.TestCase):
         self.assertEqual(len(key), 32)
         int(key, 16)  # raises if not valid hex
 
+    def test_hex_format_odd_length_generates_exact_length(self):
+        """Regression test: secrets.token_hex(length // 2) previously
+        undershot by one character for odd lengths (token_hex(n)
+        returns 2n chars, so length // 2 rounds down), which meant
+        validate_secret()'s len(secret) >= self.length check failed
+        for every key this rotator generated - every rotation of an
+        odd-length hex job would fail validation."""
+        for length in (31, 33, 41):
+            with self.subTest(length=length):
+                rotator = APIKeyRotator("key", {"length": length, "format": "hex"})
+                key = rotator.generate_new_secret()
+                self.assertEqual(len(key), length)
+                int(key, 16)  # still valid hex
+                self.assertTrue(rotator.validate_secret(key))
+
+    def test_hex_format_odd_length_key_is_still_valid_hex_with_prefix(self):
+        rotator = APIKeyRotator("key", {"length": 33, "format": "hex", "prefix": "sk_live_"})
+        key = rotator.generate_new_secret()
+        self.assertTrue(key.startswith("sk_live_"))
+        int(key[len("sk_live_") :], 16)
+        self.assertTrue(rotator.validate_secret(key))
+
     def test_base64_format_generates_expected_length(self):
         rotator = APIKeyRotator("key", {"length": 24, "format": "base64"})
         self.assertEqual(len(rotator.generate_new_secret()), 24)
