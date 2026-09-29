@@ -131,9 +131,7 @@ class TestAPIKeyRotator(unittest.TestCase):
                 self.assertTrue(rotator.validate_secret(key))
 
     def test_hex_format_odd_length_key_is_still_valid_hex_with_prefix(self):
-        rotator = APIKeyRotator(
-            "key", {"length": 33, "format": "hex", "prefix": "sk_live_"}
-        )
+        rotator = APIKeyRotator("key", {"length": 33, "format": "hex", "prefix": "sk_live_"})
         key = rotator.generate_new_secret()
         self.assertTrue(key.startswith("sk_live_"))
         int(key[len("sk_live_") :], 16)
