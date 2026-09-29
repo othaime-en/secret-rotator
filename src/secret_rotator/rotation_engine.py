@@ -128,7 +128,7 @@ class RotationEngine:
                         rotator.generate_new_secret()
                     )  # Generate early for backup metadata
                     backup_path = self.backup_manager.create_backup_with_checksum(
-                        secret_id, current_secret, new_secret_temp
+                        secret_id, current_secret, new_secret_temp, provider_name=provider_name
                     )
                     logger.info(f"Backup created at {backup_path}")
                 except Exception as e:
