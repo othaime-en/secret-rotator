@@ -282,8 +282,27 @@ class BackupManager:
 
         return metadata
 
-    def create_backup_with_checksum(self, secret_id: str, old_value: str, new_value: str) -> str:
-        """Create backup with checksum for integrity verification"""
+    def create_backup_with_checksum(
+        self,
+        secret_id: str,
+        old_value: str,
+        new_value: str,
+        provider_name: Optional[str] = None,
+    ) -> str:
+        """Create backup with checksum for integrity verification.
+
+        Args:
+            provider_name: which provider this secret belongs to (e.g.
+                "postgres_prod", "aws_secrets_manager"). Recorded on the
+                backup so a later restore can be routed back to the
+                correct provider rather than guessed — see
+                routes/api.py's restore() for why this matters once a
+                deployment has more than one provider configured.
+                Optional for backward compatibility with callers (and
+                older on-disk backups) that don't pass it; None is a
+                valid value and just means the restore path has to
+                fall back to inference.
+        """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         backup_filename = f"{secret_id}_{timestamp}.json"
         backup_path = self.backup_dir / backup_filename
@@ -291,6 +310,7 @@ class BackupManager:
         # Prepare backup data
         backup_data = {
             "secret_id": secret_id,
+            "provider_name": provider_name,
             "timestamp": timestamp,
             "old_value": old_value,
             "new_value": new_value,
