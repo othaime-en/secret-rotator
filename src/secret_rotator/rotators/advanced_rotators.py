@@ -184,7 +184,14 @@ class APIKeyRotator(SecretRotator):
     def generate_new_secret(self) -> str:
         """Generate an API key"""
         if self.format == "hex":
-            key_part = secrets.token_hex(self.length // 2)
+            # secrets.token_hex(n) returns 2n hex chars, so for an odd
+            # self.length, length // 2 undershoots by one character -
+            # e.g. length=33 -> token_hex(16) -> 32 chars, one short.
+            # validate_secret()'s len(secret) >= self.length check then
+            # fails every rotation for that job. Round up and slice
+            # down to guarantee exactly self.length chars regardless
+            # of parity (mirrors the base64 branch below).
+            key_part = secrets.token_hex((self.length + 1) // 2)[: self.length]
         elif self.format == "base64":
             key_part = secrets.token_urlsafe(self.length)[: self.length]
         else:  # alphanumeric
