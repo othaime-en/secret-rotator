@@ -68,9 +68,7 @@ class TestResolveRestoreProvider(unittest.TestCase):
 
     def test_uses_provider_name_recorded_on_backup(self):
         backup_data = {"provider_name": "mongo_atlas"}
-        provider, source = _resolve_restore_provider(
-            self.engine, backup_data, "mongo_svc_password"
-        )
+        provider, source = _resolve_restore_provider(self.engine, backup_data, "mongo_svc_password")
         self.assertIs(provider, self.provider_b)
         self.assertEqual(source, "backup_metadata")
 
@@ -78,18 +76,14 @@ class TestResolveRestoreProvider(unittest.TestCase):
         # Deliberately contradicts the job_config for this secret_id -
         # the explicit backup record should still win.
         backup_data = {"provider_name": "postgres_prod"}
-        provider, source = _resolve_restore_provider(
-            self.engine, backup_data, "mongo_svc_password"
-        )
+        provider, source = _resolve_restore_provider(self.engine, backup_data, "mongo_svc_password")
         self.assertIs(provider, self.provider_a)
         self.assertEqual(source, "backup_metadata")
 
     def test_falls_back_to_job_config_when_no_provider_name_on_backup(self):
         """Pre-1.3.1 backups have no provider_name field at all."""
         backup_data = {}
-        provider, source = _resolve_restore_provider(
-            self.engine, backup_data, "mongo_svc_password"
-        )
+        provider, source = _resolve_restore_provider(self.engine, backup_data, "mongo_svc_password")
         self.assertIs(provider, self.provider_b)
         self.assertEqual(source, "job_config")
 
@@ -98,9 +92,7 @@ class TestResolveRestoreProvider(unittest.TestCase):
         removed from config - don't error, fall through to the next
         signal instead."""
         backup_data = {"provider_name": "no_longer_configured"}
-        provider, source = _resolve_restore_provider(
-            self.engine, backup_data, "mongo_svc_password"
-        )
+        provider, source = _resolve_restore_provider(self.engine, backup_data, "mongo_svc_password")
         self.assertIs(provider, self.provider_b)
         self.assertEqual(source, "job_config")
 
