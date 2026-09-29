@@ -266,6 +266,62 @@ def backup_detail(backup_file):
         return jsonify({"error": str(e)}), 500
 
 
+def _resolve_restore_provider(engine, backup_data, secret_id):
+    """
+    Work out which registered provider a restore should write to.
+
+    Historically this endpoint always restored to
+    ``list(engine.providers.values())[0]`` — the first provider,
+    regardless of which one the secret actually belongs to. With more
+    than one provider configured (the normal case for anything beyond
+    a single-secret demo), that silently wrote the restored value into
+    the wrong system.
+
+    Resolution order, most to least reliable:
+      1. ``backup_data["provider_name"]`` — recorded at backup-creation
+         time (see BackupManager.create_backup_with_checksum) for any
+         backup made by this version or later. Exact match.
+      2. The configured rotation jobs — if exactly one job's
+         ``secret_id`` matches, its ``provider`` field tells us where
+         this secret lives even for older backups made before
+         provider_name existed.
+      3. Last resort: the first registered provider, matching the old
+         behavior — only reached for a pre-upgrade backup whose
+         secret_id isn't (or is no longer) in any configured job. The
+         caller logs a loud warning whenever this path is taken and
+         more than one provider is configured, since it's a guess.
+
+    Returns:
+        (provider, source) — source is one of "backup_metadata",
+        "job_config", or "first_provider_fallback", so the caller can
+        decide whether the outcome is trustworthy enough to skip the
+        warning. provider is None only if engine.providers is empty.
+    """
+    provider_name = backup_data.get("provider_name")
+    if provider_name:
+        provider = engine.providers.get(provider_name)
+        if provider is not None:
+            return provider, "backup_metadata"
+        logger.warning(
+            f"Backup for {secret_id} names provider '{provider_name}', "
+            f"which is not currently registered — falling back to job "
+            f"config / first-provider inference."
+        )
+
+    matching_job_providers = {
+        job["provider"]
+        for job in engine.rotation_jobs
+        if job.get("secret_id") == secret_id and job.get("provider") in engine.providers
+    }
+    if len(matching_job_providers) == 1:
+        return engine.providers[next(iter(matching_job_providers))], "job_config"
+
+    if not engine.providers:
+        return None, "no_provider"
+
+    return next(iter(engine.providers.values())), "first_provider_fallback"
+
+
 @bp.route("/restore", methods=["POST"])
 @limiter.limit("10 per minute")
 def restore():
@@ -309,20 +365,51 @@ def restore():
         secret_id = backup_data["secret_id"]
         old_value = backup_data["old_value"]
 
-        # Get the first provider (for now - could be enhanced to specify provider)
-        provider = list(engine.providers.values())[0]
+        provider, provider_source = _resolve_restore_provider(engine, backup_data, secret_id)
+
+        if provider is None:
+            logger.error(
+                f"Cannot restore {secret_id}: no provider is registered "
+                f"(engine.providers is empty)"
+            )
+            audit_log.log(
+                "restore",
+                actor,
+                secret_id=secret_id,
+                success=False,
+                details={"backup_file": backup_file, "reason": "no provider registered"},
+            )
+            return jsonify({"success": False, "error": "No provider registered"}), 500
+
+        if provider_source != "backup_metadata" and len(engine.providers) > 1:
+            # We couldn't confidently identify which provider this
+            # secret belongs to, and there's more than one to choose
+            # from — restoring to the wrong one silently corrupts a
+            # live secret, so this is worth a loud warning even though
+            # we still proceed (see _resolve_restore_provider docstring
+            # for why guessing is still better than refusing outright).
+            logger.warning(
+                f"Restoring {secret_id} to provider '{provider.name}' "
+                f"({provider_source}) — this backup predates provider "
+                f"tracking and {len(engine.providers)} providers are "
+                f"configured, so this is a best-effort guess. Verify the "
+                f"restored value landed in the right place."
+            )
 
         # Restore the old value
         success = provider.update_secret(secret_id, old_value)
 
         if success:
-            logger.info(f"Successfully restored backup for {secret_id} from {backup_file}")
+            logger.info(
+                f"Successfully restored backup for {secret_id} from {backup_file} "
+                f"to provider '{provider.name}'"
+            )
             audit_log.log(
                 "restore",
                 actor,
                 secret_id=secret_id,
                 success=True,
-                details={"backup_file": backup_file},
+                details={"backup_file": backup_file, "provider": provider.name},
             )
             return jsonify(
                 {
