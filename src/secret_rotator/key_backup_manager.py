@@ -479,8 +479,30 @@ class MasterKeyBackupManager:
                     share_data = json.load(f)
 
                 timestamp = share_data.get("created_at")
-                if timestamp not in share_groups:
-                    share_groups[timestamp] = {
+                if timestamp:
+                    group_key = timestamp
+                else:
+                    # Missing/corrupted created_at. Grouping by the
+                    # bare value would key every such file under the
+                    # same None/"" bucket, silently merging shares
+                    # from unrelated (or genuinely corrupted) split-key
+                    # backups into one bogus "backup set" - which could
+                    # then get misreported as complete/restorable even
+                    # though the shares don't actually reconstitute any
+                    # single original key together. Key this file on
+                    # its own path instead, so it's reported as its
+                    # own (almost certainly incomplete) group.
+                    logger.warning(
+                        f"Share {share_file} has no created_at timestamp - "
+                        f"cannot group it with other shares from the same "
+                        f"backup. Reporting it as its own, likely-incomplete "
+                        f"group rather than merging it with other shares "
+                        f"that also lack a timestamp."
+                    )
+                    group_key = str(share_file)
+
+                if group_key not in share_groups:
+                    share_groups[group_key] = {
                         "type": "split_key",
                         "created_at": timestamp,
                         "threshold": share_data.get("threshold"),
@@ -489,7 +511,7 @@ class MasterKeyBackupManager:
                         "shares": [],
                     }
 
-                share_groups[timestamp]["shares"].append(str(share_file))
+                share_groups[group_key]["shares"].append(str(share_file))
             except Exception as e:
                 logger.warning(f"Error reading share {share_file}: {e}")
 
@@ -517,7 +539,14 @@ class MasterKeyBackupManager:
                     }
                 )
 
-        return sorted(backups, key=lambda x: x.get("created_at", ""), reverse=True)
+        # `.get("created_at", "")` only substitutes "" when the *key* is
+        # missing - a share group whose created_at is explicitly None
+        # (see the grouping logic above) still returns None here, and
+        # None isn't orderable against itself or against str in Python 3
+        # (sorted([None, None]) and sorted([None, "x"]) both raise
+        # TypeError). `or ""` normalizes any falsy created_at (None,
+        # missing, "") to "" before comparison.
+        return sorted(backups, key=lambda x: x.get("created_at") or "", reverse=True)
 
     def verify_backup(self, backup_file: str, passphrase: Optional[str] = None) -> bool:
         """
