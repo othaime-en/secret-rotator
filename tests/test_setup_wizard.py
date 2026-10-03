@@ -108,6 +108,20 @@ class TestCreateConfig(SetupWizardTestCase):
             self.assertIn(section, config)
         self.assertEqual(config["rotation"]["schedule"], "daily")
 
+    def test_master_key_file_is_in_data_dir_not_config_dir(self):
+        """Regression test: the master key must live in the writable
+        data directory, not config — config is expected to be
+        read-only in production (see encryption_manager.py's v1.2.0
+        note), so a wizard-generated config pointing master_key_file
+        at config_dir would break key auto-generation/rotation there.
+        """
+        with mock.patch("builtins.input", return_value="1"):
+            config_file = setup_wizard.create_config(self.config_dir, self.data_dir, self.log_dir)
+        config = yaml.safe_load(config_file.read_text())
+
+        master_key_file = Path(config["security"]["encryption"]["master_key_file"])
+        self.assertEqual(master_key_file, self.data_dir / ".master.key")
+
     def test_config_file_has_owner_only_permissions(self):
         with mock.patch("builtins.input", return_value="1"):
             config_file = setup_wizard.create_config(self.config_dir, self.data_dir, self.log_dir)
@@ -164,31 +178,39 @@ class TestCreateConfig(SetupWizardTestCase):
 class TestSetupEncryption(SetupWizardTestCase):
     def setUp(self):
         super().setUp()
-        self.config_dir.mkdir(parents=True)
+        # setup_encryption() writes the master key into data_dir, not
+        # config_dir — see test_master_key_file_is_in_data_dir_not_config_dir
+        # above for why that split matters.
+        self.data_dir.mkdir(parents=True)
 
     def test_generates_master_key_with_owner_only_permissions(self):
-        setup_wizard.setup_encryption(self.config_dir)
-        key_file = self.config_dir / ".master.key"
+        setup_wizard.setup_encryption(self.data_dir)
+        key_file = self.data_dir / ".master.key"
         self.assertTrue(key_file.exists())
         self.assertEqual(stat.S_IMODE(key_file.stat().st_mode), 0o600)
 
+    def test_master_key_is_not_written_to_config_dir(self):
+        self.config_dir.mkdir(parents=True)
+        setup_wizard.setup_encryption(self.data_dir)
+        self.assertFalse((self.config_dir / ".master.key").exists())
+
     def test_existing_key_kept_when_user_declines_regeneration(self):
-        key_file = self.config_dir / ".master.key"
-        setup_wizard.setup_encryption(self.config_dir)  # first-run, no prompt
+        key_file = self.data_dir / ".master.key"
+        setup_wizard.setup_encryption(self.data_dir)  # first-run, no prompt
         original_content = key_file.read_text()
 
         with mock.patch("builtins.input", return_value="no"):
-            setup_wizard.setup_encryption(self.config_dir)
+            setup_wizard.setup_encryption(self.data_dir)
 
         self.assertEqual(key_file.read_text(), original_content)
 
     def test_existing_key_backed_up_before_regeneration(self):
-        key_file = self.config_dir / ".master.key"
-        setup_wizard.setup_encryption(self.config_dir)
+        key_file = self.data_dir / ".master.key"
+        setup_wizard.setup_encryption(self.data_dir)
         original_content = key_file.read_text()
 
         with mock.patch("builtins.input", return_value="yes"):
-            setup_wizard.setup_encryption(self.config_dir)
+            setup_wizard.setup_encryption(self.data_dir)
 
         backup_file = key_file.with_suffix(".key.backup")
         self.assertTrue(backup_file.exists())
