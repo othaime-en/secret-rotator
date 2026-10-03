@@ -414,6 +414,46 @@ class TestBackupManagerPathTraversal(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.backup_manager.restore_backup("..")
 
+    def test_verify_backup_with_checksum_rejects_relative_traversal(self):
+        """Regression test for B5: verify_backup_with_checksum() used
+        Path(backup_file) directly, bypassing _resolve_backup_path()'s
+        containment guard entirely - the exact hole restore_backup()
+        was already fixed for. Not reachable via an unauthenticated
+        route today (only BackupIntegrityChecker calls it, always with
+        a path from list_backups()), but the method itself must still
+        refuse to read outside backup_dir the moment anything else
+        calls it with untrusted input."""
+        depth = len(Path(self.temp_backup_dir).resolve().parts)
+        traversal = "../" * (depth + 2) + str(self.secret_file).lstrip("/")
+
+        is_valid, reason = self.backup_manager.verify_backup_with_checksum(traversal)
+        self.assertFalse(is_valid)
+        self.assertIn(reason, ("invalid_path", "file_not_found"))
+
+    def test_verify_backup_with_checksum_rejects_absolute_path_outside_backup_dir(self):
+        is_valid, reason = self.backup_manager.verify_backup_with_checksum(
+            str(self.secret_file)
+        )
+        self.assertFalse(is_valid)
+        self.assertIn(reason, ("invalid_path", "file_not_found"))
+        # The outside file's contents must never have been read/returned.
+        self.assertNotIn("super-secret-master-key", str(reason))
+
+    def test_verify_backup_with_checksum_still_works_for_legitimate_backup(self):
+        """Normal, non-traversal usage must be unaffected by the fix."""
+        backup_path = self.backup_manager.create_backup_with_checksum("svc", "old", "new")
+        filename = Path(backup_path).name
+
+        is_valid, reason = self.backup_manager.verify_backup_with_checksum(filename)
+        self.assertTrue(is_valid)
+        self.assertEqual(reason, "checksum_valid")
+
+        # Also works given the full path, as returned by
+        # create_backup_with_checksum / list_backups.
+        is_valid2, reason2 = self.backup_manager.verify_backup_with_checksum(backup_path)
+        self.assertTrue(is_valid2)
+        self.assertEqual(reason2, "checksum_valid")
+
 
 if __name__ == "__main__":
     unittest.main()
