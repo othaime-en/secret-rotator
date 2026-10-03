@@ -7,24 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-03
+
+A minor release: a codebase audit turned up five additional
+logic/data-integrity bugs, fixed here alongside fixes already on
+`main` since 1.3.0. No upgrade action required.
+
 ### Fixed
 
-- Resolved the full mypy backlog (23 pre-existing type errors across
-  13 files) and made `mypy` a hard gate in CI instead of
-  informational-only. Two of the fixes were real (small) bugs beyond
-  type-checker noise: a variable-name collision in
-  `web/job_manager.py`'s job-creation path, and an unguarded
-  possibly-unset `threshold` comparison in `key_backup_manager.py`'s
-  Shamir-share restore.
-- The Docker runtime image now installs from the hash-pinned
-  `requirements.lock.txt` (via `pip install --require-hashes`)
-  instead of the unpinned `requirements.txt`. The lock file has been
-  generated since the 1.3.0 supply-chain work but nothing actually
-  installed from it until now.
-- Corrected the Docker image's `LABEL version` (was still `1.2.0`,
-  three releases stale).
-- Updated README.md/CONTRIBUTING.md, which still described `mypy` as
-  informational-only in CI.
+- Resolved the full mypy backlog and made `mypy` a hard CI gate;
+  two of the fixes were real bugs (a variable-name collision in
+  `web/job_manager.py`, an unguarded `threshold` comparison in
+  `key_backup_manager.py`'s Shamir-share restore)
+- Docker image now installs from the hash-pinned
+  `requirements.lock.txt` instead of the unpinned `requirements.txt`
+- Corrected the Docker image's `LABEL version` (was stale at `1.2.0`)
+- Updated README.md/CONTRIBUTING.md's stale "mypy is
+  informational-only" claim
+- `POST /api/restore` always restored to the first registered
+  provider regardless of which one the secret belonged to; it now
+  resolves the correct provider from the backup's own record
+- `APIKeyRotator`'s `hex` format undershot odd configured `length`
+  values by one character, failing its own `validate_secret()`
+- The setup wizard wrote the master key under the (production
+  read-only) config directory instead of the data directory
+- `key_backup_manager.list_backups()` could merge unrelated Shamir
+  shares into one bogus group when `created_at` was missing; fixing
+  this also surfaced and fixed a related sort-crash in the same
+  function
+
+### Security
+
+- `BackupManager.verify_backup_with_checksum()` bypassed the
+  path-traversal containment check `restore_backup()` uses; not
+  reachable via an unauthenticated route today, but fixed so it
+  can't become one
 
 ## [1.3.0] - 2026-09-25
 

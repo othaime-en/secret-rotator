@@ -52,7 +52,7 @@ LABEL description="Secret Rotation System - Production Runtime"
 # Bump alongside the version in pyproject.toml on every release - this
 # is intentionally static rather than derived at build time, so keep
 # `docker build` and `bumpversion`/release steps in the same commit.
-LABEL version="1.3.0"
+LABEL version="1.3.1"
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
