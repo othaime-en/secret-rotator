@@ -15,4 +15,4 @@ waitress==3.0.2
 Flask-Limiter>=3.11.0
 redis==8.1.0
 rq==2.12.0
-boto3==1.43.101
+boto3==1.43.106
