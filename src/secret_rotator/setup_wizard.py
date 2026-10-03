@@ -137,7 +137,13 @@ def create_config(config_dir, data_dir, log_dir):
         "security": {
             "encryption": {
                 "enabled": True,
-                "master_key_file": str(config_dir / ".master.key"),
+                # Master key lives in the writable data directory, not
+                # config — config is expected to be read-only in
+                # production (see encryption_manager.py's v1.2.0 note),
+                # and a key file that can't be auto-generated/rotated
+                # there would break on first run. Matches
+                # config.example.yaml's documented "data/.master.key".
+                "master_key_file": str(data_dir / ".master.key"),
                 "rotate_master_key_days": 90,
             }
         },
@@ -172,11 +178,16 @@ def create_config(config_dir, data_dir, log_dir):
     return config_file
 
 
-def setup_encryption(config_dir):
-    """Set up encryption and generate master key"""
+def setup_encryption(data_dir):
+    """Set up encryption and generate master key.
+
+    Takes data_dir, not config_dir: the master key must live in the
+    writable data directory (see the matching note in create_config()
+    above) — config is expected to be read-only in production.
+    """
     print("\n🔐 Setting up encryption...")
 
-    master_key_file = config_dir / ".master.key"
+    master_key_file = data_dir / ".master.key"
 
     if master_key_file.exists():
         response = input("\n⚠️  Master key already exists\n   Generate new key? (yes/no): ")
@@ -358,7 +369,7 @@ def main():
 
         print(f"✓ Configuration updated: {config_file}")
 
-        setup_encryption(config_dir)
+        setup_encryption(data_dir)
 
         print_summary(config_dir, data_dir, log_dir, config_file)
 
