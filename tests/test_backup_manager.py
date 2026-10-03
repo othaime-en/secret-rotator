@@ -431,9 +431,7 @@ class TestBackupManagerPathTraversal(unittest.TestCase):
         self.assertIn(reason, ("invalid_path", "file_not_found"))
 
     def test_verify_backup_with_checksum_rejects_absolute_path_outside_backup_dir(self):
-        is_valid, reason = self.backup_manager.verify_backup_with_checksum(
-            str(self.secret_file)
-        )
+        is_valid, reason = self.backup_manager.verify_backup_with_checksum(str(self.secret_file))
         self.assertFalse(is_valid)
         self.assertIn(reason, ("invalid_path", "file_not_found"))
         # The outside file's contents must never have been read/returned.

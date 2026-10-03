@@ -628,4 +628,3 @@ class BackupIntegrityChecker:
             "last_verification": latest.get("timestamp"),
             "recent_corrupted": sum(len(v.get("corrupted", [])) for v in recent_verifications),
         }
-    
