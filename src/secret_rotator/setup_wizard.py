@@ -1,374 +1,286 @@
-#!/usr/bin/env python3
 """
-Interactive setup wizard for Secret Rotation System
-This creates all necessary directories and configuration
+Unit tests for setup_wizard.py.
 """
 
 import os
-import sys
-import yaml
+import stat
 import shutil
+import tempfile
+import unittest
 from pathlib import Path
-from secret_rotator.utils.passphrase_manager import PassphraseManager
-
-
-def get_config_dir():
-    """Get platform-specific config directory"""
-    if sys.platform == "win32":
-        base = os.environ.get("APPDATA", os.path.expanduser("~"))
-        return Path(base) / "secret-rotator"
-    else:
-        # Unix-like: use XDG Base Directory spec
-        xdg_config = os.environ.get("XDG_CONFIG_HOME")
-        if xdg_config:
-            return Path(xdg_config) / "secret-rotator"
-        return Path.home() / ".config" / "secret-rotator"
-
-
-def get_data_dir():
-    """Get platform-specific data directory"""
-    if sys.platform == "win32":
-        base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-        return Path(base) / "secret-rotator" / "data"
-    else:
-        xdg_data = os.environ.get("XDG_DATA_HOME")
-        if xdg_data:
-            return Path(xdg_data) / "secret-rotator"
-        return Path.home() / ".local" / "share" / "secret-rotator"
-
-
-def get_log_dir():
-    """Get platform-specific log directory"""
-    if sys.platform == "win32":
-        base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-        return Path(base) / "secret-rotator" / "logs"
-    else:
-        xdg_state = os.environ.get("XDG_STATE_HOME")
-        if xdg_state:
-            return Path(xdg_state) / "secret-rotator" / "logs"
-        return Path.home() / ".local" / "state" / "secret-rotator" / "logs"
-
-
-def create_directories(config_dir, data_dir, log_dir):
-    """Create necessary directories"""
-    print("\n📁 Creating directories...")
-
-    directories = [config_dir, data_dir, data_dir / "backup", log_dir]
-
-    for directory in directories:
-        directory.mkdir(parents=True, exist_ok=True)
-        os.chmod(directory, 0o700)  # Restrictive permissions
-        print(f"  ✓ {directory}")
-
-
-def create_config(config_dir, data_dir, log_dir):
-    """Create default configuration"""
-    config_file = config_dir / "config.yaml"
-
-    if config_file.exists():
-        response = input(
-            f"\n⚠️  Configuration already exists at {config_file}\n   Overwrite? (yes/no): "
-        )
-        if response.lower() != "yes":
-            print("Keeping existing configuration")
-            return config_file
-
-    print("\n📝 Creating configuration...")
-
-    # Interactive configuration
-    print("\nRotation Schedule:")
-    print("  1. Daily (recommended)")
-    print("  2. Weekly")
-    print("  3. Every 12 hours")
-    print("  4. Custom")
-
-    choice = input("Select schedule [1]: ").strip() or "1"
-    # NOTE: the "4" (custom) value is only prompted for lazily, on demand.
-    # A dict literal evaluates every value eagerly, so building
-    # {"4": input(...)} unconditionally would ask "Enter custom schedule"
-    # on every run regardless of what the user picked for 1/2/3, and then
-    # silently discard that answer.
-    schedule_map = {
-        "1": "daily",
-        "2": "weekly",
-        "3": "every_12_hours",
-    }
-    if choice == "4":
-        schedule = input("  Enter custom schedule (e.g., every_30_minutes): ").strip() or "daily"
-    else:
-        schedule = schedule_map.get(choice, "daily")
-
-    # Create configuration
-    config = {
-        "rotation": {
-            "schedule": schedule,
-            "retry_attempts": 3,
-            "timeout": 30,
-            "backup_old_secrets": True,
-        },
-        "logging": {
-            "level": "INFO",
-            "file": str(log_dir / "rotation.log"),
-            "console_enabled": True,
-            "structured": False,
-            "max_file_size": "10MB",
-            "backup_count": 5,
-            "separate_error_log": True,
-        },
-        "web": {"enabled": True, "port": 8080, "host": "localhost"},
-        "providers": {
-            "file_storage": {
-                "type": "file",
-                "file_path": str(data_dir / "secrets.json"),
-                "backup_path": str(data_dir / "backup"),
-            }
-        },
-        "rotators": {
-            "password_gen": {
-                "type": "password",
-                "length": 16,
-                "use_symbols": True,
-                "use_numbers": True,
-                "use_uppercase": True,
-                "use_lowercase": True,
-                "exclude_ambiguous": True,
-            }
-        },
-        "security": {
-            "encryption": {
-                "enabled": True,
-                "master_key_file": str(config_dir / ".master.key"),
-                "rotate_master_key_days": 90,
-            }
-        },
-        "backup": {
-            "enabled": True,
-            "storage_path": str(data_dir / "backup"),
-            "encrypt_backups": True,
-            "cleanup_time": "03:00",
-            "verification_time": "04:00",
-            "verify_integrity": True,
-            "retention": {"days": 90, "max_backups_per_secret": 10},
-        },
-        "jobs": [
-            {
-                "name": "example_password",
-                "provider": "file_storage",
-                "rotator": "password_gen",
-                "secret_id": "example_secret",
-                "schedule": "weekly",
-                "notification": False,
-            }
-        ],
-    }
-
-    # Write configuration
-    with open(config_file, "w") as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-
-    os.chmod(config_file, 0o600)  # Restrictive permissions
-    print(f"  ✓ Configuration saved to {config_file}")
-
-    return config_file
-
-
-def setup_encryption(config_dir):
-    """Set up encryption and generate master key"""
-    print("\n🔐 Setting up encryption...")
-
-    master_key_file = config_dir / ".master.key"
-
-    if master_key_file.exists():
-        response = input("\n⚠️  Master key already exists\n   Generate new key? (yes/no): ")
-        if response.lower() != "yes":
-            print("Keeping existing master key")
-            return
-
-        # Backup existing key
-        backup_file = master_key_file.with_suffix(".key.backup")
-        shutil.copy2(master_key_file, backup_file)
-        print(f"  ✓ Backed up existing key to {backup_file}")
-
-    # Import encryption manager to generate key
-    try:
-        from secret_rotator.encryption_manager import EncryptionManager
-
-        # This will automatically generate a new key if it doesn't exist
-        EncryptionManager(key_file=str(master_key_file))
-
-        os.chmod(master_key_file, 0o600)
-        print(f"  ✓ Master encryption key generated: {master_key_file}")
-        print("\n  ⚠️  CRITICAL: Backup this key immediately!")
-        print("     Run: secret-rotator-backup create-encrypted")
-
-    except Exception as e:
-        print(f"  ✗ Error generating master key: {e}")
-        sys.exit(1)
-
-
-def print_summary(config_dir, data_dir, log_dir, config_file):
-    """Print setup summary and next steps"""
-    print("\n" + "=" * 70)
-    print("✓ SETUP COMPLETE")
-    print("=" * 70)
-
-    print("\nDirectories created:")
-    print(f"  Config:  {config_dir}")
-    print(f"  Data:    {data_dir}")
-    print(f"  Logs:    {log_dir}")
-
-    print(f"\nConfiguration: {config_file}")
-
-    print("\n" + "=" * 70)
-    print("NEXT STEPS")
-    print("=" * 70)
-
-    print("\n1. BACKUP YOUR MASTER KEY (Critical!)")
-    print("   Run: secret-rotator-backup create-encrypted")
-    print("   Store the passphrase in a password manager")
-
-    print("\n2. Edit configuration if needed:")
-    print(f"   {config_file}")
-
-    print("\n3. Add your rotation jobs to the 'jobs' section")
-
-    print("\n4. Verify setup:")
-    print("   secret-rotator --mode verify")
-
-    print("\n5. Start the application:")
-    print("   secret-rotator")
-
-    print("\n6. Access web interface:")
-    print("   http://localhost:8080")
-
-    print("\n" + "=" * 70)
-
-
-def setup_backup_passphrase(config_dir, data_dir):
-    """Configure backup passphrase during initial setup"""
-    print("\n" + "=" * 70)
-    print("BACKUP PASSPHRASE CONFIGURATION")
-    print("=" * 70)
-    print("\nFor encrypting master key backups, you need a passphrase.")
-    print("How would you like to provide this passphrase?\n")
-
-    print("1. Interactive (ask each time) - Most secure")
-    print("2. Store in secure file - Convenient for automation")
-    print("3. Environment variable - Good for CI/CD")
-    print("4. I'll configure this later")
-
-    choice = input("\nSelect option [1]: ").strip() or "1"
-
-    config_value = "interactive"  # default
-
-    if choice == "1":
-        print("\n✓ Passphrase will be requested interactively when needed")
-        config_value = "interactive"
-
-    elif choice == "2":
-        print("\nCreating secure passphrase file...")
-
-        # Determine best location
-        if os.path.exists("/app/data"):  # Docker environment
-            passphrase_file = Path("/app/data/.backup-passphrase")
-            display_path = "/app/data/.backup-passphrase"
-        else:  # PyPI installation
-            passphrase_file = config_dir / ".backup-passphrase"
-            display_path = str(passphrase_file)
-
-        # Use PassphraseManager to create file
-        pm = PassphraseManager()
-        success = pm.create_passphrase_file(
-            str(passphrase_file), passphrase=None, interactive=True  # Will prompt
-        )
-
-        if success:
-            config_value = f"file:{passphrase_file}"
-            print(f"\n✓ Passphrase file created: {display_path}")
-            print("  This file will be used automatically for encrypted backups")
-        else:
-            print("\n⚠️  Failed to create passphrase file, using interactive mode")
-            config_value = "interactive"
-
-    elif choice == "3":
-        env_var = input("Environment variable name [BACKUP_PASSPHRASE]: ").strip()
-        env_var = env_var or "BACKUP_PASSPHRASE"
-
-        print(f"\n✓ Will use environment variable: {env_var}")
-        print("\nAdd this to your environment:")
-        print(f"  export {env_var}='your-secure-passphrase-here'")
-        config_value = f"env:{env_var}"
-
-    elif choice == "4":
-        print("\n✓ Backup passphrase not configured")
-        print("  You can configure this later in config.yaml")
-        config_value = "interactive"
-
-    else:
-        print("\n⚠️  Invalid choice, using interactive mode")
-        config_value = "interactive"
-
-    return config_value
-
-
-def main():
-    """Main setup wizard"""
-    print("=" * 70)
-    print("SECRET ROTATION SYSTEM - SETUP WIZARD")
-    print("=" * 70)
-    print("\nThis wizard will set up Secret Rotation System on your machine.")
-    print("It will create configuration files and necessary directories.")
-
-    # Determine directories
-    config_dir = get_config_dir()
-    data_dir = get_data_dir()
-    log_dir = get_log_dir()
-
-    print("\nInstallation locations:")
-    print(f"  Config: {config_dir}")
-    print(f"  Data:   {data_dir}")
-    print(f"  Logs:   {log_dir}")
-
-    response = input("\nContinue? (yes/no): ")
-    if response.lower() != "yes":
-        print("Setup cancelled")
-        sys.exit(0)
-
-    try:
-        create_directories(config_dir, data_dir, log_dir)
-
-        config_file = create_config(config_dir, data_dir, log_dir)
-
-        # Setup backup passphrase configuration
-        print("\n" + "=" * 70)
-        print("STEP 4: BACKUP CONFIGURATION")
-        print("=" * 70)
-        backup_passphrase_config = setup_backup_passphrase(config_dir, data_dir)
-
-        with open(config_file, "r") as f:
+from unittest import mock
+
+import yaml
+
+from secret_rotator import setup_wizard
+
+
+class SetupWizardTestCase(unittest.TestCase):
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.test_dir, ignore_errors=True)
+        self.config_dir = Path(self.test_dir) / "config"
+        self.data_dir = Path(self.test_dir) / "data"
+        self.log_dir = Path(self.test_dir) / "logs"
+
+
+class TestDirectoryResolution(unittest.TestCase):
+    def setUp(self):
+        self._env_patch = mock.patch.dict(os.environ, {}, clear=False)
+        self._env_patch.start()
+        self.addCleanup(self._env_patch.stop)
+        for var in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"):
+            os.environ.pop(var, None)
+
+    def test_config_dir_respects_xdg_config_home(self):
+        with mock.patch("sys.platform", "linux"):
+            os.environ["XDG_CONFIG_HOME"] = "/custom/xdg/config"
+            self.assertEqual(
+                setup_wizard.get_config_dir(), Path("/custom/xdg/config/secret-rotator")
+            )
+
+    def test_config_dir_falls_back_to_home_when_no_xdg(self):
+        with mock.patch("sys.platform", "linux"):
+            self.assertEqual(
+                setup_wizard.get_config_dir(), Path.home() / ".config" / "secret-rotator"
+            )
+
+    def test_data_dir_respects_xdg_data_home(self):
+        with mock.patch("sys.platform", "linux"):
+            os.environ["XDG_DATA_HOME"] = "/custom/xdg/data"
+            self.assertEqual(setup_wizard.get_data_dir(), Path("/custom/xdg/data/secret-rotator"))
+
+    def test_data_dir_falls_back_to_home_when_no_xdg(self):
+        with mock.patch("sys.platform", "linux"):
+            self.assertEqual(
+                setup_wizard.get_data_dir(), Path.home() / ".local" / "share" / "secret-rotator"
+            )
+
+    def test_log_dir_respects_xdg_state_home(self):
+        with mock.patch("sys.platform", "linux"):
+            os.environ["XDG_STATE_HOME"] = "/custom/xdg/state"
+            self.assertEqual(
+                setup_wizard.get_log_dir(), Path("/custom/xdg/state/secret-rotator/logs")
+            )
+
+    def test_windows_config_dir_uses_appdata(self):
+        with mock.patch("sys.platform", "win32"):
+            os.environ["APPDATA"] = r"C:\Users\tester\AppData\Roaming"
+            self.assertEqual(
+                setup_wizard.get_config_dir(),
+                Path(r"C:\Users\tester\AppData\Roaming") / "secret-rotator",
+            )
+
+
+class TestCreateDirectories(SetupWizardTestCase):
+    def test_all_directories_created_with_owner_only_permissions(self):
+        setup_wizard.create_directories(self.config_dir, self.data_dir, self.log_dir)
+
+        for directory in (self.config_dir, self.data_dir, self.data_dir / "backup", self.log_dir):
+            self.assertTrue(directory.is_dir())
+            self.assertEqual(stat.S_IMODE(directory.stat().st_mode), 0o700)
+
+
+class TestCreateConfig(SetupWizardTestCase):
+    def setUp(self):
+        super().setUp()
+        for d in (self.config_dir, self.data_dir, self.log_dir):
+            d.mkdir(parents=True)
+
+    def test_writes_valid_yaml_with_expected_top_level_sections(self):
+        with mock.patch("builtins.input", return_value="1"):
+            config_file = setup_wizard.create_config(self.config_dir, self.data_dir, self.log_dir)
+
+        self.assertTrue(config_file.exists())
+        with open(config_file) as f:
             config = yaml.safe_load(f)
 
-        if "backup" not in config:
-            config["backup"] = {}
+        for section in (
+            "rotation",
+            "logging",
+            "web",
+            "providers",
+            "rotators",
+            "security",
+            "backup",
+            "jobs",
+        ):
+            self.assertIn(section, config)
+        self.assertEqual(config["rotation"]["schedule"], "daily")
 
-        config["backup"]["key_backup"] = {"passphrase_source": backup_passphrase_config}
+    def test_master_key_file_is_in_data_dir_not_config_dir(self):
+        """Regression test: the master key must live in the writable
+        data directory, not config — config is expected to be
+        read-only in production (see encryption_manager.py's v1.2.0
+        note), so a wizard-generated config pointing master_key_file
+        at config_dir would break key auto-generation/rotation there.
+        """
+        with mock.patch("builtins.input", return_value="1"):
+            config_file = setup_wizard.create_config(self.config_dir, self.data_dir, self.log_dir)
+        config = yaml.safe_load(config_file.read_text())
 
-        with open(config_file, "w") as f:
-            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        master_key_file = Path(config["security"]["encryption"]["master_key_file"])
+        self.assertEqual(master_key_file, self.data_dir / ".master.key")
 
-        print(f"✓ Configuration updated: {config_file}")
+    def test_config_file_has_owner_only_permissions(self):
+        with mock.patch("builtins.input", return_value="1"):
+            config_file = setup_wizard.create_config(self.config_dir, self.data_dir, self.log_dir)
+        self.assertEqual(stat.S_IMODE(config_file.stat().st_mode), 0o600)
 
-        setup_encryption(config_dir)
+    def test_schedule_choice_2_selects_weekly(self):
+        with mock.patch("builtins.input", return_value="2"):
+            config_file = setup_wizard.create_config(self.config_dir, self.data_dir, self.log_dir)
+        config = yaml.safe_load(config_file.read_text())
+        self.assertEqual(config["rotation"]["schedule"], "weekly")
 
-        print_summary(config_dir, data_dir, log_dir, config_file)
+    def test_default_choice_when_input_is_blank(self):
+        with mock.patch("builtins.input", return_value=""):
+            config_file = setup_wizard.create_config(self.config_dir, self.data_dir, self.log_dir)
+        config = yaml.safe_load(config_file.read_text())
+        self.assertEqual(config["rotation"]["schedule"], "daily")
 
-    except KeyboardInterrupt:
-        print("\n\nSetup interrupted")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n✗ Setup failed: {e}", file=sys.stderr)
-        sys.exit(1)
+    def test_picking_option_1_does_not_prompt_a_second_time(self):
+        """Regression test: create_config() must only call input() once
+        (for the schedule choice itself) when the user picks 1/2/3 — it
+        must not also eagerly ask for a custom schedule and discard it."""
+        with mock.patch("builtins.input", return_value="1") as mocked_input:
+            setup_wizard.create_config(self.config_dir, self.data_dir, self.log_dir)
+        self.assertEqual(mocked_input.call_count, 1)
+
+    def test_choice_4_prompts_for_and_uses_custom_schedule(self):
+        with mock.patch("builtins.input", side_effect=["4", "every_45_minutes"]):
+            config_file = setup_wizard.create_config(self.config_dir, self.data_dir, self.log_dir)
+        config = yaml.safe_load(config_file.read_text())
+        self.assertEqual(config["rotation"]["schedule"], "every_45_minutes")
+
+    def test_existing_config_not_overwritten_when_user_declines(self):
+        config_file = self.config_dir / "config.yaml"
+        config_file.write_text("original: true\n")
+
+        with mock.patch("builtins.input", return_value="no"):
+            result = setup_wizard.create_config(self.config_dir, self.data_dir, self.log_dir)
+
+        self.assertEqual(result, config_file)
+        self.assertEqual(yaml.safe_load(config_file.read_text()), {"original": True})
+
+    def test_existing_config_overwritten_when_user_confirms(self):
+        config_file = self.config_dir / "config.yaml"
+        config_file.write_text("original: true\n")
+
+        with mock.patch("builtins.input", side_effect=["yes", "1"]):
+            setup_wizard.create_config(self.config_dir, self.data_dir, self.log_dir)
+
+        config = yaml.safe_load(config_file.read_text())
+        self.assertIn("rotation", config)
+        self.assertNotIn("original", config)
+
+
+class TestSetupEncryption(SetupWizardTestCase):
+    def setUp(self):
+        super().setUp()
+        # setup_encryption() writes the master key into data_dir, not
+        # config_dir — see test_master_key_file_is_in_data_dir_not_config_dir
+        # above for why that split matters.
+        self.data_dir.mkdir(parents=True)
+
+    def test_generates_master_key_with_owner_only_permissions(self):
+        setup_wizard.setup_encryption(self.data_dir)
+        key_file = self.data_dir / ".master.key"
+        self.assertTrue(key_file.exists())
+        self.assertEqual(stat.S_IMODE(key_file.stat().st_mode), 0o600)
+
+    def test_master_key_is_not_written_to_config_dir(self):
+        self.config_dir.mkdir(parents=True)
+        setup_wizard.setup_encryption(self.data_dir)
+        self.assertFalse((self.config_dir / ".master.key").exists())
+
+    def test_existing_key_kept_when_user_declines_regeneration(self):
+        key_file = self.data_dir / ".master.key"
+        setup_wizard.setup_encryption(self.data_dir)  # first-run, no prompt
+        original_content = key_file.read_text()
+
+        with mock.patch("builtins.input", return_value="no"):
+            setup_wizard.setup_encryption(self.data_dir)
+
+        self.assertEqual(key_file.read_text(), original_content)
+
+    def test_existing_key_backed_up_before_regeneration(self):
+        key_file = self.data_dir / ".master.key"
+        setup_wizard.setup_encryption(self.data_dir)
+        original_content = key_file.read_text()
+
+        with mock.patch("builtins.input", return_value="yes"):
+            setup_wizard.setup_encryption(self.data_dir)
+
+        backup_file = key_file.with_suffix(".key.backup")
+        self.assertTrue(backup_file.exists())
+        self.assertEqual(backup_file.read_text(), original_content)
+
+
+class TestSetupBackupPassphrase(SetupWizardTestCase):
+    def setUp(self):
+        super().setUp()
+        for d in (self.config_dir, self.data_dir):
+            d.mkdir(parents=True)
+
+    def test_choice_1_selects_interactive(self):
+        with mock.patch("builtins.input", return_value="1"):
+            result = setup_wizard.setup_backup_passphrase(self.config_dir, self.data_dir)
+        self.assertEqual(result, "interactive")
+
+    def test_choice_3_selects_custom_env_var(self):
+        with mock.patch("builtins.input", side_effect=["3", "MY_PASSPHRASE_VAR"]):
+            result = setup_wizard.setup_backup_passphrase(self.config_dir, self.data_dir)
+        self.assertEqual(result, "env:MY_PASSPHRASE_VAR")
+
+    def test_choice_3_defaults_env_var_name_when_blank(self):
+        with mock.patch("builtins.input", side_effect=["3", ""]):
+            result = setup_wizard.setup_backup_passphrase(self.config_dir, self.data_dir)
+        self.assertEqual(result, "env:BACKUP_PASSPHRASE")
+
+    def test_choice_4_defers_configuration(self):
+        with mock.patch("builtins.input", return_value="4"):
+            result = setup_wizard.setup_backup_passphrase(self.config_dir, self.data_dir)
+        self.assertEqual(result, "interactive")
+
+    def test_invalid_choice_falls_back_to_interactive(self):
+        with mock.patch("builtins.input", return_value="9"):
+            result = setup_wizard.setup_backup_passphrase(self.config_dir, self.data_dir)
+        self.assertEqual(result, "interactive")
+
+    def test_choice_2_creates_passphrase_file_and_returns_file_source(self):
+        with mock.patch("builtins.input", return_value="2"):
+            with mock.patch(
+                "secret_rotator.setup_wizard.PassphraseManager.create_passphrase_file",
+                return_value=True,
+            ):
+                result = setup_wizard.setup_backup_passphrase(self.config_dir, self.data_dir)
+        self.assertTrue(result.startswith("file:"))
+
+    def test_choice_2_falls_back_to_interactive_on_failure(self):
+        with mock.patch("builtins.input", return_value="2"):
+            with mock.patch(
+                "secret_rotator.setup_wizard.PassphraseManager.create_passphrase_file",
+                return_value=False,
+            ):
+                result = setup_wizard.setup_backup_passphrase(self.config_dir, self.data_dir)
+        self.assertEqual(result, "interactive")
+
+
+class TestMainEntryPoint(SetupWizardTestCase):
+    def test_declining_initial_confirmation_exits_without_creating_anything(self):
+        with (
+            mock.patch("secret_rotator.setup_wizard.get_config_dir", return_value=self.config_dir),
+            mock.patch("secret_rotator.setup_wizard.get_data_dir", return_value=self.data_dir),
+            mock.patch("secret_rotator.setup_wizard.get_log_dir", return_value=self.log_dir),
+            mock.patch("builtins.input", return_value="no"),
+        ):
+            with self.assertRaises(SystemExit) as cm:
+                setup_wizard.main()
+
+        self.assertEqual(cm.exception.code, 0)
+        self.assertFalse(self.config_dir.exists())
 
 
 if __name__ == "__main__":
-    main()
+    unittest.main()
