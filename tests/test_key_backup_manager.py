@@ -238,6 +238,54 @@ class TestListAndVerifyBackups(KeyBackupManagerTestCase):
         for group in groups:
             self.assertEqual(group["available_shares"], 3)
 
+    def test_shares_with_missing_created_at_are_not_merged_together(self):
+        """Regression test: list_backups() previously grouped share
+        files by share_data.get("created_at") with no guard for a
+        missing/corrupted value - every share lacking created_at
+        collapsed into one shared None-keyed group, silently merging
+        shares from unrelated (or corrupted) backup sets and risking
+        a false "complete, restorable" status for a group whose
+        shares don't actually reconstitute any single key together.
+        Shares missing created_at must now be reported as their own,
+        separate (unmergeable) groups instead."""
+        self.manager.create_split_key_backup(num_shares=3, threshold=2)
+
+        # Simulate two corrupted/hand-edited share files, each missing
+        # created_at, from what were originally two different (and
+        # otherwise unrelated) split-key backups.
+        for i in (1, 2):
+            corrupt_share = self.backup_dir / f"corrupt_share_{i}.share"
+            corrupt_share.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "share_number": 1,
+                        "total_shares": 3,
+                        "threshold": 2,
+                        # created_at intentionally omitted
+                        "share_data": "irrelevant-for-this-test",
+                        "key_id": f"unrelated-key-{i}",
+                    }
+                )
+            )
+
+        backups = self.manager.list_backups()
+        split_groups = [b for b in backups if b["type"] == "split_key"]
+
+        # The real 3-share batch, plus two separate one-share groups
+        # for the corrupted files - never merged into each other or
+        # into the real batch.
+        self.assertEqual(len(split_groups), 3)
+
+        real_group = next(g for g in split_groups if g["available_shares"] == 3)
+        self.assertEqual(real_group["status"], "complete")
+
+        corrupt_groups = [g for g in split_groups if g["available_shares"] == 1]
+        self.assertEqual(len(corrupt_groups), 2)
+        for group in corrupt_groups:
+            self.assertIsNone(group["created_at"])
+            self.assertEqual(group["status"], "incomplete")
+
     def test_verify_encrypted_backup_requires_passphrase(self):
         backup_file = self.manager.create_encrypted_key_backup(passphrase="correct horse battery!!")
         self.assertFalse(self.manager.verify_backup(backup_file))
