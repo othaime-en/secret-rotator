@@ -362,7 +362,21 @@ class BackupManager:
         Verify backup using stored checksum.
         Returns (is_valid, reason)
         """
-        backup_path = Path(backup_file)
+        # Route through the same containment guard as restore_backup()
+        # (see _resolve_backup_path's docstring) rather than
+        # Path(backup_file) directly. Not reachable from an
+        # unauthenticated route today - only BackupIntegrityChecker
+        # calls this, always with a path it got from list_backups() -
+        # but that's incidental, not a control: the moment anything
+        # else (a new endpoint, a CLI tool) calls this with
+        # user-supplied input, Path(backup_file) would have been a
+        # path-traversal hole identical to the one restore_backup()
+        # already guards against.
+        try:
+            backup_path = self._resolve_backup_path(backup_file)
+        except ValueError as e:
+            logger.error(f"Rejected backup path for checksum verification: {e}")
+            return False, "invalid_path"
 
         if not backup_path.exists():
             return False, "file_not_found"
