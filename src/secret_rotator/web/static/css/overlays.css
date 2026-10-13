@@ -1,0 +1,60 @@
+/* Scrim and modal dialogs. Drawers are added with the pages that use them. */
+
+.scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.28);
+    display: none;
+    z-index: 20;
+}
+
+.scrim.open {
+    display: block;
+    animation: fade 0.15s;
+}
+
+.modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(420px, 92vw);
+    z-index: 21;
+    display: none;
+    border-radius: 12px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.2);
+}
+
+.modal.open {
+    display: block;
+    animation: pop 0.15s ease-out;
+}
+
+.modal .card-b {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.warnbox {
+    display: flex;
+    gap: 10px;
+    padding: 11px 12px;
+    border-radius: 6px;
+    background: var(--warn-soft);
+    color: var(--warn);
+    font-size: 13px;
+}
+
+@keyframes fade {
+    from {
+        opacity: 0;
+    }
+}
+
+@keyframes pop {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -48%);
+    }
+}

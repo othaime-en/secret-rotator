@@ -13,6 +13,7 @@ complete, so rotation/restore remain usable in the meantime.
 """
 
 import os
+from datetime import datetime, timezone
 
 from flask import Blueprint, render_template, current_app, session
 from secret_rotator.utils.logger import logger
@@ -53,10 +54,31 @@ def _stub(active, title, blurb, **context):
     return render_page("page_stub.html", active, title, page_blurb=blurb, **context)
 
 
+@bp.app_template_filter("schedule_label")
+def schedule_label(value):
+    """'every_2_hours' -> 'Every 2 hours', 'daily' -> 'Daily'."""
+    return str(value or "").replace("_", " ").capitalize()
+
+
+@bp.app_template_filter("format_utc")
+def format_utc(value):
+    """ISO timestamp -> '2026-10-13 04:00 UTC'.
+
+    The no-JavaScript fallback text inside <time>; static/js/time.js
+    replaces it with the viewer's local time.
+    """
+    try:
+        parsed = datetime.fromisoformat(value).astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return str(value or "")
+    return parsed.strftime("%Y-%m-%d %H:%M UTC")
+
+
 @bp.route("/")
 def index():
-    """Overview."""
-    return _stub("overview", "Overview", "Rotation status and what needs attention.")
+    """Overview: totals, items needing attention, job status, activity."""
+    data = current_app.job_status.overview()
+    return render_page("overview.html", "overview", "Overview", data=data)
 
 
 @bp.route("/jobs")

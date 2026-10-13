@@ -209,6 +209,15 @@ class TestOverview(AuditFixture):
         message = self.overview()["recent_activity"][0]["message"]
         self.assertEqual(message, "db_job failed")
 
+    def test_unreadable_verification_data_does_not_break_the_overview(self):
+        with patch(
+            "secret_rotator.job_status.BackupIntegrityChecker",
+            side_effect=OSError("logs dir not writable"),
+        ):
+            verification = self.service().overview()["verification"]
+        self.assertEqual(verification["status"], "unknown")
+        self.assertEqual(verification["recent_runs"], [])
+
     def test_verification_runs_are_oldest_first_with_ok_flag(self):
         stamp = lambda h: (NOW - timedelta(hours=h)).replace(tzinfo=None).isoformat()  # noqa: E731
         history = [  # newest first, as get_verification_history returns

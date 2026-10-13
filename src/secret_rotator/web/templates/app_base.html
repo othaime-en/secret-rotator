@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/overlays.css') }}">
     {% block extra_css %}{% endblock %}
 </head>
 
@@ -30,7 +31,12 @@
         </div>
     </div>
 
+    <div class="scrim" id="scrim"></div>
     {% block overlays %}{% endblock %}
+
+    <script src="{{ url_for('static', filename='js/http.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/time.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/overlays.js') }}"></script>
     {% block extra_js %}{% endblock %}
 </body>
 

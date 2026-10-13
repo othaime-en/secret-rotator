@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   history to keep in sync. `RotationScheduler.next_rotation_time()`,
   `RotationEngine.active_job_names()` and
   `BackupManager.count_backups()` support this.
+- Dashboard redesign, step 4: new Overview page at `/` showing job and
+  backup totals, failed jobs needing attention, every job's status and
+  schedule, recent backup verification runs and recent activity. "Rotate
+  all" now confirms in an accessible dialog, shows live progress and
+  joins a rotation that is already running. Timestamps are shown in the
+  viewer's local time zone.
 
 ### Fixed
 

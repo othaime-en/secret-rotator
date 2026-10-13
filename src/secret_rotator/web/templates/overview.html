@@ -1,0 +1,136 @@
+{% extends "app_base.html" %}
+{% from "partials/macros.html" import when, plural, status_badge %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/overview.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set summary = data.summary %}
+{% set verification = data.verification %}
+
+<div class="head">
+    <div>
+        <h1>Overview</h1>
+        <p>
+            {{ plural(summary.jobs, "job") }} and {{ plural(summary.backups, "backup") }}.
+            {% if not verification.last_verification %}
+            No backup verification has run yet.
+            {% elif verification.failed == 0 %}
+            The last verification passed at {{ when(verification.last_verification, "datetime") }}.
+            {% else %}
+            The last verification found {{ verification.failed }} of {{ verification.total }} backups failing.
+            {% endif %}
+        </p>
+    </div>
+    <button type="button" class="btn primary" data-open="m-rotate"{% if not summary.jobs or summary.rotating %} disabled{% endif %}>Rotate all</button>
+</div>
+
+<div class="banner" id="rotate-banner" role="status" aria-live="polite"{% if not summary.rotating %} hidden{% endif %}
+     {% if summary.rotating %}data-refresh-ms="3000"{% endif %}>
+    <span id="rotate-banner-text">{% if summary.rotating %}Rotating, {{ plural(summary.rotating, "job") }} in progress{% endif %}</span>
+    <div class="bar" hidden><i style="width:0%"></i></div>
+</div>
+
+{% if data.attention %}
+<div class="attn" role="region" aria-label="Needs attention">
+    {% for item in data.attention %}
+    <div class="ar">
+        <i class="d e" aria-hidden="true"></i>
+        <span>
+            <b>{{ item.job }}</b> failed at {{ when(item.timestamp, "datetime") }}{% if item.detail %}: {{ item.detail }}{% endif %}.
+        </span>
+        <a class="btn sm" href="{{ url_for('dashboard.job_detail', job_id=item.job) }}">View</a>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="blk">
+    <div class="row">
+        <h2>Secrets</h2>
+        <a class="lnk" href="{{ url_for('dashboard.jobs') }}">View all</a>
+    </div>
+    {% if data.jobs %}
+    <div class="tw">
+        <table>
+            <thead>
+                <tr>
+                    <th>Secret</th>
+                    <th>Schedule</th>
+                    <th>Last rotated</th>
+                    <th>Next rotation</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in data.jobs %}
+                <tr>
+                    <td class="cell-t">
+                        <a href="{{ url_for('dashboard.job_detail', job_id=job.name) }}">{{ job.name }}</a>
+                        <small>{{ job.secret_id }}</small>
+                    </td>
+                    <td>{{ job.schedule|schedule_label }}</td>
+                    <td>
+                        {% if job.status == "rotating" %}Rotating now
+                        {% elif job.status == "failed" %}Failed {{ when(job.last_attempt, "datetime") }}
+                        {% elif job.last_rotated %}{{ when(job.last_rotated, "datetime") }}
+                        {% else %}Never{% endif %}
+                    </td>
+                    <td>{% if job.next_rotation %}{{ when(job.next_rotation, "datetime") }}{% else %}<span class="muted">Not scheduled</span>{% endif %}</td>
+                    <td>{{ status_badge(job.status) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">No jobs yet. Add a job to rotate your first secret.</div>
+    {% endif %}
+</div>
+
+<div class="two">
+    <div>
+        <h2>Backups</h2>
+        {% set runs = verification.recent_runs %}
+        {% if runs %}
+        {% set bad = runs|rejectattr("ok")|list|length %}
+        <div class="strip" role="img"
+             aria-label="Last {{ runs|length }} verification runs, oldest first: {{ runs|length - bad }} passed, {{ bad }} failed">
+            {% for run in runs %}<i{% if not run.ok %} class="bad"{% endif %}></i>{% endfor %}
+        </div>
+        <p class="muted" style="font-size:13px">
+            Last {{ plural(runs|length, "verification run") }}, oldest first.
+            {% if bad %}{{ bad }} failed.{% else %}All passed.{% endif %}
+        </p>
+        {% else %}
+        <p class="muted" style="font-size:13px;margin-top:10px">No verification runs yet.</p>
+        {% endif %}
+        <p style="margin-top:10px"><a class="lnk" href="{{ url_for('dashboard.backup_health') }}">Open backup health</a></p>
+    </div>
+    <div>
+        <h2 style="margin-bottom:6px">Activity</h2>
+        {% if data.recent_activity %}
+        <ul class="ev">
+            {% for event in data.recent_activity %}
+            <li>
+                <small>{{ when(event.timestamp, "activity") }}</small>
+                <span>{{ event.message }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted" style="font-size:13px;margin-top:10px">No activity yet.</p>
+        {% endif %}
+        <p style="margin-top:10px"><a class="lnk" href="{{ url_for('dashboard.activity') }}">Open activity log</a></p>
+    </div>
+</div>
+{% endblock %}
+
+{% block overlays %}
+{% with job_count = data.summary.jobs %}{% include "partials/rotate_modal.html" %}{% endwith %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/rotate.js') }}"></script>
+{% endblock %}

@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 from secret_rotator.audit_log import audit_log as default_audit_log
 from secret_rotator.backup_manager import BackupIntegrityChecker
 from secret_rotator.config.settings import settings
+from secret_rotator.utils.logger import logger
 
 STATUS_ROTATING = "rotating"
 STATUS_FAILED = "failed"
@@ -194,9 +195,22 @@ class JobStatusService:
         }
 
     def _verification(self) -> Dict[str, Any]:
-        checker = BackupIntegrityChecker(self.engine.backup_manager)
-        health = checker.get_backup_health_metrics()
-        history = checker.get_verification_history(days=7)  # newest first
+        try:
+            checker = BackupIntegrityChecker(self.engine.backup_manager)
+            health = checker.get_backup_health_metrics()
+            history = checker.get_verification_history(days=7)  # newest first
+        except Exception as e:
+            # Verification data is a nice-to-have on the Overview; never
+            # let an unreadable log take the whole page down.
+            logger.error(f"Could not read backup verification data: {e}")
+            return {
+                "status": "unknown",
+                "last_verification": None,
+                "total": 0,
+                "verified": 0,
+                "failed": 0,
+                "recent_runs": [],
+            }
 
         runs = [
             {"timestamp": _to_utc_iso(run.get("timestamp")), "ok": run.get("failed", 0) == 0}
