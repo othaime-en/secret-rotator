@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tokens with light, dark and follow-the-system themes, a no-flash
   `theme.js`, self-hosted Geist / Geist Mono fonts) and a restyled
   sign-in page. No third-party font requests are made.
+- Dashboard redesign, step 2: new app shell (sidebar navigation, theme
+  switch, signed-in user, environment label) and real URLs for every
+  page: `/`, `/jobs`, `/jobs/<id>`, `/backups`, `/backup-health`,
+  `/activity`, `/providers`, `/rotators`, `/settings`. Pages not yet
+  rebuilt show a placeholder. The previous dashboard remains available
+  at `/legacy` until the redesign is complete.
 
 ### Fixed
 

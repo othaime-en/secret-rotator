@@ -170,3 +170,51 @@
     border: 1px solid var(--rule);
     border-radius: 8px;
 }
+
+/* ---- text-style button (e.g. "Sign out") ---- */
+button.lnk {
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+}
+
+/* ---- segmented control ---- */
+.seg {
+    display: inline-flex;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.seg span,
+.seg button {
+    padding: 4px 11px;
+    font-size: 13px;
+    color: var(--ink2);
+    cursor: pointer;
+    background: none;
+    border: 0;
+}
+
+.seg button {
+    padding: 4px 9px;
+}
+
+.seg .on {
+    background: var(--hover);
+    color: var(--ink);
+    font-weight: 550;
+}
+
+/* ---- empty state ---- */
+.empty {
+    padding: 28px;
+    text-align: center;
+    color: var(--ink3);
+    border: 1px dashed var(--rule);
+    border-radius: 8px;
+    font-size: 13px;
+}
