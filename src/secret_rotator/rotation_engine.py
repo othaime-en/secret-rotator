@@ -320,6 +320,43 @@ class RotationEngine:
         finally:
             self._rotation_lock.release()
 
+    def rotate_job(self, job_name: str, actor: str = "system") -> bool:
+        """Rotate a single configured job by name.
+
+        Takes the same lock as rotate_all_secrets(), so a single-job
+        rotation never overlaps a full sweep (here or, with
+        ``distributed.enabled``, on another instance) or another
+        single-job rotation.
+
+        Args:
+            job_name: the job's ``name`` from configuration.
+            actor: who triggered this, recorded in the audit log.
+
+        Returns:
+            True if the secret was rotated, False if the rotation ran
+            but failed (the reason is in the audit log).
+
+        Raises:
+            KeyError: no configured job has this name.
+            RotationInProgressError: a sweep or another single-job
+                rotation is already running.
+        """
+        job = next((j for j in self.rotation_jobs if j.get("name") == job_name), None)
+        if job is None:
+            raise KeyError(job_name)
+
+        try:
+            self._rotation_lock.acquire()
+        except LockAcquisitionError as e:
+            raise RotationInProgressError(
+                f"A rotation is already running elsewhere; try again once it finishes. ({e})"
+            ) from e
+
+        try:
+            return self.rotate_secret(job, actor=actor)
+        finally:
+            self._rotation_lock.release()
+
     def is_rotation_in_progress(self) -> bool:
         """Non-blocking check for whether a sweep is currently running
         — locally, or (with `distributed.enabled: true`) anywhere. Used

@@ -14,6 +14,7 @@ from flask import Blueprint, jsonify, request, current_app, session
 from urllib.parse import unquote
 from secret_rotator.utils.logger import logger
 from secret_rotator.audit_log import audit_log
+from secret_rotator.rotation_engine import RotationInProgressError
 from secret_rotator.web.rate_limit import limiter
 
 bp = Blueprint("api", __name__)
@@ -109,6 +110,42 @@ def job_status():
         }
     """
     return jsonify({"jobs": current_app.job_status.job_summaries()})
+
+
+@bp.route("/jobs/<job_name>/rotate", methods=["POST"])
+@limiter.limit("30 per minute")
+def rotate_job(job_name):
+    """
+    Rotate one job now and return the outcome.
+
+    Unlike POST /api/rotate this runs synchronously: a single rotation is
+    one provider round trip, so there is nothing to poll. It shares the
+    rotation lock with full sweeps, so it can never overlap one.
+
+    Returns:
+        200 with ``success`` (whether the rotation worked) and the job's
+        updated status record. A rotation that ran but failed is still a
+        200 with ``success: false`` and the reason in ``job.last_error``.
+        404 if no job has this name; 409 if a rotation is already running.
+
+    Example Response (200):
+        {
+            "success": true,
+            "job": {"name": "database_password", "status": "current", ...}
+        }
+    """
+    actor = session.get("username", "unknown")
+    logger.info(f"Single-job rotation of '{job_name}' requested by {actor}")
+
+    try:
+        success = current_app.rotation_engine.rotate_job(job_name, actor=actor)
+    except KeyError:
+        return jsonify({"error": "Job not found"}), 404
+    except RotationInProgressError as e:
+        logger.info(f"Rotation of '{job_name}' refused: {e}")
+        return jsonify({"error": "A rotation is already in progress. Try again shortly."}), 409
+
+    return jsonify({"success": success, "job": current_app.job_status.job_summary(job_name)})
 
 
 @bp.route("/overview")

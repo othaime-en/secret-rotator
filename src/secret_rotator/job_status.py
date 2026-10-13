@@ -159,6 +159,10 @@ class JobStatusService:
             )
         return summaries
 
+    def job_summary(self, name: str) -> Optional[Dict[str, Any]]:
+        """Status record for one job, or None if no job has this name."""
+        return next((j for j in self.job_summaries() if j["name"] == name), None)
+
     # ---- overview ----------------------------------------------------
 
     def _recent_activity(self, limit: int) -> List[Dict[str, Any]]:

@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   all" now confirms in an accessible dialog, shows live progress and
   joins a rotation that is already running. Timestamps are shown in the
   viewer's local time zone.
+- Dashboard redesign, step 5 (backend for per-job actions): new
+  `POST /api/jobs/<name>/rotate` rotates a single job and returns its
+  updated status (404 for an unknown job, 409 while another rotation is
+  running). It shares the rotation lock with full sweeps, so the two
+  can never overlap. Backed by `RotationEngine.rotate_job()`.
 
 ### Fixed
 
