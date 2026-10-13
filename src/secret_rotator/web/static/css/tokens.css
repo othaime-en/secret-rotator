@@ -1,0 +1,114 @@
+/*
+ * Design tokens for the Secret Rotator dashboard.
+ *
+ * Theme resolution (see static/js/theme.js):
+ *   - <html data-theme="light">  -> forced light
+ *   - <html data-theme="dark">   -> forced dark
+ *   - no data-theme attribute    -> follows the OS (prefers-color-scheme)
+ *
+ * The dark palette therefore appears twice: once under the media query
+ * (for "follow the system" and for no-JS clients) and once under the
+ * explicit [data-theme="dark"] selector. Keep the two blocks identical.
+ */
+
+/* Geist is self-hosted: the dashboard makes no third-party requests, so it
+   works air-gapped and does not leak its existence to a font CDN. */
+@font-face {
+    font-family: "Geist";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("../fonts/geist-latin-wght-normal.woff2") format("woff2-variations");
+}
+
+@font-face {
+    font-family: "Geist Mono";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("../fonts/geist-mono-latin-wght-normal.woff2") format("woff2-variations");
+}
+
+:root {
+    color-scheme: light dark;
+
+    --bg: #fff;
+    --side: #fafafa;
+    --ink: #171717;
+    --ink2: #6a6a6a;
+    --ink3: #9b9b9b;
+    --rule: #e8e8e8;
+    --rule2: #f1f1f1;
+    --rule-strong: #d6d6d6;
+    --hover: #f5f5f5;
+
+    --ok: #1f8a54;
+    --warn: #b7791f;
+    --err: #c8412d;
+    --run: #171717;
+    --ok-soft: #e6f4ec;
+    --warn-soft: #faf0dc;
+    --err-soft: #fbe7e3;
+
+    --accent: #171717;
+    --accent-ink: #fff;
+
+    --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #0d0d0e;
+        --side: #101011;
+        --ink: #ededed;
+        --ink2: #9a9a9a;
+        --ink3: #6c6c6c;
+        --rule: #232324;
+        --rule2: #19191a;
+        --rule-strong: #333335;
+        --hover: #171718;
+
+        --ok: #4cc58b;
+        --warn: #e0a94a;
+        --err: #f0735f;
+        --run: #ededed;
+        --ok-soft: #10261b;
+        --warn-soft: #2a210e;
+        --err-soft: #2d1511;
+
+        --accent: #ededed;
+        --accent-ink: #0d0d0e;
+    }
+}
+
+:root[data-theme="dark"] {
+    --bg: #0d0d0e;
+    --side: #101011;
+    --ink: #ededed;
+    --ink2: #9a9a9a;
+    --ink3: #6c6c6c;
+    --rule: #232324;
+    --rule2: #19191a;
+    --rule-strong: #333335;
+    --hover: #171718;
+
+    --ok: #4cc58b;
+    --warn: #e0a94a;
+    --err: #f0735f;
+    --run: #ededed;
+    --ok-soft: #10261b;
+    --warn-soft: #2a210e;
+    --err-soft: #2d1511;
+
+    --accent: #ededed;
+    --accent-ink: #0d0d0e;
+}
+
+:root[data-theme="light"] {
+    color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+}

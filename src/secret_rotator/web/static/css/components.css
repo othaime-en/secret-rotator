@@ -1,0 +1,172 @@
+/* Core UI components: brand mark, buttons, inputs, fields, badges, cards. */
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+}
+
+.mk {
+    width: 14px;
+    height: 14px;
+    border: 2.5px solid var(--ink);
+    border-radius: 50%;
+    flex: none;
+    display: block;
+}
+
+/* ---- buttons ---- */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--rule);
+    background: var(--bg);
+    cursor: pointer;
+    font-weight: 500;
+    text-decoration: none;
+    color: var(--ink);
+    transition: background 0.12s, border-color 0.12s;
+}
+
+.btn:hover {
+    background: var(--hover);
+    border-color: var(--rule-strong);
+}
+
+.btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+}
+
+.btn.primary:hover {
+    opacity: 0.88;
+    background: var(--accent);
+}
+
+.btn.danger {
+    color: var(--err);
+}
+
+.btn.sm {
+    padding: 4px 10px;
+    font-size: 13px;
+}
+
+.btn.icon {
+    padding: 6px;
+}
+
+.btn:disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+.btn.ghost {
+    border-color: transparent;
+    color: var(--ink2);
+}
+
+.btn.ghost:hover {
+    color: var(--ink);
+}
+
+.lnk {
+    color: var(--ink2);
+    text-decoration: none;
+    font-size: 13px;
+}
+
+.lnk:hover {
+    color: var(--ink);
+    text-decoration: underline;
+}
+
+/* ---- form controls ---- */
+.input {
+    padding: 6px 10px;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--bg);
+    min-width: 0;
+}
+
+.input:focus {
+    outline: none;
+    border-color: var(--ink);
+    box-shadow: 0 0 0 3px rgba(127, 127, 127, 0.18);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-weight: 500;
+    font-size: 13px;
+}
+
+.field .input {
+    font-weight: 400;
+    width: 100%;
+    padding: 8px 10px;
+}
+
+/* ---- status badge ---- */
+.badge {
+    --c: var(--ink3);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 450;
+    color: var(--ink);
+    white-space: nowrap;
+}
+
+.badge::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--c);
+}
+
+.badge.ok {
+    --c: var(--ok);
+}
+
+.badge.warn {
+    --c: var(--warn);
+}
+
+.badge.err {
+    --c: var(--err);
+}
+
+.badge.acc {
+    --c: var(--run);
+}
+
+.badge.acc::before {
+    animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    50% {
+        opacity: 0.25;
+    }
+}
+
+/* ---- card ---- */
+.card {
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+}

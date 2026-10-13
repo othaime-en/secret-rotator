@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Dashboard redesign, step 1: new design-system foundation (CSS design
+  tokens with light, dark and follow-the-system themes, a no-flash
+  `theme.js`, self-hosted Geist / Geist Mono fonts) and a restyled
+  sign-in page. No third-party font requests are made.
+
+### Fixed
+
+- `pyproject.toml` package-data now includes the web templates and
+  static assets, so wheel/sdist installs ship a working dashboard
+
 ## [1.3.1] - 2026-10-03
 
 A minor release: a codebase audit turned up five additional
