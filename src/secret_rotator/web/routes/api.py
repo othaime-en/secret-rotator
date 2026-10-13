@@ -76,6 +76,71 @@ def jobs():
     return jsonify(jobs_data)
 
 
+@bp.route("/job-status")
+@limiter.limit("120 per minute")
+def job_status():
+    """
+    Per-job rotation status for the Jobs list.
+
+    Rate limited separately from the app default: the dashboard polls
+    this while a rotation is running.
+
+    Returns:
+        JSON with one record per configured job. ``status`` is one of
+        ``current``, ``failed``, ``rotating`` or ``never_rotated``;
+        timestamps are ISO 8601 UTC, or null when unknown.
+
+    Example Response:
+        {
+            "jobs": [
+                {
+                    "name": "database_password",
+                    "secret_id": "db_password",
+                    "provider": "file_storage",
+                    "rotator": "password_gen",
+                    "schedule": "weekly",
+                    "status": "failed",
+                    "last_rotated": "2026-10-08T04:00:01+00:00",
+                    "last_attempt": "2026-10-13T04:00:30+00:00",
+                    "last_error": "provider update_secret returned False",
+                    "next_rotation": "2026-10-14T02:00:00+00:00"
+                }
+            ]
+        }
+    """
+    return jsonify({"jobs": current_app.job_status.job_summaries()})
+
+
+@bp.route("/overview")
+@limiter.limit("120 per minute")
+def overview():
+    """
+    Everything the Overview page needs in one request: totals, items
+    needing attention (failed jobs), per-job status, the latest rotation
+    and restore activity, and recent backup verification results.
+
+    Example Response (abridged):
+        {
+            "summary": {"jobs": 5, "backups": 48, "rotating": 0},
+            "attention": [
+                {"kind": "job_failed", "job": "jwt_signing_secret",
+                 "detail": "timeout", "timestamp": "2026-10-13T04:00:30+00:00"}
+            ],
+            "jobs": [...],
+            "recent_activity": [
+                {"timestamp": "...", "action": "rotate", "success": true,
+                 "actor": "system", "message": "api_key_stripe rotated"}
+            ],
+            "verification": {
+                "status": "healthy", "last_verification": "...",
+                "total": 48, "verified": 48, "failed": 0,
+                "recent_runs": [{"timestamp": "...", "ok": true}]
+            }
+        }
+    """
+    return jsonify(current_app.job_status.overview())
+
+
 @bp.route("/rotate", methods=["POST"])
 @limiter.limit("10 per minute")
 def rotate():

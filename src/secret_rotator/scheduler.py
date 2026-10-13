@@ -1,11 +1,17 @@
 import schedule
 import time
 import threading
-from typing import Callable
+from datetime import datetime, timezone
+from typing import Callable, Optional
 from secret_rotator.utils.logger import logger
 from secret_rotator.config.settings import settings
 from secret_rotator.backup_manager import BackupManager, BackupIntegrityChecker
 from secret_rotator.rotation_engine import RotationInProgressError
+
+# Tag on the schedule jobs that trigger rotation, so the dashboard can ask
+# when the next rotation is due without touching the maintenance jobs
+# (cleanup, verification, remote sync) scheduled alongside it.
+ROTATION_TAG = "rotation"
 
 
 class RotationScheduler:
@@ -24,9 +30,9 @@ class RotationScheduler:
         schedule.clear()
 
         if schedule_config == "daily":
-            schedule.every().day.at("02:00").do(self._run_rotation)
+            schedule.every().day.at("02:00").tag(ROTATION_TAG).do(self._run_rotation)
         elif schedule_config == "weekly":
-            schedule.every().week.do(self._run_rotation)
+            schedule.every().week.tag(ROTATION_TAG).do(self._run_rotation)
         elif schedule_config.startswith("every_"):
             # Format: "every_30_minutes" or "every_2_hours"
             parts = schedule_config.split("_")
@@ -34,9 +40,9 @@ class RotationScheduler:
                 interval = int(parts[1])
                 unit = parts[2]
                 if unit == "minutes":
-                    schedule.every(interval).minutes.do(self._run_rotation)
+                    schedule.every(interval).minutes.tag(ROTATION_TAG).do(self._run_rotation)
                 elif unit == "hours":
-                    schedule.every(interval).hours.do(self._run_rotation)
+                    schedule.every(interval).hours.tag(ROTATION_TAG).do(self._run_rotation)
 
         # Schedule backup cleanup (daily at 03:00)
         cleanup_time = settings.get("backup.cleanup_time", "03:00")
@@ -75,6 +81,16 @@ class RotationScheduler:
 
         logger.info(f"Scheduled rotation: {schedule_config}")
         logger.info(f"Scheduled backup cleanup: daily at {cleanup_time}")
+
+    def next_rotation_time(self) -> Optional[datetime]:
+        """When the next scheduled rotation will fire (UTC), or None if no
+        rotation schedule is set up in this process."""
+        runs = [job.next_run for job in schedule.get_jobs(ROTATION_TAG) if job.next_run]
+        if not runs:
+            return None
+        # schedule stores naive local times; astimezone() on a naive
+        # datetime interprets it as local time.
+        return min(runs).astimezone(timezone.utc)
 
     def _run_rotation(self):
         """Internal method to run rotation with error handling"""

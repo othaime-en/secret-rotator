@@ -229,6 +229,11 @@ class BackupManager:
         backups.sort(key=lambda x: x["timestamp"], reverse=True)
         return backups
 
+    def count_backups(self) -> int:
+        """Number of backup files on disk. Cheap: unlike list_backups() it
+        reads and decrypts nothing."""
+        return sum(1 for _ in self.backup_dir.glob("*.json"))
+
     def cleanup_old_backups(self, days_to_keep: int = 30):
         """Remove backup files older than specified days"""
         cutoff_timestamp = datetime.now().timestamp() - (days_to_keep * 24 * 60 * 60)

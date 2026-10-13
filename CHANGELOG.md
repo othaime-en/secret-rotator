@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/activity`, `/providers`, `/rotators`, `/settings`. Pages not yet
   rebuilt show a placeholder. The previous dashboard remains available
   at `/legacy` until the redesign is complete.
+- Dashboard redesign, step 3 (backend for the Overview and Jobs pages):
+  new `GET /api/job-status` and `GET /api/overview` endpoints report
+  each job's status (current, failed, rotating, never rotated), last
+  rotated time, last error and next rotation, plus items needing
+  attention, recent activity and backup verification results. Status is
+  derived from the existing audit log, so there is no separate run
+  history to keep in sync. `RotationScheduler.next_rotation_time()`,
+  `RotationEngine.active_job_names()` and
+  `BackupManager.count_backups()` support this.
 
 ### Fixed
 
