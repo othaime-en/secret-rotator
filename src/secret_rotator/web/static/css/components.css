@@ -349,3 +349,18 @@ th:last-child {
 tr[hidden] {
     display: none;
 }
+
+/* ---- card footer (pagination, drawer actions) ---- */
+.card-f {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-top: 1px solid var(--rule);
+}
+
+.btn[aria-disabled="true"] {
+    opacity: 0.4;
+    pointer-events: none;
+}

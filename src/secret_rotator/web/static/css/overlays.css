@@ -1,4 +1,4 @@
-/* Scrim and modal dialogs. Drawers are added with the pages that use them. */
+/* Scrim, modal dialogs and side drawers. */
 
 .scrim {
     position: fixed;
@@ -36,6 +36,55 @@
     gap: 14px;
 }
 
+.drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(420px, 100%);
+    background: var(--bg);
+    border-left: 1px solid var(--rule);
+    z-index: 21;
+    display: none;
+    flex-direction: column;
+}
+
+.drawer.open {
+    display: flex;
+    animation: slide 0.2s ease-out;
+}
+
+.drawer .card-b {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.secret {
+    padding: 9px 12px;
+    background: var(--hover);
+    border-radius: 6px;
+    overflow-wrap: anywhere;
+}
+
+.kv {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 10px 12px;
+    font-size: 13.5px;
+}
+
+.kv dt {
+    color: var(--ink2);
+}
+
+.kv dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
 .warnbox {
     display: flex;
     gap: 10px;
@@ -56,5 +105,12 @@
     from {
         opacity: 0;
         transform: translate(-50%, -48%);
+    }
+}
+
+@keyframes slide {
+    from {
+        transform: translateX(20px);
+        opacity: 0;
     }
 }

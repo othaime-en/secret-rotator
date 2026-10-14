@@ -15,7 +15,7 @@ complete, so rotation/restore remain usable in the meantime.
 import os
 from datetime import datetime, timezone
 
-from flask import Blueprint, render_template, current_app, session
+from flask import Blueprint, render_template, current_app, request, session
 from secret_rotator.utils.logger import logger
 
 bp = Blueprint("dashboard", __name__)
@@ -100,10 +100,19 @@ def job_detail(job_id):
     )
 
 
+BACKUPS_PER_PAGE = 25
+
+
 @bp.route("/backups")
 def backups():
-    """Backups."""
-    return _stub("backups", "Backups", "Encrypted snapshots created on every rotation.")
+    """Backups: filterable, paged list with a details drawer and restore."""
+    query = request.args.get("q", "").strip()
+    page = request.args.get("page", 1, type=int) or 1  # junk -> page 1
+
+    result = current_app.rotation_engine.backup_manager.list_backup_page(
+        query=query or None, page=page, per_page=BACKUPS_PER_PAGE
+    )
+    return render_page("backups.html", "backups", "Backups", q=query, result=result)
 
 
 @bp.route("/backup-health")

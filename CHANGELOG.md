@@ -50,6 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on the requested page, and returns file names rather than server paths,
   so it stays fast with thousands of backups. Backed by
   `BackupManager.list_backup_page()`. `GET /api/backups` is unchanged.
+- Dashboard redesign, step 8: new Backups page at `/backups` with a
+  secret ID filter, 25-per-page pagination, an encryption badge per
+  backup, a details drawer and a restore confirmation. Secret values are
+  masked everywhere and never shown in full in the browser; restoring
+  applies the old value on the server. Results of actions that reload the
+  page now appear as a message afterwards (`flash.js`).
 
 ### Fixed
 

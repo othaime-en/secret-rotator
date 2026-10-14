@@ -19,7 +19,6 @@
 
     var POLL_MS = 1500;
     var MAX_POLL_ERRORS = 5;
-    var FLASH_KEY = "sr-flash";
     var BUSY_SELECTOR =
         '[data-action="rotate-all"], [data-open="m-rotate"], [data-action="rotate-job"]';
 
@@ -149,33 +148,6 @@
 
     // ---- rotate one job ---------------------------------------------
 
-    function stashFlash(message, failed) {
-        try {
-            window.sessionStorage.setItem(FLASH_KEY, JSON.stringify({ message: message, failed: failed }));
-        } catch (e) {
-            // Storage unavailable: the table still shows the new state.
-        }
-    }
-
-    function showStashedFlash() {
-        var raw = null;
-        try {
-            raw = window.sessionStorage.getItem(FLASH_KEY);
-            window.sessionStorage.removeItem(FLASH_KEY);
-        } catch (e) {
-            return;
-        }
-        if (!raw) {
-            return;
-        }
-        try {
-            var flash = JSON.parse(raw);
-            show(flash.message, null, flash.failed);
-        } catch (e) {
-            // Ignore a malformed value.
-        }
-    }
-
     async function rotateJob(button) {
         var name = button.getAttribute("data-job");
         setBusy(true);
@@ -183,7 +155,7 @@
         try {
             var result = await SR.api.post("/api/jobs/" + encodeURIComponent(name) + "/rotate");
             var reason = result.job && result.job.last_error ? ": " + result.job.last_error : "";
-            stashFlash(result.success ? name + " rotated" : name + " failed" + reason, !result.success);
+            SR.flash.stash(result.success ? name + " rotated" : name + " failed" + reason, !result.success);
             window.location.reload();
         } catch (error) {
             show("Could not rotate " + name + ": " + requestError(error), null, true);
@@ -202,7 +174,10 @@
         }
     });
 
-    showStashedFlash();
+    var flash = SR.flash.consume();
+    if (flash) {
+        show(flash.message, null, flash.failed);
+    }
 
     var refresh = document.querySelector("[data-refresh-ms]");
     if (refresh) {
