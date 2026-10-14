@@ -1,0 +1,21 @@
+{% extends "app_base.html" %}
+
+{# Placeholder for pages that have not been rebuilt yet. Removed once every
+   page has its own template. #}
+
+{% block content %}
+{% if job_id %}
+<div class="crumb muted"><a class="lnk" href="{{ url_for('dashboard.jobs') }}">Jobs</a> / {{ job_id }}</div>
+{% endif %}
+<div class="head">
+    <div>
+        <h1>{{ page_title }}</h1>
+        <p>{{ page_blurb }}</p>
+    </div>
+</div>
+<div class="empty">
+    This page is being rebuilt.
+    <a class="lnk" href="{{ url_for('dashboard.legacy_dashboard') }}">Open the previous dashboard</a>
+    in the meantime.
+</div>
+{% endblock %}

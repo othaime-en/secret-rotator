@@ -1,0 +1,54 @@
+/* Sign-in page. */
+
+.auth {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: var(--bg);
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 340px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.auth-card h1 {
+    font-size: 22px;
+}
+
+.auth-card p {
+    margin-top: 4px;
+}
+
+.auth-card .brand {
+    padding: 0;
+}
+
+.auth-card .badge.err {
+    display: flex;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    background: var(--err-soft);
+    justify-content: flex-start;
+    white-space: normal;
+}
+
+.auth-card .badge.err::before {
+    display: none;
+}
+
+.auth-card .badge.err svg {
+    color: var(--err);
+    margin-top: 2px;
+}
+
+.auth-card .btn.primary {
+    justify-content: center;
+    padding: 10px;
+}

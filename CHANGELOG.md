@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Dashboard redesign, step 1: new design-system foundation (CSS design
+  tokens with light, dark and follow-the-system themes, a no-flash
+  `theme.js`, self-hosted Geist / Geist Mono fonts) and a restyled
+  sign-in page. No third-party font requests are made.
+- Dashboard redesign, step 2: new app shell (sidebar navigation, theme
+  switch, signed-in user, environment label) and real URLs for every
+  page: `/`, `/jobs`, `/jobs/<id>`, `/backups`, `/backup-health`,
+  `/activity`, `/providers`, `/rotators`, `/settings`. Pages not yet
+  rebuilt show a placeholder. The previous dashboard remains available
+  at `/legacy` until the redesign is complete.
+- Dashboard redesign, step 3 (backend for the Overview and Jobs pages):
+  new `GET /api/job-status` and `GET /api/overview` endpoints report
+  each job's status (current, failed, rotating, never rotated), last
+  rotated time, last error and next rotation, plus items needing
+  attention, recent activity and backup verification results. Status is
+  derived from the existing audit log, so there is no separate run
+  history to keep in sync. `RotationScheduler.next_rotation_time()`,
+  `RotationEngine.active_job_names()` and
+  `BackupManager.count_backups()` support this.
+- Dashboard redesign, step 4: new Overview page at `/` showing job and
+  backup totals, failed jobs needing attention, every job's status and
+  schedule, recent backup verification runs and recent activity. "Rotate
+  all" now confirms in an accessible dialog, shows live progress and
+  joins a rotation that is already running. Timestamps are shown in the
+  viewer's local time zone.
+- Dashboard redesign, step 5 (backend for per-job actions): new
+  `POST /api/jobs/<name>/rotate` rotates a single job and returns its
+  updated status (404 for an unknown job, 409 while another rotation is
+  running). It shares the rotation lock with full sweeps, so the two
+  can never overlap. Backed by `RotationEngine.rotate_job()`.
+- Dashboard redesign, step 6: new Jobs page at `/jobs` listing every job
+  with schedule, last and next rotation and status, a search box, and
+  per-job Rotate / Retry buttons. Failed jobs on the Overview now have a
+  Retry button too. Job names containing `/` now work in page and API
+  URLs.
+- Dashboard redesign, step 7 (backend for the Backups page): new
+  `GET /api/backup-list` returns one page of backups, newest first, with
+  an optional secret ID filter. It decrypts nothing, opens only the files
+  on the requested page, and returns file names rather than server paths,
+  so it stays fast with thousands of backups. Backed by
+  `BackupManager.list_backup_page()`. `GET /api/backups` is unchanged.
+
+### Fixed
+
+- `pyproject.toml` package-data now includes the web templates and
+  static assets, so wheel/sdist installs ship a working dashboard
+
 ## [1.3.1] - 2026-10-03
 
 A minor release: a codebase audit turned up five additional

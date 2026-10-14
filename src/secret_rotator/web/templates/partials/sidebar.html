@@ -1,0 +1,45 @@
+{# Sidebar navigation. Expects: active, username, env_label, env_is_production. #}
+{% set nav_groups = [
+    [
+        ("overview", "Overview", "dashboard.index"),
+        ("jobs", "Jobs", "dashboard.jobs"),
+        ("backups", "Backups", "dashboard.backups"),
+    ],
+    [
+        ("backup-health", "Backup health", "dashboard.backup_health"),
+        ("activity", "Activity", "dashboard.activity"),
+    ],
+    [
+        ("providers", "Providers", "dashboard.providers"),
+        ("rotators", "Rotators", "dashboard.rotators"),
+        ("settings", "Settings", "dashboard.settings"),
+    ],
+] %}
+<aside class="side">
+    <a class="brand" href="{{ url_for('dashboard.index') }}"><span class="mk"></span>Secret Rotator</a>
+
+    <nav class="nav" aria-label="Main">
+        {% for group in nav_groups %}
+            {% if not loop.first %}<span class="gap"></span>{% endif %}
+            {% for key, label, endpoint in group %}
+                <a href="{{ url_for(endpoint) }}"{% if key == active %} class="on" aria-current="page"{% endif %}>{{ label }}</a>
+            {% endfor %}
+        {% endfor %}
+    </nav>
+
+    <div class="side-foot">
+        <div class="env"><span class="dot{% if not env_is_production %} dev{% endif %}"></span>{{ env_label }}</div>
+        <div class="seg" role="group" aria-label="Theme">
+            <button type="button" data-theme-choice="system" aria-pressed="false">Auto</button>
+            <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+            <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
+        </div>
+        <div class="row">
+            <b class="who">{{ username or "admin" }}</b>
+            <form method="POST" action="{{ url_for('auth.logout') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="lnk">Sign out</button>
+            </form>
+        </div>
+    </div>
+</aside>

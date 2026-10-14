@@ -74,7 +74,14 @@ secret-rotator-backup = "secret_rotator.tools.manage_key_backups:main"
 packages = { find = { where = ["src"] } }
 
 [tool.setuptools.package-data]
-secret_rotator = ["py.typed"]
+secret_rotator = [
+    "py.typed",
+    "web/templates/*.html",
+    "web/templates/**/*.html",
+    "web/static/css/*.css",
+    "web/static/js/*.js",
+    "web/static/fonts/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -76,6 +76,10 @@ def create_app(rotation_engine, config=None):
 
     app.job_manager = RotationJobManager(rotation_engine)
 
+    from secret_rotator.job_status import JobStatusService
+
+    app.job_status = JobStatusService(rotation_engine)
+
     from .routes import dashboard_bp, api_bp, health_bp
     from .auth import bp as auth_bp, require_login, credentials_configured
 

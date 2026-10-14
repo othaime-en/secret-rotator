@@ -1,0 +1,42 @@
+{# Shared template helpers. Import with: {% from "partials/macros.html" import when, status_badge, plural %} #}
+
+{# A timestamp rendered in UTC for no-JS clients; time.js localises it.
+   fmt: clock | datetime | date | activity (see static/js/time.js). #}
+{% macro when(iso, fmt="datetime") -%}
+{%- if iso -%}
+<time datetime="{{ iso }}" data-fmt="{{ fmt }}">{{ iso|format_utc }}</time>
+{%- else -%}
+<span class="muted">—</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro plural(count, singular, plural_form=None) -%}
+{{ count }} {{ singular if count == 1 else (plural_form or singular ~ "s") }}
+{%- endmacro %}
+
+{% macro status_badge(status) -%}
+{%- set kinds = {
+    "current": ("ok", "Current"),
+    "failed": ("err", "Failed"),
+    "rotating": ("acc", "Rotating"),
+    "never_rotated": ("", "Never rotated"),
+} -%}
+{%- set kind = kinds.get(status, ("", status)) -%}
+<span class="badge {{ kind[0] }}">{{ kind[1] }}</span>
+{%- endmacro %}
+
+{# "Last rotated" table cell for a job status record. #}
+{% macro last_rotated(job) -%}
+{%- if job.status == "rotating" -%}Rotating now
+{%- elif job.status == "failed" -%}Failed {{ when(job.last_attempt, "datetime") }}
+{%- elif job.last_rotated -%}{{ when(job.last_rotated, "datetime") }}
+{%- else -%}Never
+{%- endif -%}
+{%- endmacro %}
+
+{# "Next rotation" table cell for a job status record. #}
+{% macro next_rotation(job) -%}
+{%- if job.next_rotation -%}{{ when(job.next_rotation, "datetime") }}
+{%- else -%}<span class="muted">Not scheduled</span>
+{%- endif -%}
+{%- endmacro %}

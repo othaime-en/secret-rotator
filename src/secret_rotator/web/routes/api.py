@@ -14,6 +14,7 @@ from flask import Blueprint, jsonify, request, current_app, session
 from urllib.parse import unquote
 from secret_rotator.utils.logger import logger
 from secret_rotator.audit_log import audit_log
+from secret_rotator.rotation_engine import RotationInProgressError
 from secret_rotator.web.rate_limit import limiter
 
 bp = Blueprint("api", __name__)
@@ -74,6 +75,107 @@ def jobs():
 
     logger.info(f"Jobs endpoint called, returning {len(engine.rotation_jobs)} jobs")
     return jsonify(jobs_data)
+
+
+@bp.route("/job-status")
+@limiter.limit("120 per minute")
+def job_status():
+    """
+    Per-job rotation status for the Jobs list.
+
+    Rate limited separately from the app default: the dashboard polls
+    this while a rotation is running.
+
+    Returns:
+        JSON with one record per configured job. ``status`` is one of
+        ``current``, ``failed``, ``rotating`` or ``never_rotated``;
+        timestamps are ISO 8601 UTC, or null when unknown.
+
+    Example Response:
+        {
+            "jobs": [
+                {
+                    "name": "database_password",
+                    "secret_id": "db_password",
+                    "provider": "file_storage",
+                    "rotator": "password_gen",
+                    "schedule": "weekly",
+                    "status": "failed",
+                    "last_rotated": "2026-10-08T04:00:01+00:00",
+                    "last_attempt": "2026-10-13T04:00:30+00:00",
+                    "last_error": "provider update_secret returned False",
+                    "next_rotation": "2026-10-14T02:00:00+00:00"
+                }
+            ]
+        }
+    """
+    return jsonify({"jobs": current_app.job_status.job_summaries()})
+
+
+@bp.route("/jobs/<path:job_name>/rotate", methods=["POST"])
+@limiter.limit("30 per minute")
+def rotate_job(job_name):
+    """
+    Rotate one job now and return the outcome.
+
+    Unlike POST /api/rotate this runs synchronously: a single rotation is
+    one provider round trip, so there is nothing to poll. It shares the
+    rotation lock with full sweeps, so it can never overlap one.
+
+    Returns:
+        200 with ``success`` (whether the rotation worked) and the job's
+        updated status record. A rotation that ran but failed is still a
+        200 with ``success: false`` and the reason in ``job.last_error``.
+        404 if no job has this name; 409 if a rotation is already running.
+
+    Example Response (200):
+        {
+            "success": true,
+            "job": {"name": "database_password", "status": "current", ...}
+        }
+    """
+    actor = session.get("username", "unknown")
+    logger.info(f"Single-job rotation of '{job_name}' requested by {actor}")
+
+    try:
+        success = current_app.rotation_engine.rotate_job(job_name, actor=actor)
+    except KeyError:
+        return jsonify({"error": "Job not found"}), 404
+    except RotationInProgressError as e:
+        logger.info(f"Rotation of '{job_name}' refused: {e}")
+        return jsonify({"error": "A rotation is already in progress. Try again shortly."}), 409
+
+    return jsonify({"success": success, "job": current_app.job_status.job_summary(job_name)})
+
+
+@bp.route("/overview")
+@limiter.limit("120 per minute")
+def overview():
+    """
+    Everything the Overview page needs in one request: totals, items
+    needing attention (failed jobs), per-job status, the latest rotation
+    and restore activity, and recent backup verification results.
+
+    Example Response (abridged):
+        {
+            "summary": {"jobs": 5, "backups": 48, "rotating": 0},
+            "attention": [
+                {"kind": "job_failed", "job": "jwt_signing_secret",
+                 "detail": "timeout", "timestamp": "2026-10-13T04:00:30+00:00"}
+            ],
+            "jobs": [...],
+            "recent_activity": [
+                {"timestamp": "...", "action": "rotate", "success": true,
+                 "actor": "system", "message": "api_key_stripe rotated"}
+            ],
+            "verification": {
+                "status": "healthy", "last_verification": "...",
+                "total": 48, "verified": 48, "failed": 0,
+                "recent_runs": [{"timestamp": "...", "ok": true}]
+            }
+        }
+    """
+    return jsonify(current_app.job_status.overview())
 
 
 @bp.route("/rotate", methods=["POST"])
@@ -209,6 +311,47 @@ def backups():
     except Exception as e:
         logger.error(f"Failed to list backups: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/backup-list")
+@limiter.limit("120 per minute")
+def backup_list():
+    """
+    One page of backups for the dashboard, newest first.
+
+    Unlike GET /api/backups this does not decrypt anything and returns
+    only file names (never server paths), so it stays fast with
+    thousands of backups.
+
+    Query Parameters:
+        q (optional): case-insensitive text to look for in the secret ID
+        page (optional): 1-based page number, default 1
+        per_page (optional): page size, 1-100, default 25
+
+    Example Response:
+        {
+            "backups": [
+                {
+                    "file": "db_password_20261012_040000_123456.json",
+                    "secret_id": "db_password",
+                    "created": "2026-10-12T04:00:00+00:00",
+                    "encrypted": true,
+                    "readable": true
+                }
+            ],
+            "total": 48, "page": 1, "per_page": 25, "pages": 2
+        }
+    """
+    try:
+        page = int(request.args.get("page", 1))
+        per_page = int(request.args.get("per_page", 25))
+    except ValueError:
+        return jsonify({"error": "page and per_page must be integers"}), 400
+
+    result = current_app.rotation_engine.backup_manager.list_backup_page(
+        query=request.args.get("q"), page=page, per_page=per_page
+    )
+    return jsonify(result)
 
 
 @bp.route("/backups/<path:backup_file>")

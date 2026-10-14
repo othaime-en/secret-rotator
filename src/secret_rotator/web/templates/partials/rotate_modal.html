@@ -1,0 +1,12 @@
+{# Confirmation dialog and progress banner for "Rotate all".
+   Expects: job_count. Pair with static/js/rotate.js. #}
+<div class="modal card" id="m-rotate" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="m-rotate-title">
+    <div class="card-b">
+        <h1 id="m-rotate-title">Rotate all secrets?</h1>
+        <p class="muted">{{ job_count }} {{ "secret" if job_count == 1 else "secrets" }} will be rotated now. Backups are created automatically.</p>
+        <div class="row" style="justify-content:flex-end">
+            <button type="button" class="btn" data-close>Cancel</button>
+            <button type="button" class="btn primary" data-action="rotate-all" data-autofocus>Rotate all</button>
+        </div>
+    </div>
+</div>
