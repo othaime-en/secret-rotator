@@ -24,3 +24,19 @@
 {%- set kind = kinds.get(status, ("", status)) -%}
 <span class="badge {{ kind[0] }}">{{ kind[1] }}</span>
 {%- endmacro %}
+
+{# "Last rotated" table cell for a job status record. #}
+{% macro last_rotated(job) -%}
+{%- if job.status == "rotating" -%}Rotating now
+{%- elif job.status == "failed" -%}Failed {{ when(job.last_attempt, "datetime") }}
+{%- elif job.last_rotated -%}{{ when(job.last_rotated, "datetime") }}
+{%- else -%}Never
+{%- endif -%}
+{%- endmacro %}
+
+{# "Next rotation" table cell for a job status record. #}
+{% macro next_rotation(job) -%}
+{%- if job.next_rotation -%}{{ when(job.next_rotation, "datetime") }}
+{%- else -%}<span class="muted">Not scheduled</span>
+{%- endif -%}
+{%- endmacro %}

@@ -189,6 +189,17 @@ class TestOverviewPage(unittest.TestCase):
         self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", html)
         self.assertIn('href="/jobs/ssh_deploy_key">View</a>', html)
 
+    def test_failed_job_row_has_a_retry_button(self):
+        self.write_event(1, "ssh_deploy_key", success=False, reason="boom")
+        html = self.page()
+        self.assertIn('data-action="rotate-job" data-job="ssh_deploy_key">Retry</button>', html)
+
+    def test_retry_is_disabled_while_another_rotation_runs(self):
+        self.write_event(1, "ssh_deploy_key", success=False, reason="boom")
+        self.engine._mark_job_active("database_password")
+        html = self.page()
+        self.assertIn('data-job="ssh_deploy_key" disabled>Retry</button>', html)
+
     # ---- backups and activity ----
 
     def test_verification_strip_summarises_runs(self):

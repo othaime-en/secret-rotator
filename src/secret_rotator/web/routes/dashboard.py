@@ -84,10 +84,12 @@ def index():
 @bp.route("/jobs")
 def jobs():
     """Rotation jobs."""
-    return _stub("jobs", "Jobs", "Each job rotates one secret on a schedule.")
+    job_list = current_app.job_status.job_summaries()
+    rotating = sum(1 for job in job_list if job["status"] == "rotating")
+    return render_page("jobs.html", "jobs", "Jobs", jobs=job_list, rotating=rotating)
 
 
-@bp.route("/jobs/<job_id>")
+@bp.route("/jobs/<path:job_id>")
 def job_detail(job_id):
     """A single rotation job."""
     return _stub(

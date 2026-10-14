@@ -197,6 +197,15 @@ class TestRotateJobApi(EngineFixture):
         self.assertEqual(data["job"]["status"], "failed")
         self.assertIn("update_secret", data["job"]["last_error"])
 
+    def test_job_names_containing_slashes_work(self):
+        self.login()
+        self.engine.rotation_jobs.append(
+            {"name": "prod/db", "provider": "p", "rotator": "r", "secret_id": "db"}
+        )
+        resp = self.client.post("/api/jobs/prod%2Fdb/rotate")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.get_json()["job"]["name"], "prod/db")
+
     def test_unknown_job_is_404(self):
         self.login()
         resp = self.client.post("/api/jobs/nope/rotate")

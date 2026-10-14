@@ -1,5 +1,5 @@
 {% extends "app_base.html" %}
-{% from "partials/macros.html" import when, plural, status_badge %}
+{% from "partials/macros.html" import when, plural, status_badge, last_rotated, next_rotation %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/overview.css') }}">
@@ -26,11 +26,7 @@
     <button type="button" class="btn primary" data-open="m-rotate"{% if not summary.jobs or summary.rotating %} disabled{% endif %}>Rotate all</button>
 </div>
 
-<div class="banner" id="rotate-banner" role="status" aria-live="polite"{% if not summary.rotating %} hidden{% endif %}
-     {% if summary.rotating %}data-refresh-ms="3000"{% endif %}>
-    <span id="rotate-banner-text">{% if summary.rotating %}Rotating, {{ plural(summary.rotating, "job") }} in progress{% endif %}</span>
-    <div class="bar" hidden><i style="width:0%"></i></div>
-</div>
+{% with rotating = summary.rotating %}{% include "partials/rotate_banner.html" %}{% endwith %}
 
 {% if data.attention %}
 <div class="attn" role="region" aria-label="Needs attention">
@@ -40,7 +36,8 @@
         <span>
             <b>{{ item.job }}</b> failed at {{ when(item.timestamp, "datetime") }}{% if item.detail %}: {{ item.detail }}{% endif %}.
         </span>
-        <a class="btn sm" href="{{ url_for('dashboard.job_detail', job_id=item.job) }}">View</a>
+        <a class="lnk" href="{{ url_for('dashboard.job_detail', job_id=item.job) }}">View</a>
+        <button type="button" class="btn sm" data-action="rotate-job" data-job="{{ item.job }}"{% if summary.rotating %} disabled{% endif %}>Retry</button>
     </div>
     {% endfor %}
 </div>
@@ -71,13 +68,8 @@
                         <small>{{ job.secret_id }}</small>
                     </td>
                     <td>{{ job.schedule|schedule_label }}</td>
-                    <td>
-                        {% if job.status == "rotating" %}Rotating now
-                        {% elif job.status == "failed" %}Failed {{ when(job.last_attempt, "datetime") }}
-                        {% elif job.last_rotated %}{{ when(job.last_rotated, "datetime") }}
-                        {% else %}Never{% endif %}
-                    </td>
-                    <td>{% if job.next_rotation %}{{ when(job.next_rotation, "datetime") }}{% else %}<span class="muted">Not scheduled</span>{% endif %}</td>
+                    <td>{{ last_rotated(job) }}</td>
+                    <td>{{ next_rotation(job) }}</td>
                     <td>{{ status_badge(job.status) }}</td>
                 </tr>
                 {% endfor %}

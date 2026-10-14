@@ -112,7 +112,7 @@ def job_status():
     return jsonify({"jobs": current_app.job_status.job_summaries()})
 
 
-@bp.route("/jobs/<job_name>/rotate", methods=["POST"])
+@bp.route("/jobs/<path:job_name>/rotate", methods=["POST"])
 @limiter.limit("30 per minute")
 def rotate_job(job_name):
     """

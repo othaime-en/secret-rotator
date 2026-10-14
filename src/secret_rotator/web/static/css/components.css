@@ -341,3 +341,11 @@ th:last-child {
 .banner.is-error {
     color: var(--err);
 }
+
+.input.search {
+    width: 180px;
+}
+
+tr[hidden] {
+    display: none;
+}

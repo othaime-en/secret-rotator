@@ -1,0 +1,70 @@
+{% extends "app_base.html" %}
+{% from "partials/macros.html" import status_badge, last_rotated, next_rotation %}
+
+{% block content %}
+<div class="head">
+    <div>
+        <h1>Jobs</h1>
+        <p>Each job rotates one secret on a schedule.</p>
+    </div>
+    <div class="row">
+        {% if jobs %}
+        <input class="input search" type="search" placeholder="Search" aria-label="Search jobs"
+               data-filter-rows="#job-rows" data-filter-empty="#job-no-match">
+        {% endif %}
+        <button type="button" class="btn primary" data-open="m-rotate"{% if not jobs or rotating %} disabled{% endif %}>Rotate all</button>
+    </div>
+</div>
+
+{% include "partials/rotate_banner.html" %}
+
+{% if jobs %}
+<div class="tw">
+    <table>
+        <thead>
+            <tr>
+                <th>Secret</th>
+                <th>Schedule</th>
+                <th>Last rotated</th>
+                <th>Next rotation</th>
+                <th>Status</th>
+                <th><span class="sr-only">Actions</span></th>
+            </tr>
+        </thead>
+        <tbody id="job-rows">
+            {% for job in jobs %}
+            <tr data-search="{{ job.name }} {{ job.secret_id }} {{ job.provider }} {{ job.rotator }}">
+                <td class="cell-t">
+                    <a href="{{ url_for('dashboard.job_detail', job_id=job.name) }}">{{ job.name }}</a>
+                    <small>{{ job.secret_id }}</small>
+                </td>
+                <td>{{ job.schedule|schedule_label }}</td>
+                <td>{{ last_rotated(job) }}</td>
+                <td>{{ next_rotation(job) }}</td>
+                <td>{{ status_badge(job.status) }}</td>
+                <td>
+                    <button type="button" class="btn sm" data-action="rotate-job" data-job="{{ job.name }}"
+                            aria-label="{{ 'Retry' if job.status == 'failed' else 'Rotate' }} {{ job.name }}"
+                            {% if job.status == "rotating" or rotating %}disabled{% endif %}>
+                        {{ "Retry" if job.status == "failed" else "Rotate" }}
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<div class="empty" id="job-no-match" hidden>No jobs match your search.</div>
+{% else %}
+<div class="empty">No jobs yet. Add a job to rotate your first secret.</div>
+{% endif %}
+{% endblock %}
+
+{% block overlays %}
+{% with job_count = jobs|length %}{% include "partials/rotate_modal.html" %}{% endwith %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/table-filter.js') }}"></script>
+<script src="{{ url_for('static', filename='js/rotate.js') }}"></script>
+{% endblock %}

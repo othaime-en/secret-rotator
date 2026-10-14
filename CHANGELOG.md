@@ -39,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   updated status (404 for an unknown job, 409 while another rotation is
   running). It shares the rotation lock with full sweeps, so the two
   can never overlap. Backed by `RotationEngine.rotate_job()`.
+- Dashboard redesign, step 6: new Jobs page at `/jobs` listing every job
+  with schedule, last and next rotation and status, a search box, and
+  per-job Rotate / Retry buttons. Failed jobs on the Overview now have a
+  Retry button too. Job names containing `/` now work in page and API
+  URLs.
 
 ### Fixed
 
