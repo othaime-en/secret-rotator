@@ -313,6 +313,47 @@ def backups():
         return jsonify({"error": str(e)}), 500
 
 
+@bp.route("/backup-list")
+@limiter.limit("120 per minute")
+def backup_list():
+    """
+    One page of backups for the dashboard, newest first.
+
+    Unlike GET /api/backups this does not decrypt anything and returns
+    only file names (never server paths), so it stays fast with
+    thousands of backups.
+
+    Query Parameters:
+        q (optional): case-insensitive text to look for in the secret ID
+        page (optional): 1-based page number, default 1
+        per_page (optional): page size, 1-100, default 25
+
+    Example Response:
+        {
+            "backups": [
+                {
+                    "file": "db_password_20261012_040000_123456.json",
+                    "secret_id": "db_password",
+                    "created": "2026-10-12T04:00:00+00:00",
+                    "encrypted": true,
+                    "readable": true
+                }
+            ],
+            "total": 48, "page": 1, "per_page": 25, "pages": 2
+        }
+    """
+    try:
+        page = int(request.args.get("page", 1))
+        per_page = int(request.args.get("per_page", 25))
+    except ValueError:
+        return jsonify({"error": "page and per_page must be integers"}), 400
+
+    result = current_app.rotation_engine.backup_manager.list_backup_page(
+        query=request.args.get("q"), page=page, per_page=per_page
+    )
+    return jsonify(result)
+
+
 @bp.route("/backups/<path:backup_file>")
 def backup_detail(backup_file):
     """

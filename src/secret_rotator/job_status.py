@@ -25,6 +25,7 @@ from secret_rotator.audit_log import audit_log as default_audit_log
 from secret_rotator.backup_manager import BackupIntegrityChecker
 from secret_rotator.config.settings import settings
 from secret_rotator.utils.logger import logger
+from secret_rotator.utils.timeutil import parse_time, to_utc_iso
 
 STATUS_ROTATING = "rotating"
 STATUS_FAILED = "failed"
@@ -36,26 +37,6 @@ STATUS_NEVER = "never_rotated"
 _ALL_TIME_HOURS = 24 * 365 * 10
 
 _ACTIVITY_ACTIONS = ("rotate", "restore")
-
-
-def _parse_time(value: Optional[str]) -> Optional[datetime]:
-    """Parse an ISO timestamp to an aware UTC datetime.
-
-    Naive timestamps (the backup verification log writes local time
-    without an offset) are interpreted as local time.
-    """
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(value)
-    except (TypeError, ValueError):
-        return None
-    return parsed.astimezone(timezone.utc)
-
-
-def _to_utc_iso(value: Optional[str]) -> Optional[str]:
-    parsed = _parse_time(value)
-    return parsed.isoformat() if parsed else None
 
 
 class JobStatusService:
@@ -87,7 +68,7 @@ class JobStatusService:
             if key != self._cache_key:
                 events = self.audit.get_recent_events(hours=_ALL_TIME_HOURS, action="rotate")
                 events.sort(
-                    key=lambda e: _parse_time(e.get("timestamp"))
+                    key=lambda e: parse_time(e.get("timestamp"))
                     or datetime.min.replace(tzinfo=timezone.utc)
                 )
                 self._cache_events = events
@@ -170,7 +151,7 @@ class JobStatusService:
         for action in _ACTIVITY_ACTIONS:
             events.extend(self.audit.get_recent_events(hours=24 * 30, action=action))
         events.sort(
-            key=lambda e: _parse_time(e.get("timestamp"))
+            key=lambda e: parse_time(e.get("timestamp"))
             or datetime.min.replace(tzinfo=timezone.utc),
             reverse=True,
         )
@@ -217,12 +198,12 @@ class JobStatusService:
             }
 
         runs = [
-            {"timestamp": _to_utc_iso(run.get("timestamp")), "ok": run.get("failed", 0) == 0}
+            {"timestamp": to_utc_iso(run.get("timestamp")), "ok": run.get("failed", 0) == 0}
             for run in reversed(history[:7])
         ]
         return {
             "status": health.get("status", "unknown"),
-            "last_verification": _to_utc_iso(health.get("last_verification")),
+            "last_verification": to_utc_iso(health.get("last_verification")),
             "total": health.get("total_backups", 0),
             "verified": health.get("verified", 0),
             "failed": health.get("failed", 0),

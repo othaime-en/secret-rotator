@@ -1,9 +1,11 @@
 import json
 import hashlib
+import math
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, List
 from secret_rotator.utils.logger import logger
+from secret_rotator.utils.timeutil import to_utc_iso
 from secret_rotator.encryption_manager import EncryptionManager, SecretMasker
 from secret_rotator.remote_backup import RemoteBackupClient
 
@@ -228,6 +230,91 @@ class BackupManager:
         # Sort by timestamp (newest first)
         backups.sort(key=lambda x: x["timestamp"], reverse=True)
         return backups
+
+    @staticmethod
+    def _parse_backup_name(filename: str) -> Tuple[str, str]:
+        """Split ``<secret_id>_<YYYYMMDD>_<HHMMSS>_<micros>.json`` into
+        ``(secret_id, timestamp)``.
+
+        Secret IDs may themselves contain underscores, so the three
+        trailing timestamp parts are split off from the right. A name
+        that does not follow the pattern yields its stem and an empty
+        timestamp (it sorts last).
+        """
+        stem = filename[: -len(".json")] if filename.endswith(".json") else filename
+        parts = stem.rsplit("_", 3)
+        if len(parts) == 4 and parts[1].isdigit() and parts[2].isdigit() and parts[3].isdigit():
+            return parts[0], "_".join(parts[1:])
+        return stem, ""
+
+    def list_backup_page(
+        self, query: Optional[str] = None, page: int = 1, per_page: int = 25
+    ) -> Dict[str, Any]:
+        """One page of backup metadata for the dashboard, newest first.
+
+        Cheap by design: unlike list_backups() this decrypts nothing and
+        opens only the files on the requested page. Filtering and ordering
+        use the file name (``<secret_id>_<timestamp>.json``); the page's
+        own files are then opened for their ``encrypted`` flag and
+        creation time. Secret values are never read into the result, and
+        only file *names* are returned, never server paths.
+
+        Args:
+            query: case-insensitive substring to match against the secret
+                ID (no match-all wildcard characters are interpreted).
+            page: 1-based page number; clamped to the last page.
+            per_page: page size, limited to 1..100.
+
+        Returns:
+            ``{"backups": [...], "total": N, "page": p, "per_page": n,
+            "pages": P}`` where each backup is ``{"file", "secret_id",
+            "created", "encrypted", "readable"}``. ``created`` is an ISO
+            8601 UTC string or None; ``encrypted`` is None when the file
+            could not be read (``readable`` is then False).
+        """
+        per_page = max(1, min(int(per_page), 100))
+        needle = (query or "").strip().lower()
+
+        entries = []
+        for path in self.backup_dir.glob("*.json"):
+            secret_id, timestamp = self._parse_backup_name(path.name)
+            if needle and needle not in secret_id.lower():
+                continue
+            entries.append((timestamp, path.name, secret_id))
+        entries.sort(reverse=True)
+
+        total = len(entries)
+        pages = max(1, math.ceil(total / per_page))
+        page = min(max(1, int(page)), pages)
+        window = entries[(page - 1) * per_page : page * per_page]
+
+        backups = []
+        for timestamp, filename, parsed_secret_id in window:
+            item = {
+                "file": filename,
+                "secret_id": parsed_secret_id,
+                "created": None,
+                "encrypted": None,
+                "readable": False,
+            }
+            try:
+                with open(self.backup_dir / filename, "r") as f:
+                    data = json.load(f)
+                item["secret_id"] = data.get("secret_id", parsed_secret_id)
+                item["encrypted"] = bool(data.get("encrypted", False))
+                item["created"] = to_utc_iso(data.get("backup_created"))
+                item["readable"] = True
+            except (OSError, ValueError) as e:
+                logger.warning(f"Could not read backup {filename} for listing: {e}")
+            backups.append(item)
+
+        return {
+            "backups": backups,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": pages,
+        }
 
     def count_backups(self) -> int:
         """Number of backup files on disk. Cheap: unlike list_backups() it

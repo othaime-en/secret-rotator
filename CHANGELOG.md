@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per-job Rotate / Retry buttons. Failed jobs on the Overview now have a
   Retry button too. Job names containing `/` now work in page and API
   URLs.
+- Dashboard redesign, step 7 (backend for the Backups page): new
+  `GET /api/backup-list` returns one page of backups, newest first, with
+  an optional secret ID filter. It decrypts nothing, opens only the files
+  on the requested page, and returns file names rather than server paths,
+  so it stays fast with thousands of backups. Backed by
+  `BackupManager.list_backup_page()`. `GET /api/backups` is unchanged.
 
 ### Fixed
 
