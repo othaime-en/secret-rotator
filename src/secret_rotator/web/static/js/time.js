@@ -7,6 +7,7 @@
  *   datetime  Today, 04:00 / Oct 8, 04:00 (year added when not this year)
  *   date      Today / Oct 8
  *   activity  04:00 when it is today, otherwise Oct 8
+ *   logstamp  04:00:12 when it is today, otherwise Oct 8 04:00:12
  */
 (function () {
     "use strict";
@@ -14,6 +15,13 @@
     var clockFormat = new Intl.DateTimeFormat(undefined, {
         hour: "2-digit",
         minute: "2-digit",
+        hour12: false,
+    });
+
+    var clockSecondsFormat = new Intl.DateTimeFormat(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
         hour12: false,
     });
 
@@ -48,6 +56,10 @@
                 return dayLabel(date, now);
             case "activity":
                 return dayLabel(date, now) === "Today" ? clockFormat.format(date) : dayLabel(date, now);
+            case "logstamp":
+                return dayLabel(date, now) === "Today"
+                    ? clockSecondsFormat.format(date)
+                    : dayLabel(date, now) + " " + clockSecondsFormat.format(date);
             case "datetime":
             default:
                 return dayLabel(date, now) + ", " + clockFormat.format(date);

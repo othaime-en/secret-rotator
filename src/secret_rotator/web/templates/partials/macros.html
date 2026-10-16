@@ -47,3 +47,15 @@
 {%- else -%}<span class="badge {{ 'ok' if rate == 100 else ('warn' if rate >= 95 else 'err') }}">{{ "%g"|format(rate) }}%</span>
 {%- endif -%}
 {%- endmacro %}
+
+{# One line of the activity log. Keep in step with lineFor() in
+   static/js/activity.js, which builds the same markup for live updates. #}
+{% macro log_line(event) -%}
+{%- set routine = event.action in ("rotate", "restore", "verify_backups") -%}
+{%- if event.level == "error" -%}{%- set kind = ("e", "ERROR") -%}
+{%- elif event.level == "warning" -%}{%- set kind = ("w", "WARN") -%}
+{%- elif routine -%}{%- set kind = ("s", "OK") -%}
+{%- else -%}{%- set kind = ("i", "INFO") -%}
+{%- endif -%}
+<div class="line" data-seq="{{ event.seq }}"><span class="t">{{ when(event.timestamp, "logstamp") }}</span> <span class="lv {{ kind[0] }}">{{ kind[1] }}</span> <span class="msg">{{ event.message }}</span></div>
+{%- endmacro %}

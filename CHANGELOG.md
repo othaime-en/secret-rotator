@@ -80,6 +80,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   structured and carry no secret values; the free-text application log
   is deliberately not exposed. Adds `AuditLog.read_events()` and the
   `ActivityService`.
+- Dashboard redesign, step 12: new Activity page at `/activity`: the
+  audit log as a terminal-style pane (oldest to newest) with an
+  All / Info / Warnings / Errors switch, text search, pagination, CSV and
+  JSON export of the current filter, and a Live mode that appends new
+  events as they happen (pausable; stops itself when the tab is hidden
+  or the server stops answering).
 
 ### Fixed
 

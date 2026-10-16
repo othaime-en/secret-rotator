@@ -134,10 +134,35 @@ def backup_health():
     )
 
 
+ACTIVITY_PER_PAGE = 100
+ACTIVITY_LEVELS = (
+    ("all", "All"),
+    ("info", "Info"),
+    ("warning", "Warnings"),
+    ("error", "Errors"),
+)
+
+
 @bp.route("/activity")
 def activity():
-    """Activity log."""
-    return _stub("activity", "Activity log", "Rotations, restores, and system events.")
+    """Activity log: audit events with level filter, search and live view."""
+    level = request.args.get("level", "all").strip().lower()
+    if level not in {key for key, _ in ACTIVITY_LEVELS}:
+        level = "all"
+    query = request.args.get("q", "").strip()
+    page = request.args.get("page", 1, type=int) or 1  # junk -> page 1
+
+    result = current_app.activity.query(level, query, page, ACTIVITY_PER_PAGE)
+    return render_page(
+        "activity.html",
+        "activity",
+        "Activity log",
+        result=result,
+        events=list(reversed(result["events"])),  # the pane reads oldest to newest
+        level=level,
+        q=query,
+        levels=ACTIVITY_LEVELS,
+    )
 
 
 @bp.route("/providers")
