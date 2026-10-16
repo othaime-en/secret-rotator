@@ -115,10 +115,23 @@ def backups():
     return render_page("backups.html", "backups", "Backups", q=query, result=result)
 
 
+HEALTH_RANGES = (7, 30, 90)
+
+
 @bp.route("/backup-health")
 def backup_health():
-    """Backup health."""
-    return _stub("backup-health", "Backup health", "Integrity verification across all backups.")
+    """Backup health: latest verification, recent runs and history."""
+    days = request.args.get("days", HEALTH_RANGES[0], type=int)
+    if days not in HEALTH_RANGES:
+        days = HEALTH_RANGES[0]
+    data = current_app.backup_health.summary(days)
+    return render_page(
+        "backup_health.html",
+        "backup-health",
+        "Backup health",
+        data=data,
+        ranges=HEALTH_RANGES,
+    )
 
 
 @bp.route("/activity")

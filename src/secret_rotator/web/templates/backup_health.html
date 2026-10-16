@@ -1,0 +1,133 @@
+{% extends "app_base.html" %}
+{% from "partials/macros.html" import when, plural, rate_badge %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/health.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set latest = data.latest %}
+{% set runs = data.recent_runs %}
+
+<div class="head">
+    <div>
+        <h1>Backup health</h1>
+        <p>Integrity verification across all backups.</p>
+    </div>
+    <button type="button" class="btn primary" data-action="run-verification"{% if data.running %} disabled{% endif %}>
+        <svg class="icon" aria-hidden="true"><use href="#i-play"/></svg>Run verification now
+    </button>
+</div>
+
+{% include "partials/notice.html" %}
+<span id="verify-state" data-running="{{ 'true' if data.running else 'false' }}" hidden></span>
+
+<section class="hero" aria-labelledby="hero-title">
+    {% if not latest %}
+    <h1 id="hero-title">No verification has run yet.</h1>
+    <p class="muted lede">Run a verification to check that every backup can be decrypted and matches its checksum.</p>
+    {% elif latest.total == 0 %}
+    <h1 id="hero-title">There are no backups to verify yet.</h1>
+    <p class="muted lede">The last run finished {{ when(latest.timestamp, "datetime") }}.</p>
+    {% elif latest.failed == 0 %}
+    <h1 id="hero-title">All {{ latest.total }} backups passed verification.</h1>
+    <p class="muted lede">
+        The last run finished {{ when(latest.timestamp, "datetime") }}.
+        {% set bad_runs = runs|rejectattr("ok")|list|length %}
+        {% if bad_runs %}{{ bad_runs }} of the last {{ runs|length }} runs found failures.{% endif %}
+    </p>
+    {% else %}
+    <h1 id="hero-title">{{ latest.failed }} of {{ latest.total }} backups failed verification.</h1>
+    <p class="muted lede">The last run finished {{ when(latest.timestamp, "datetime") }}.</p>
+    {% endif %}
+
+    {% if runs %}
+    {% set bad = runs|rejectattr("ok")|list|length %}
+    <div class="strip" role="img"
+         aria-label="Last {{ runs|length }} verification runs, oldest first: {{ runs|length - bad }} passed, {{ bad }} failed">
+        {% for run in runs %}<i{% if not run.ok %} class="bad"{% endif %}></i>{% endfor %}
+    </div>
+    <p class="muted caption">Last {{ plural(runs|length, "run") }}, oldest first</p>
+    {% endif %}
+
+    {% if latest %}
+    <div class="facts">
+        <div><b>{{ latest.total }}</b><span>Backups</span></div>
+        <div><b>{{ latest.verified }}</b><span>Verified</span></div>
+        <div><b{% if latest.failed %} class="bad"{% endif %}>{{ latest.failed }}</b><span>Failed</span></div>
+    </div>
+    {% endif %}
+</section>
+
+<div class="stack">
+    {% if latest and latest.failures %}
+    <div class="card">
+        <div class="card-h">
+            <h2>Failed in the latest run</h2>
+            {% if latest.failures_total > latest.failures|length %}
+            <span class="muted">Showing {{ latest.failures|length }} of {{ latest.failures_total }}</span>
+            {% endif %}
+        </div>
+        <div class="tw">
+            <table>
+                <thead>
+                    <tr><th>Secret</th><th>File</th><th>Reason</th></tr>
+                </thead>
+                <tbody>
+                    {% for item in latest.failures %}
+                    <tr>
+                        <td class="cell-t">{{ item.secret_id or "—" }}</td>
+                        <td class="mono">{{ item.file or "—" }}</td>
+                        <td>{{ item.reason }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-h">
+            <h2>Verification history</h2>
+            <nav class="seg" aria-label="History range">
+                {% for option in ranges %}
+                <a href="{{ url_for('dashboard.backup_health', days=option if option != ranges[0] else None) }}"{% if option == data.days %} class="on" aria-current="true"{% endif %}>{{ option }}d</a>
+                {% endfor %}
+            </nav>
+        </div>
+        {% if data.history %}
+        <div class="tw">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Total</th>
+                        <th>Verified</th>
+                        <th>Failed</th>
+                        <th>Success rate</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in data.history %}
+                    <tr>
+                        <td>{{ when(row.timestamp, "datetime") }}</td>
+                        <td>{{ row.total }}</td>
+                        <td>{{ row.verified }}</td>
+                        <td>{{ row.failed }}</td>
+                        <td>{{ rate_badge(row.success_rate) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card-b"><p class="muted">No verification runs in the last {{ data.days }} days.</p></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/health.js') }}"></script>
+{% endblock %}

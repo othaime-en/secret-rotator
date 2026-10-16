@@ -66,6 +66,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   names, never server paths. Backed by the new `BackupHealthService` and
   `BackupIntegrityChecker.classify_success_rate()`. The legacy
   `/api/run-verification` and `/api/verification-history` are unchanged.
+- Dashboard redesign, step 10: new Backup health page at `/backup-health`
+  with a headline result, the last seven runs, backups verified and
+  failed, which backups failed in the latest run and why, and a history
+  table switchable between 7, 30 and 90 days. "Run verification now"
+  starts a background verification and follows it to the end.
 
 ### Fixed
 

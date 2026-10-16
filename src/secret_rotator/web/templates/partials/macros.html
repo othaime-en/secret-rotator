@@ -40,3 +40,10 @@
 {%- else -%}<span class="muted">Not scheduled</span>
 {%- endif -%}
 {%- endmacro %}
+
+{# Verification success rate (0-100, or None) as a coloured badge. #}
+{% macro rate_badge(rate) -%}
+{%- if rate is none -%}<span class="muted">—</span>
+{%- else -%}<span class="badge {{ 'ok' if rate == 100 else ('warn' if rate >= 95 else 'err') }}">{{ "%g"|format(rate) }}%</span>
+{%- endif -%}
+{%- endmacro %}
