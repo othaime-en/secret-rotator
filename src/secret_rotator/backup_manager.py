@@ -685,6 +685,16 @@ class BackupIntegrityChecker:
 
         return sorted(history, key=lambda x: x["timestamp"], reverse=True)
 
+    @staticmethod
+    def classify_success_rate(success_rate: float) -> str:
+        """Map a verification success rate (0-100) to a health status:
+        100 is healthy, 95 and above a warning, anything lower critical."""
+        if success_rate == 100:
+            return "healthy"
+        if success_rate >= 95:
+            return "warning"
+        return "critical"
+
     def get_backup_health_metrics(self) -> Dict[str, Any]:
         """Get overall backup health metrics"""
         recent_verifications = self.get_verification_history(days=7)
@@ -703,13 +713,7 @@ class BackupIntegrityChecker:
         verified = latest.get("verified", 0)
         success_rate = (verified / total_backups * 100) if total_backups > 0 else 0
 
-        # Determine health status
-        if success_rate == 100:
-            status = "healthy"
-        elif success_rate >= 95:
-            status = "warning"
-        else:
-            status = "critical"
+        status = self.classify_success_rate(success_rate)
 
         return {
             "status": status,

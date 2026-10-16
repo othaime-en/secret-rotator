@@ -56,6 +56,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   masked everywhere and never shown in full in the browser; restoring
   applies the old value on the server. Results of actions that reload the
   page now appear as a message afterwards (`flash.js`).
+- Dashboard redesign, step 9 (backend for the Backup health page): new
+  `GET /api/verification/summary?days=` (latest run with the backups that
+  failed, last seven runs, history table, overall status),
+  `POST /api/verification/run` and `GET /api/verification/status`.
+  A manual verification now runs in a background thread, one at a time,
+  instead of blocking a web request while every backup is decrypted, and
+  is recorded in the audit log as `verify_backups`. Responses contain file
+  names, never server paths. Backed by the new `BackupHealthService` and
+  `BackupIntegrityChecker.classify_success_rate()`. The legacy
+  `/api/run-verification` and `/api/verification-history` are unchanged.
 
 ### Fixed
 
