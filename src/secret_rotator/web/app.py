@@ -84,6 +84,10 @@ def create_app(rotation_engine, config=None):
 
     app.backup_health = BackupHealthService(rotation_engine)
 
+    from secret_rotator.activity import ActivityService
+
+    app.activity = ActivityService()
+
     from .routes import dashboard_bp, api_bp, health_bp
     from .auth import bp as auth_bp, require_login, credentials_configured
 

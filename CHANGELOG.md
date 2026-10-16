@@ -71,6 +71,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failed, which backups failed in the latest run and why, and a history
   table switchable between 7, 30 and 90 days. "Run verification now"
   starts a background verification and follows it to the end.
+- Dashboard redesign, step 11 (backend for the Activity page): new
+  `GET /api/activity` (audit events, newest first, filtered by level
+  and text, paged, with an `after` mode for live updates) and
+  `GET /api/activity/export` (CSV or JSON download, capped at the newest
+  10,000 matches, spreadsheet-formula safe, itself recorded in the audit
+  log as `export_activity`). Built on the audit log, so entries are
+  structured and carry no secret values; the free-text application log
+  is deliberately not exposed. Adds `AuditLog.read_events()` and the
+  `ActivityService`.
 
 ### Fixed
 

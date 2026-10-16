@@ -148,6 +148,95 @@ def rotate_job(job_name):
     return jsonify({"success": success, "job": current_app.job_status.job_summary(job_name)})
 
 
+def _activity_filters():
+    """Parse the level/q parameters shared by the activity endpoints."""
+    return request.args.get("level", "all").strip().lower(), request.args.get("q", "")
+
+
+@bp.route("/activity")
+@limiter.limit("120 per minute")
+def activity():
+    """
+    Audit events for the Activity page, newest first.
+
+    Query Parameters:
+        level (optional): all (default), info, warning or error
+        q (optional): case-insensitive text to find in the action, actor,
+            secret ID or message
+        page, per_page (optional): paging, per_page 1-500 (default 100)
+        after (optional): a ``seq``; returns only newer events (used by
+            the live view) and ignores page/per_page
+
+    Example Response:
+        {
+            "events": [
+                {"seq": 1204, "timestamp": "2026-10-13T04:00:30+00:00",
+                 "level": "error", "action": "rotate", "actor": "system",
+                 "secret_id": "jwt_secret", "success": false,
+                 "message": "jwt_signing_secret rotation failed: timeout"}
+            ],
+            "total": 311, "page": 1, "per_page": 100, "pages": 4,
+            "latest_seq": 1204
+        }
+
+    With ``after`` the response is just ``events`` and ``latest_seq``.
+    """
+    level, query = _activity_filters()
+    service = current_app.activity
+    try:
+        if "after" in request.args:
+            after = int(request.args["after"])
+            if after < 0:
+                raise ValueError("after must not be negative")
+            return jsonify(service.since(after, level, query))
+        page = int(request.args.get("page", 1))
+        per_page = int(request.args.get("per_page", 100))
+        return jsonify(service.query(level, query, page, per_page))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@bp.route("/activity/export")
+@limiter.limit("10 per minute")
+def export_activity():
+    """
+    Download the matching audit events as CSV or JSON, oldest first.
+
+    Query Parameters:
+        format (optional): csv (default) or json
+        level, q (optional): the same filters as GET /api/activity
+
+    At most the newest 10,000 matching events are exported; the
+    ``X-Export-Truncated`` header is ``true`` when the cap applied. Every
+    export is itself recorded in the audit log.
+    """
+    fmt = request.args.get("format", "csv").strip().lower()
+    if fmt not in ("csv", "json"):
+        return jsonify({"error": "format must be csv or json"}), 400
+
+    level, query = _activity_filters()
+    service = current_app.activity
+    try:
+        rows, truncated = service.export_rows(level, query)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    actor = session.get("username", "unknown")
+    service.record_export(actor, fmt, len(rows))
+
+    body = service.to_csv(rows) if fmt == "csv" else service.to_json(rows)
+    response = current_app.response_class(
+        body, mimetype="text/csv" if fmt == "csv" else "application/json"
+    )
+    response.headers["Content-Disposition"] = (
+        f'attachment; filename="{service.export_filename(fmt)}"'
+    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Export-Truncated"] = "true" if truncated else "false"
+    return response
+
+
 @bp.route("/overview")
 @limiter.limit("120 per minute")
 def overview():
