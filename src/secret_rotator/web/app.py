@@ -5,7 +5,7 @@ This module creates and configures the Flask application instance,
 registers blueprints, and sets up error handlers.
 """
 
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 from pathlib import Path
 from datetime import timedelta
 from flask_wtf.csrf import CSRFProtect, CSRFError
@@ -143,11 +143,23 @@ def register_error_handlers(app):
 
     @app.errorhandler(404)
     def not_found(error):
-        """Handle 404 Not Found errors"""
-        return (
-            jsonify({"error": "Not Found", "message": "The requested resource does not exist"}),
-            404,
-        )
+        """Handle 404 Not Found errors.
+
+        API and static requests get JSON. Page requests get a proper page
+        inside the dashboard shell for signed-in users; anyone else is
+        sent to the sign-in page, so unknown URLs reveal nothing.
+        """
+        if request.path.startswith(("/api/", "/static/")):
+            return (
+                jsonify({"error": "Not Found", "message": "The requested resource does not exist"}),
+                404,
+            )
+        if not session.get("authenticated"):
+            return redirect(url_for("auth.login"))
+
+        from secret_rotator.web.routes.dashboard import render_page
+
+        return render_page("not_found.html", None, "Page not found"), 404
 
     @app.errorhandler(500)
     def internal_error(error):

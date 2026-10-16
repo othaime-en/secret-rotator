@@ -407,3 +407,20 @@ button.badge {
     font-size: 13px;
     font-weight: 450;
 }
+
+/* ---- status dot ---- */
+.d {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--c, var(--ink3));
+    flex: none;
+}
+
+.d.e {
+    --c: var(--err);
+}
+
+.d.w {
+    --c: var(--warn);
+}

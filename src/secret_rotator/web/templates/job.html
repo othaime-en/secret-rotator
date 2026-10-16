@@ -1,0 +1,150 @@
+{% extends "app_base.html" %}
+{% from "partials/macros.html" import when, status_badge, rate_badge %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/job.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set job = detail.job %}
+{% set config = detail.config %}
+{% set stats = detail.stats %}
+
+<div class="crumb muted"><a class="lnk" href="{{ url_for('dashboard.jobs') }}">Jobs</a> / {{ job.name }}</div>
+
+<div class="head" style="margin-bottom:24px">
+    <div class="row" style="gap:14px">
+        <h1>{{ job.name }}</h1>
+        {{ status_badge(job.status) }}
+    </div>
+    <div class="row">
+        <button type="button" class="btn primary" data-action="rotate-job" data-job="{{ job.name }}"{% if job.status == "rotating" %} disabled{% endif %}>Rotate now</button>
+    </div>
+</div>
+
+{% include "partials/rotate_banner.html" %}
+{% include "partials/notice.html" %}
+
+{% if job.status == "failed" %}
+<div class="fail-note" role="region" aria-label="Last attempt failed">
+    <i class="d e" aria-hidden="true"></i>
+    <span>The last attempt failed {{ when(job.last_attempt, "datetime") }}{% if job.last_error %}: {{ job.last_error }}{% endif %}.</span>
+</div>
+{% endif %}
+
+<dl class="band">
+    <div><dt>Next run</dt><dd>{% if job.next_rotation %}{{ when(job.next_rotation, "datetime") }}{% else %}<span class="muted">Not scheduled</span>{% endif %}</dd></div>
+    <div><dt>Last rotated</dt><dd>{% if job.last_rotated %}{{ when(job.last_rotated, "datetime") }}{% else %}Never{% endif %}</dd></div>
+    <div><dt>Success rate</dt><dd{% if stats.runs %} title="{{ stats.succeeded }} of {{ stats.runs }} runs succeeded"{% endif %}>{% if stats.success_rate is none %}<span class="muted">—</span>{% else %}{{ "%g"|format(stats.success_rate) }}%{% endif %}</dd></div>
+    <div><dt>Backups</dt><dd>{{ stats.backups }}</dd></div>
+</dl>
+
+<div class="grid g2">
+    <div class="col">
+        <div class="sec">
+            <h2>Run history</h2>
+            {% if detail.runs %}
+            <div class="tw">
+                <table>
+                    <thead>
+                        <tr><th>When</th><th>Trigger</th><th>Duration</th><th>Result</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for run in detail.runs %}
+                        <tr>
+                            <td>{{ when(run.timestamp, "datetime") }}</td>
+                            <td>{% if run.trigger == "schedule" %}Schedule{% else %}Manual, {{ run.actor }}{% endif %}</td>
+                            <td class="mono">{{ run.duration_ms|duration_label }}</td>
+                            <td>
+                                {% if run.success %}<span class="badge ok">Success</span>
+                                {% else %}<span class="badge err">Failed</span>{% if run.reason %}<div class="reason muted">{{ run.reason }}</div>{% endif %}{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if stats.runs > detail.runs|length %}
+            <p class="muted" style="font-size:13px;margin-top:10px">Showing the latest {{ detail.runs|length }} of {{ stats.runs }} runs.</p>
+            {% endif %}
+            {% else %}
+            <div class="empty">No runs recorded yet.</div>
+            {% endif %}
+        </div>
+
+        <div class="sec">
+            <div class="row row-split">
+                <h2 style="margin:0">Backups of this secret</h2>
+                <a class="lnk" href="{{ url_for('dashboard.backups', q=config.secret_id) }}">All backups</a>
+            </div>
+            {% if detail.backups %}
+            <div class="tw">
+                <table>
+                    <tbody>
+                        {% for item in detail.backups %}
+                        <tr>
+                            <td class="mono">{{ item.file }}</td>
+                            <td>{{ when(item.created, "date") }}</td>
+                            <td>
+                                {% if not item.readable %}<span class="badge">Unreadable</span>
+                                {% elif item.encrypted %}<span class="badge ok">Encrypted</span>
+                                {% else %}<span class="badge warn">Unencrypted</span>{% endif %}
+                            </td>
+                            <td>
+                                <button type="button" class="btn sm danger" data-open="m-restore"
+                                        data-file="{{ item.file }}" data-secret="{{ item.secret_id }}"
+                                        aria-label="Restore backup {{ item.file }}"
+                                        {% if not item.readable %}disabled{% endif %}>Restore</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty">No backups yet. One is created each time this secret is rotated.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="col">
+        <div class="sec">
+            <h2>Configuration</h2>
+            <dl class="kv">
+                <dt>Secret ID</dt><dd><span class="mono">{{ config.secret_id }}</span></dd>
+                <dt>Provider</dt><dd>{{ config.provider }}</dd>
+                <dt>Rotator</dt><dd>{{ config.rotator_name }}</dd>
+                <dt>Schedule</dt><dd>{{ config.schedule|schedule_label }}</dd>
+                <dt>Notifications</dt><dd>{{ "On" if config.notifications else "Off" }}</dd>
+            </dl>
+        </div>
+
+        <div class="sec">
+            <div class="row row-split">
+                <h2 style="margin:0">Rotator settings</h2>
+                <a class="lnk" href="{{ url_for('dashboard.rotators') }}">Open</a>
+            </div>
+            {% if config.rotator.type is none %}
+            <p class="muted" style="font-size:13px">The rotator “{{ config.rotator_name }}” is not configured, so this job cannot rotate.</p>
+            {% elif config.rotator.settings %}
+            <dl class="kv">
+                {% for setting in config.rotator.settings %}
+                <dt>{{ setting.label }}</dt><dd>{{ setting.value }}</dd>
+                {% endfor %}
+            </dl>
+            {% else %}
+            <p class="muted" style="font-size:13px">{{ config.rotator.type }} rotator. No settings to show.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block overlays %}
+{% include "partials/restore_modal.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/rotate.js') }}"></script>
+<script src="{{ url_for('static', filename='js/backups.js') }}"></script>
+{% endblock %}

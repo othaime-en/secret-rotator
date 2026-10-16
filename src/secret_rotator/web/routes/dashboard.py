@@ -89,15 +89,39 @@ def jobs():
     return render_page("jobs.html", "jobs", "Jobs", jobs=job_list, rotating=rotating)
 
 
+@bp.app_template_filter("duration_label")
+def duration_label(milliseconds):
+    """1234 -> '1.2s', 450 -> '450ms', 65000 -> '1m 05s', None -> '—'."""
+    if milliseconds is None:
+        return "—"
+    if milliseconds < 1000:
+        return f"{milliseconds}ms"
+    seconds = milliseconds / 1000
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes, rest = divmod(int(seconds), 60)
+    return f"{minutes}m {rest:02d}s"
+
+
 @bp.route("/jobs/<path:job_id>")
 def job_detail(job_id):
-    """A single rotation job."""
-    return _stub(
-        "jobs",
-        job_id,
-        "Job details, run history and configuration.",
-        job_id=job_id,
-    )
+    """A single rotation job: status, run history, backups, configuration."""
+    detail = current_app.job_status.job_detail(job_id)
+    if detail is None:
+        return (
+            render_page(
+                "not_found.html",
+                "jobs",
+                "Job not found",
+                heading="Job not found",
+                message=f"There is no job named “{job_id}”.",
+                back_url="/jobs",
+                back_label="Back to jobs",
+            ),
+            404,
+        )
+    rotating = 1 if detail["job"]["status"] == "rotating" else 0
+    return render_page("job.html", "jobs", job_id, detail=detail, rotating=rotating)
 
 
 BACKUPS_PER_PAGE = 25

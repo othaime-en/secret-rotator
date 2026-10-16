@@ -95,6 +95,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   account name are never shown, and neither are the settings of
   rotators the dashboard does not know. `BackupManager.list_backup_page()`
   gains an exact `secret_id` filter.
+- Dashboard redesign, step 14: new job page at `/jobs/<name>` with a
+  status header and Rotate now, next run / last rotated / success rate /
+  backups, run history (trigger, duration, result and failure reason), the
+  job's backups with Restore, its configuration and display-safe rotator
+  settings. Unknown pages and jobs now show a proper "not found" page
+  inside the dashboard (anonymous visitors are sent to sign in); API and
+  static URLs still answer with JSON.
 
 ### Fixed
 

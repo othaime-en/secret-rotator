@@ -1,5 +1,6 @@
 /*
- * Backups page: details drawer and restore.
+ * Backups page: details drawer and restore. The restore part also drives
+ * the Restore buttons on the job page, which has no drawer.
  *
  * - [data-action="view-backup"] opens the drawer and loads the backup's
  *   metadata from GET /api/backups/<file>. Secret values arrive already
@@ -33,7 +34,10 @@
         selected = target;
         el("m-restore-secret").textContent = target.secret;
         el("m-restore-file").textContent = target.file;
-        el("d-backup-restore").disabled = false;
+        var drawerRestore = el("d-backup-restore"); // only on the Backups page
+        if (drawerRestore) {
+            drawerRestore.disabled = false;
+        }
     }
 
     function resetDrawer(target) {

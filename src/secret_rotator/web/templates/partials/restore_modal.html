@@ -1,0 +1,16 @@
+{# Restore confirmation. Driven by static/js/backups.js. #}
+<div class="modal card" id="m-restore" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="m-restore-title">
+    <div class="card-b">
+        <h1 id="m-restore-title">Restore backup?</h1>
+        <p class="muted">This replaces the current value of <b class="mono" id="m-restore-secret"></b> with the old value from this backup.</p>
+        <p class="mono muted" id="m-restore-file" style="overflow-wrap:anywhere"></p>
+        <div class="warnbox">
+            <svg class="icon" aria-hidden="true"><use href="#i-warn"/></svg>
+            <span>Services using the current secret may lose access.</span>
+        </div>
+        <div class="row" style="justify-content:flex-end">
+            <button type="button" class="btn" data-close data-autofocus>Cancel</button>
+            <button type="button" class="btn primary" data-action="confirm-restore">Restore</button>
+        </div>
+    </div>
+</div>

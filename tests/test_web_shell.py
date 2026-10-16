@@ -19,7 +19,6 @@ TEST_PASSWORD = "correct-horse-battery-staple"
 PAGES = [
     ("/", "overview", "Overview"),
     ("/jobs", "jobs", "Jobs"),
-    ("/jobs/database_password", "jobs", "database_password"),
     ("/backups", "backups", "Backups"),
     ("/backup-health", "backup-health", "Backup health"),
     ("/activity", "activity", "Activity log"),
@@ -123,11 +122,33 @@ class TestAppShell(unittest.TestCase):
         nav = html[html.index('<nav class="nav"') : html.index("</nav>")]
         self.assertNotIn('href="#', nav)
 
-    def test_job_detail_escapes_the_job_id(self):
+    def test_unknown_job_is_a_404_page_in_the_shell_with_the_name_escaped(self):
         self._login()
-        _, html = self._get("/jobs/%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E")
+        resp, html = self._get("/jobs/%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E")
+        self.assertEqual(resp.status_code, 404)
+        self.assertIn("<h1>Job not found</h1>", html)
+        self.assertIn('class="side"', html)
         self.assertNotIn("<img src=x", html)
         self.assertIn("&lt;img src=x", html)
+
+    def test_unknown_page_is_a_404_page_in_the_shell(self):
+        self._login()
+        resp, html = self._get("/no/such/page")
+        self.assertEqual(resp.status_code, 404)
+        self.assertIn("<h1>Page not found</h1>", html)
+        self.assertIn('class="side"', html)
+
+    def test_unknown_page_sends_anonymous_visitors_to_sign_in(self):
+        resp = self.client.get("/no/such/page", follow_redirects=False)
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/login", resp.headers["Location"])
+
+    def test_unknown_api_and_static_urls_still_answer_with_json(self):
+        self._login()
+        for url in ("/api/nope", "/static/nope.css"):
+            resp = self.client.get(url)
+            self.assertEqual(resp.status_code, 404, url)
+            self.assertEqual(resp.get_json()["error"], "Not Found", url)
 
     # ---- shell controls ----
 
