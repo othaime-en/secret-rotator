@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 from secret_rotator.audit_log import audit_log as default_audit_log
 from secret_rotator.backup_manager import BackupIntegrityChecker
 from secret_rotator.config.settings import settings
+from secret_rotator.rotator_display import describe_rotator
 from secret_rotator.utils.logger import logger
 from secret_rotator.utils.timeutil import parse_time, to_utc_iso
 
@@ -37,6 +38,16 @@ STATUS_NEVER = "never_rotated"
 _ALL_TIME_HOURS = 24 * 365 * 10
 
 _ACTIVITY_ACTIONS = ("rotate", "restore")
+
+
+MAX_REASON_LENGTH = 300
+
+
+def _clip(text: Any) -> Optional[str]:
+    if text is None:
+        return None
+    text = str(text)
+    return text if len(text) <= MAX_REASON_LENGTH else text[: MAX_REASON_LENGTH - 1] + "…"
 
 
 class JobStatusService:
@@ -143,6 +154,75 @@ class JobStatusService:
     def job_summary(self, name: str) -> Optional[Dict[str, Any]]:
         """Status record for one job, or None if no job has this name."""
         return next((j for j in self.job_summaries() if j["name"] == name), None)
+
+    def _runs_for(self, name: str) -> List[Dict[str, Any]]:
+        """Every recorded rotation of one job, newest first."""
+        runs = []
+        for event in reversed(self._rotation_events()):
+            details = event.get("details") or {}
+            if details.get("job") != name:
+                continue
+            success = bool(event.get("success"))
+            actor = event.get("actor")
+            runs.append(
+                {
+                    "timestamp": event.get("timestamp"),
+                    "actor": actor,
+                    "trigger": "schedule" if actor == "system" else "manual",
+                    "success": success,
+                    "reason": None if success else _clip(details.get("reason")),
+                    "duration_ms": details.get("duration_ms"),
+                }
+            )
+        return runs
+
+    def job_detail(
+        self, name: str, run_limit: int = 20, backup_limit: int = 5
+    ) -> Optional[Dict[str, Any]]:
+        """Everything the job page shows, or None for an unknown job.
+
+        Returns:
+            ``job`` (the status record from job_summaries), ``config``
+            (the job's configuration and a display-safe description of its
+            rotator), ``stats`` (run counts and success rate over every
+            recorded run), ``runs`` (newest ``run_limit``, newest first) and
+            ``backups`` (the job's backup count and newest few). Secret
+            values are never included.
+        """
+        summary = self.job_summary(name)
+        if summary is None:
+            return None
+        job = next(j for j in self.engine.rotation_jobs if j["name"] == name)
+
+        runs = self._runs_for(name)
+        succeeded = sum(1 for run in runs if run["success"])
+        rate = round(succeeded / len(runs) * 100, 1) if runs else None
+
+        page = self.engine.backup_manager.list_backup_page(
+            secret_id=job.get("secret_id"), per_page=backup_limit
+        )
+
+        return {
+            "job": summary,
+            "config": {
+                "name": name,
+                "secret_id": job.get("secret_id"),
+                "provider": job.get("provider"),
+                "rotator_name": job.get("rotator"),
+                "schedule": summary["schedule"],
+                "notifications": bool(job.get("notification", False)),
+                "rotator": describe_rotator(self.engine.rotators.get(job.get("rotator"))),
+            },
+            "stats": {
+                "runs": len(runs),
+                "succeeded": succeeded,
+                "failed": len(runs) - succeeded,
+                "success_rate": rate,
+                "backups": page["total"],
+            },
+            "runs": runs[: max(1, min(int(run_limit), 100))],
+            "backups": page["backups"],
+        }
 
     # ---- overview ----------------------------------------------------
 

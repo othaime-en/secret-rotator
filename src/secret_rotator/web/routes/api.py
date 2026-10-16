@@ -112,6 +112,50 @@ def job_status():
     return jsonify({"jobs": current_app.job_status.job_summaries()})
 
 
+@bp.route("/jobs/<path:job_name>/detail")
+@limiter.limit("120 per minute")
+def job_detail(job_name):
+    """
+    Everything the job page shows.
+
+    Query Parameters:
+        runs (optional): how many recent runs to include, 1-100 (default 20)
+
+    Example Response (abridged):
+        {
+            "job": {"name": "database_password", "status": "current", ...},
+            "config": {
+                "secret_id": "db_password", "provider": "file_storage",
+                "rotator_name": "password_gen", "schedule": "weekly",
+                "notifications": true,
+                "rotator": {"type": "Password", "settings": [
+                    {"label": "Length", "value": "16"}]}
+            },
+            "stats": {"runs": 25, "succeeded": 24, "failed": 1,
+                      "success_rate": 96.0, "backups": 10},
+            "runs": [{"timestamp": "...", "actor": "system",
+                      "trigger": "schedule", "success": true,
+                      "reason": null, "duration_ms": 1200}],
+            "backups": [{"file": "...", "created": "...",
+                         "encrypted": true, "readable": true}]
+        }
+
+    Only display-safe rotator settings are returned (never connection
+    details), and no secret values. 404 if no job has this name.
+    """
+    try:
+        run_limit = int(request.args.get("runs", 20))
+    except ValueError:
+        return jsonify({"error": "runs must be an integer"}), 400
+    if not 1 <= run_limit <= 100:
+        return jsonify({"error": "runs must be between 1 and 100"}), 400
+
+    detail = current_app.job_status.job_detail(job_name, run_limit=run_limit)
+    if detail is None:
+        return jsonify({"error": "Job not found"}), 404
+    return jsonify(detail)
+
+
 @bp.route("/jobs/<path:job_name>/rotate", methods=["POST"])
 @limiter.limit("30 per minute")
 def rotate_job(job_name):

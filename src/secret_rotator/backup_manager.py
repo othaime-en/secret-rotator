@@ -248,7 +248,11 @@ class BackupManager:
         return stem, ""
 
     def list_backup_page(
-        self, query: Optional[str] = None, page: int = 1, per_page: int = 25
+        self,
+        query: Optional[str] = None,
+        page: int = 1,
+        per_page: int = 25,
+        secret_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """One page of backup metadata for the dashboard, newest first.
 
@@ -264,6 +268,8 @@ class BackupManager:
                 ID (no match-all wildcard characters are interpreted).
             page: 1-based page number; clamped to the last page.
             per_page: page size, limited to 1..100.
+            secret_id: only backups of exactly this secret (unlike
+                ``query``, which matches part of the ID).
 
         Returns:
             ``{"backups": [...], "total": N, "page": p, "per_page": n,
@@ -277,10 +283,12 @@ class BackupManager:
 
         entries = []
         for path in self.backup_dir.glob("*.json"):
-            secret_id, timestamp = self._parse_backup_name(path.name)
-            if needle and needle not in secret_id.lower():
+            parsed_id, timestamp = self._parse_backup_name(path.name)
+            if needle and needle not in parsed_id.lower():
                 continue
-            entries.append((timestamp, path.name, secret_id))
+            if secret_id is not None and parsed_id != secret_id:
+                continue
+            entries.append((timestamp, path.name, parsed_id))
         entries.sort(reverse=True)
 
         total = len(entries)

@@ -86,6 +86,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   JSON export of the current filter, and a Live mode that appends new
   events as they happen (pausable; stops itself when the tab is hidden
   or the server stops answering).
+- Dashboard redesign, step 13 (backend for the job page): new
+  `GET /api/jobs/<name>/detail` returns a job's status, configuration,
+  run history (when, who or what triggered it, how long it took, the
+  failure reason), success rate and its newest backups. Rotation audit
+  events now record `duration_ms`. Only display-safe rotator settings
+  are returned: connection details such as a database host, database or
+  account name are never shown, and neither are the settings of
+  rotators the dashboard does not know. `BackupManager.list_backup_page()`
+  gains an exact `secret_id` filter.
 
 ### Fixed
 

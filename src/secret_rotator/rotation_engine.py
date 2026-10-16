@@ -43,6 +43,7 @@ def _tracks_active_job(func):
     @functools.wraps(func)
     def wrapper(self, job_config, *args, **kwargs):
         name = job_config.get("name")
+        self._rotation_timing.started = time.monotonic()
         self._mark_job_active(name)
         try:
             return func(self, job_config, *args, **kwargs)
@@ -63,6 +64,9 @@ class RotationEngine:
         # Read via active_job_names(); see _tracks_active_job.
         self._active_jobs: Dict[str, int] = {}
         self._active_lock = threading.Lock()
+        # Start time of the rotation running on this thread, for the
+        # duration recorded in each rotate audit event.
+        self._rotation_timing = threading.local()
         self.backup_manager = BackupManager(
             backup_dir=settings.get("providers.file_storage.backup_path", "data/backup")
         )  # Use config or default
@@ -96,6 +100,16 @@ class RotationEngine:
         self.rotation_jobs.append(job_config)
         logger.info(f"Added rotation job: {job_config['name']}")
         return True
+
+    def _rotation_details(self, job_name: str, **extra: Any) -> Dict[str, Any]:
+        """Audit details for a rotation event: the job, anything extra
+        (a failure reason, provider and rotator names) and how long this
+        rotation has taken so far, in milliseconds."""
+        details: Dict[str, Any] = {"job": job_name, **extra}
+        started = getattr(self._rotation_timing, "started", None)
+        if started is not None:
+            details["duration_ms"] = int((time.monotonic() - started) * 1000)
+        return details
 
     def _mark_job_active(self, name: Optional[str]) -> None:
         if name is None:
@@ -153,7 +167,9 @@ class RotationEngine:
                 actor,
                 secret_id=secret_id,
                 success=False,
-                details={"job": job_name, "reason": f"provider '{provider_name}' not found"},
+                details=self._rotation_details(
+                    job_name, reason=f"provider '{provider_name}' not found"
+                ),
             )
             return False
 
@@ -164,7 +180,9 @@ class RotationEngine:
                 actor,
                 secret_id=secret_id,
                 success=False,
-                details={"job": job_name, "reason": f"rotator '{rotator_name}' not found"},
+                details=self._rotation_details(
+                    job_name, reason=f"rotator '{rotator_name}' not found"
+                ),
             )
             return False
 
@@ -190,7 +208,7 @@ class RotationEngine:
                         actor,
                         secret_id=secret_id,
                         success=False,
-                        details={"job": job_name, "reason": f"backup failed: {e}"},
+                        details=self._rotation_details(job_name, reason=f"backup failed: {e}"),
                     )
                     return False
 
@@ -207,7 +225,7 @@ class RotationEngine:
                     actor,
                     secret_id=secret_id,
                     success=False,
-                    details={"job": job_name, "reason": "secret generation failed"},
+                    details=self._rotation_details(job_name, reason="secret generation failed"),
                 )
                 return False
 
@@ -219,7 +237,9 @@ class RotationEngine:
                     actor,
                     secret_id=secret_id,
                     success=False,
-                    details={"job": job_name, "reason": "generated secret failed validation"},
+                    details=self._rotation_details(
+                        job_name, reason="generated secret failed validation"
+                    ),
                 )
                 return False
 
@@ -232,7 +252,9 @@ class RotationEngine:
                     actor,
                     secret_id=secret_id,
                     success=True,
-                    details={"job": job_name, "provider": provider_name, "rotator": rotator_name},
+                    details=self._rotation_details(
+                        job_name, provider=provider_name, rotator=rotator_name
+                    ),
                 )
                 return True
             else:
@@ -242,7 +264,9 @@ class RotationEngine:
                     actor,
                     secret_id=secret_id,
                     success=False,
-                    details={"job": job_name, "reason": "provider update_secret returned False"},
+                    details=self._rotation_details(
+                        job_name, reason="provider update_secret returned False"
+                    ),
                 )
                 return False
 
@@ -253,7 +277,7 @@ class RotationEngine:
                 actor,
                 secret_id=secret_id,
                 success=False,
-                details={"job": job_name, "reason": str(e)},
+                details=self._rotation_details(job_name, reason=str(e)),
             )
             return False
 
