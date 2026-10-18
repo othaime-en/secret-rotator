@@ -101,6 +101,29 @@ class RotationEngine:
         logger.info(f"Added rotation job: {job_config['name']}")
         return True
 
+    def replace_rotation_jobs(self, job_configs: List[Dict[str, Any]]) -> int:
+        """Replace the whole job list, e.g. after the dashboard added,
+        changed or removed a job.
+
+        Entries that lack a required field are logged and skipped. The new
+        list is swapped in as a unit, so a sweep already running (which
+        works on its own copy) is unaffected.
+
+        Returns:
+            How many jobs the engine now has.
+        """
+        required = ("name", "provider", "rotator", "secret_id")
+        accepted = []
+        for config in job_configs:
+            missing = [f for f in required if not isinstance(config, dict) or f not in config]
+            if missing:
+                logger.error(f"Skipping job with missing field(s): {', '.join(missing)}")
+                continue
+            accepted.append(config)
+        self.rotation_jobs = accepted
+        logger.info(f"Rotation jobs updated: {len(accepted)} configured")
+        return len(accepted)
+
     def _rotation_details(self, job_name: str, **extra: Any) -> Dict[str, Any]:
         """Audit details for a rotation event: the job, anything extra
         (a failure reason, provider and rotator names) and how long this
@@ -307,7 +330,7 @@ class RotationEngine:
                 a CLI run) is already in progress in this process, or
                 (with `distributed.enabled: true`) in another instance.
         """
-        return self._rotate_sweep(list(self.rotation_jobs), actor, on_job_complete)
+        return self._rotate_sweep(self._active_jobs_in_order(), actor, on_job_complete)
 
     def rotate_jobs(
         self,
@@ -326,13 +349,25 @@ class RotationEngine:
             RotationInProgressError: as for rotate_all_secrets().
         """
         wanted = set(job_names)
-        jobs = [job for job in self.rotation_jobs if job.get("name") in wanted]
-        unknown = wanted - {job["name"] for job in jobs}
+        jobs = [job for job in self._active_jobs_in_order() if job.get("name") in wanted]
+        known = {job.get("name") for job in self.rotation_jobs}
+        unknown = wanted - known
         if unknown:
             logger.warning(f"Skipping unknown job(s) in rotation: {', '.join(sorted(unknown))}")
         if not jobs:
             return {}
         return self._rotate_sweep(jobs, actor, on_job_complete)
+
+    def _active_jobs_in_order(self) -> List[Dict[str, Any]]:
+        """The jobs a sweep covers, in configuration order: all of them
+        except those paused in the dashboard. (Rotating one job by name with
+        rotate_job() still works while it is paused: that is a deliberate
+        request.)"""
+        jobs = list(self.rotation_jobs)
+        paused = [job.get("name") for job in jobs if job.get("paused")]
+        if paused:
+            logger.info(f"Skipping paused job(s): {', '.join(map(str, paused))}")
+        return [job for job in jobs if not job.get("paused")]
 
     def _rotate_sweep(
         self,

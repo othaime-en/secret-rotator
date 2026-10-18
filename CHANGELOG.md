@@ -136,6 +136,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Settings.save()` now writes only `config.yaml`'s own contents, never
   the dashboard's changes merged in.
 
+### Added (job management API)
+
+- Jobs can now be created, changed, deleted, paused, resumed and reset
+  through the API: `POST /api/jobs`, `PUT` / `DELETE /api/jobs/<name>`,
+  `POST /api/jobs/<name>/pause`, `/resume` and `/reset`, plus
+  `GET /api/job-options` for the form. Changes are saved in the
+  dashboard's settings file (never `config.yaml`) and applied to the
+  running engine and scheduler immediately. A job needs an existing
+  provider and rotator and a secret ID; its schedule must be valid; two
+  jobs cannot rotate the same secret in the same provider; unknown fields
+  are rejected and a job cannot be renamed. Every change is audit-logged
+  (`job_create`, `job_update`, `job_delete`, `job_pause`, `job_resume`,
+  `job_reset`) and an optional `revision` lets a client detect that
+  something else changed meanwhile (HTTP 409).
+- Paused jobs are skipped by scheduled rotation and by "Rotate all";
+  rotating a paused job by name still works. Job status now includes
+  `paused` and `source` (config, modified or dashboard).
+- `RotationEngine.replace_rotation_jobs()` swaps the job list as a unit.
+
 ### Fixed
 
 - `pyproject.toml` package-data now includes the web templates and

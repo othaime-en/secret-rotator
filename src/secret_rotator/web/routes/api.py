@@ -14,6 +14,8 @@ from flask import Blueprint, jsonify, request, current_app, session
 from urllib.parse import unquote
 from secret_rotator.utils.logger import logger
 from secret_rotator.audit_log import audit_log
+from secret_rotator.config.overrides import ConflictError, OverridesError
+from secret_rotator.job_admin import JobExistsError, JobNotFoundError, JobValidationError
 from secret_rotator.rotation_engine import RotationInProgressError
 from secret_rotator.web.rate_limit import limiter
 
@@ -110,6 +112,202 @@ def job_status():
         }
     """
     return jsonify({"jobs": current_app.job_status.job_summaries()})
+
+
+def _json_body():
+    """The request's JSON object, or None if it has none."""
+    body = request.get_json(silent=True)
+    return body if isinstance(body, dict) else None
+
+
+def _job_admin(action):
+    """Run a job management action and translate its failures to HTTP."""
+    try:
+        return action()
+    except JobValidationError as e:
+        return jsonify({"error": "Invalid job", "fields": e.fields}), 400
+    except JobNotFoundError:
+        return jsonify({"error": "Job not found"}), 404
+    except JobExistsError as e:
+        return jsonify({"error": str(e), "fields": {"name": "already exists"}}), 409
+    except ConflictError as e:
+        return jsonify({"error": str(e), "conflict": True}), 409
+    except OverridesError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+def _definition_from(body):
+    """The job fields of a request body (everything but the revision)."""
+    return {key: value for key, value in body.items() if key != "revision"}
+
+
+def _revision_from(body):
+    """The settings revision the client loaded, if it sent one."""
+    revision = (body or {}).get("revision")
+    return revision if isinstance(revision, int) and not isinstance(revision, bool) else None
+
+
+def _job_response(name, status=200, **extra):
+    admin = current_app.job_admin
+    return (
+        jsonify(
+            {"job": current_app.job_status.job_summary(name), "revision": admin.revision, **extra}
+        ),
+        status,
+    )
+
+
+@bp.route("/job-options")
+@limiter.limit("120 per minute")
+def job_options():
+    """
+    What the job form can offer.
+
+    Example Response:
+        {"providers": ["file_storage"], "rotators": ["password_gen"],
+         "schedules": ["every_30_minutes", "every_2_hours", "daily",
+                       "weekly", "monthly"],
+         "default_schedule": "daily", "revision": 3}
+    """
+    return jsonify(current_app.job_admin.options())
+
+
+@bp.route("/jobs", methods=["POST"])
+@limiter.limit("30 per minute")
+def create_job():
+    """
+    Create a job. The change is saved in the dashboard's settings file
+    (never config.yaml) and applied to the running engine and scheduler.
+
+    Request Body (JSON):
+        name, provider, rotator, secret_id (required);
+        schedule (optional, e.g. "weekly"; omit to follow the global
+        schedule); notification (optional, true/false);
+        revision (optional: the settings revision you loaded, to be told
+        if something else changed meanwhile)
+
+    Returns:
+        201 with the new job's status and the new settings revision;
+        400 with per-field messages; 409 if the name is taken or the
+        settings changed since ``revision``.
+    """
+    body = _json_body()
+    if body is None:
+        return jsonify({"error": "Send the job as a JSON object"}), 400
+    actor = session.get("username", "unknown")
+
+    def action():
+        name = current_app.job_admin.create(
+            _definition_from(body), actor, revision=_revision_from(body)
+        )
+        return _job_response(name, 201)
+
+    return _job_admin(action)
+
+
+@bp.route("/jobs/<path:job_name>", methods=["PUT"])
+@limiter.limit("30 per minute")
+def update_job(job_name):
+    """
+    Replace a job's settings (everything except its name, which cannot
+    change). Same body as POST /api/jobs. Returns 200 with the job, the
+    new revision and ``changed`` (the fields that differ; empty if the
+    request changed nothing and nothing was saved).
+    """
+    body = _json_body()
+    if body is None:
+        return jsonify({"error": "Send the job as a JSON object"}), 400
+    actor = session.get("username", "unknown")
+
+    def action():
+        changed = current_app.job_admin.update(
+            job_name, _definition_from(body), actor, revision=_revision_from(body)
+        )
+        return _job_response(job_name, 200, changed=changed)
+
+    return _job_admin(action)
+
+
+@bp.route("/jobs/<path:job_name>", methods=["DELETE"])
+@limiter.limit("30 per minute")
+def delete_job(job_name):
+    """
+    Delete a job created in the dashboard, or hide one defined in
+    config.yaml (config.yaml itself is not changed; POST .../reset brings
+    it back). Optional JSON body: {"revision": N}. Existing backups are kept.
+    """
+    body = _json_body()
+    actor = session.get("username", "unknown")
+
+    def action():
+        source = current_app.job_admin.delete(job_name, actor, revision=_revision_from(body))
+        return (
+            jsonify(
+                {"deleted": True, "source": source, "revision": current_app.job_admin.revision}
+            ),
+            200,
+        )
+
+    return _job_admin(action)
+
+
+@bp.route("/jobs/<path:job_name>/pause", methods=["POST"])
+@limiter.limit("30 per minute")
+def pause_job(job_name):
+    """Pause scheduled rotation of a job (manual "Rotate now" still works,
+    "Rotate all" skips it). Optional JSON body: {"revision": N}."""
+    body = _json_body()
+    actor = session.get("username", "unknown")
+
+    def action():
+        changed = current_app.job_admin.set_paused(
+            job_name, True, actor, revision=_revision_from(body)
+        )
+        return _job_response(job_name, 200, changed=changed)
+
+    return _job_admin(action)
+
+
+@bp.route("/jobs/<path:job_name>/resume", methods=["POST"])
+@limiter.limit("30 per minute")
+def resume_job(job_name):
+    """Resume scheduled rotation of a paused job."""
+    body = _json_body()
+    actor = session.get("username", "unknown")
+
+    def action():
+        changed = current_app.job_admin.set_paused(
+            job_name, False, actor, revision=_revision_from(body)
+        )
+        return _job_response(job_name, 200, changed=changed)
+
+    return _job_admin(action)
+
+
+@bp.route("/jobs/<path:job_name>/reset", methods=["POST"])
+@limiter.limit("30 per minute")
+def reset_job(job_name):
+    """Drop every dashboard change to a job: a job defined only in the
+    dashboard is deleted; one from config.yaml is back as written there."""
+    body = _json_body()
+    actor = session.get("username", "unknown")
+
+    def action():
+        source = current_app.job_admin.reset(job_name, actor, revision=_revision_from(body))
+        job = current_app.job_status.job_summary(job_name)
+        return (
+            jsonify(
+                {
+                    "reset": True,
+                    "source": source,
+                    "job": job,
+                    "revision": current_app.job_admin.revision,
+                }
+            ),
+            200,
+        )
+
+    return _job_admin(action)
 
 
 @bp.route("/jobs/<path:job_name>/detail")

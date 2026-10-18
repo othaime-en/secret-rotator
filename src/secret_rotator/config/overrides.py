@@ -333,6 +333,12 @@ class OverridesStore:
             return SOURCE_DASHBOARD if "definition" in entry else None
         return SOURCE_MODIFIED
 
+    def has_entry(self, kind: str, name: str) -> bool:
+        """Whether the dashboard has changed (or created) this item, so there
+        is something to reset."""
+        self._check_kind(kind)
+        return name in self._data[kind]
+
     def is_paused(self, name: str) -> bool:
         return bool(self._data["jobs"].get(name, {}).get("paused"))
 

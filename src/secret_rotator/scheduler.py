@@ -218,6 +218,8 @@ class RotationScheduler:
         jobs = self._jobs()
         due = []
         for job in jobs:
+            if job.get("paused"):
+                continue  # paused in the dashboard: no scheduled rotation
             try:
                 if self.effective_schedule(job) == schedule_name:
                     due.append(job["name"])

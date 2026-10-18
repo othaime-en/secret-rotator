@@ -52,8 +52,15 @@ def _clip(text: Any) -> Optional[str]:
 class JobStatusService:
     """Builds the status data shown on the Overview and Jobs pages."""
 
-    def __init__(self, engine, audit=None):
+    def __init__(self, engine, audit=None, source_of=None):
+        """
+        Args:
+            source_of: optional ``name -> str`` saying where a job comes from
+                ("config", "modified" or "dashboard"; see config/overrides.py),
+                shown as ``source`` on each job.
+        """
         self.engine = engine
+        self._source_of = source_of
         self.audit = audit if audit is not None else default_audit_log
         self._cache_lock = threading.Lock()
         self._cache_key = None
@@ -135,6 +142,7 @@ class JobStatusService:
                 last_error = (attempt.get("details") or {}).get("reason")
 
             schedule_name = job.get("schedule") or default_schedule
+            paused = bool(job.get("paused"))
             summaries.append(
                 {
                     "name": name,
@@ -146,7 +154,9 @@ class JobStatusService:
                     "last_rotated": success["timestamp"] if success else None,
                     "last_attempt": attempt["timestamp"] if attempt else None,
                     "last_error": last_error,
-                    "next_rotation": self._next_rotation(schedule_name),
+                    "paused": paused,
+                    "source": self._source_of(name) if self._source_of else None,
+                    "next_rotation": None if paused else self._next_rotation(schedule_name),
                 }
             )
         return summaries

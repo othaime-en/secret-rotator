@@ -43,6 +43,16 @@ EXPORT_COLUMNS = ("timestamp", "level", "action", "actor", "secret_id", "success
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
+_JOB_ACTIONS = {
+    "job_create": "created",
+    "job_update": "changed",
+    "job_delete": "deleted",
+    "job_pause": "paused",
+    "job_resume": "resumed",
+    "job_reset": "reset",
+}
+
+
 def _clip(text: Any) -> str:
     text = str(text)
     return text if len(text) <= MAX_MESSAGE_LENGTH else text[: MAX_MESSAGE_LENGTH - 1] + "…"
@@ -84,6 +94,8 @@ def _message(event: Dict[str, Any]) -> str:
         return f"Failed sign-in for {actor}"
     if action == "logout":
         return f"{actor} signed out"
+    if action in _JOB_ACTIONS:
+        return f"{actor} {_JOB_ACTIONS[action]} job {details.get('job', '?')}"
     if action == "export_activity":
         return f"{actor} exported the activity log ({details.get('format', '?')})"
     return f"{action} {event.get('secret_id') or ''}".strip()

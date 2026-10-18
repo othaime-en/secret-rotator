@@ -78,7 +78,14 @@ def create_app(rotation_engine, config=None):
 
     from secret_rotator.job_status import JobStatusService
 
-    app.job_status = JobStatusService(rotation_engine)
+    from secret_rotator.config.settings import settings as app_settings
+    from secret_rotator.job_admin import JobAdminService
+
+    app.job_status = JobStatusService(
+        rotation_engine,
+        source_of=lambda name: app_settings.overrides.item_source("jobs", name),
+    )
+    app.job_admin = JobAdminService(rotation_engine, app_settings)
 
     from secret_rotator.backup_health import BackupHealthService
 
