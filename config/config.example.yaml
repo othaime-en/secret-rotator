@@ -8,7 +8,11 @@
 # DO NOT commit config.yaml with secrets to version control!
 
 rotation:
-  schedule: "daily" # daily, weekly, every_30_minutes, every_2_hours
+  # Default schedule for every job that does not set its own `schedule`:
+  #   daily | weekly | monthly | every_<N>_minutes | every_<N>_hours
+  # daily and monthly run at 02:00 (monthly on the 1st). An unrecognised
+  # value stops the daemon at startup instead of silently never rotating.
+  schedule: "daily"
   retry_attempts: 3
   timeout: 30
   backup_old_secrets: true
@@ -126,6 +130,8 @@ rotators:
     length: 32
     format: "hex" # hex, base64, alphanumeric
 
+# Each job rotates on the global schedule above unless it sets its own
+# `schedule` (same values). Jobs that share a schedule rotate together.
 jobs:
   - name: "database_password"
     provider: "file_storage"

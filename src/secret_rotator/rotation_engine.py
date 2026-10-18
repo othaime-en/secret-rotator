@@ -307,6 +307,39 @@ class RotationEngine:
                 a CLI run) is already in progress in this process, or
                 (with `distributed.enabled: true`) in another instance.
         """
+        return self._rotate_sweep(list(self.rotation_jobs), actor, on_job_complete)
+
+    def rotate_jobs(
+        self,
+        job_names: List[str],
+        actor: str = "system",
+        on_job_complete: Optional[Callable[[str, bool, int, int], None]] = None,
+    ) -> Dict[str, bool]:
+        """Rotate the named jobs, in configuration order.
+
+        This is what a per-job schedule fires: the jobs that share one
+        schedule are rotated together, under the same lock as
+        rotate_all_secrets(). Names that match no configured job are
+        logged and skipped.
+
+        Raises:
+            RotationInProgressError: as for rotate_all_secrets().
+        """
+        wanted = set(job_names)
+        jobs = [job for job in self.rotation_jobs if job.get("name") in wanted]
+        unknown = wanted - {job["name"] for job in jobs}
+        if unknown:
+            logger.warning(f"Skipping unknown job(s) in rotation: {', '.join(sorted(unknown))}")
+        if not jobs:
+            return {}
+        return self._rotate_sweep(jobs, actor, on_job_complete)
+
+    def _rotate_sweep(
+        self,
+        jobs: List[Dict[str, Any]],
+        actor: str,
+        on_job_complete: Optional[Callable[[str, bool, int, int], None]],
+    ) -> Dict[str, bool]:
         try:
             self._rotation_lock.acquire()
         except LockAcquisitionError as e:
@@ -317,10 +350,10 @@ class RotationEngine:
 
         try:
             results = {}
-            total = len(self.rotation_jobs)
+            total = len(jobs)
             logger.info(f"Starting rotation of {total} secrets")
 
-            for index, job in enumerate(self.rotation_jobs, start=1):
+            for index, job in enumerate(jobs, start=1):
                 job_name = job["name"]
                 success = self.rotate_secret(job, actor=actor)
                 results[job_name] = success

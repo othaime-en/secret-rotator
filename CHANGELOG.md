@@ -102,6 +102,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   settings. Unknown pages and jobs now show a proper "not found" page
   inside the dashboard (anonymous visitors are sent to sign in); API and
   static URLs still answer with JSON.
+- Dashboard redesign, step 15 (per-job schedules): a job's `schedule`
+  setting now actually controls when it rotates. The jobs that share a
+  schedule rotate together when it fires, and jobs without their own
+  schedule follow `rotation.schedule`. With no per-job schedules nothing
+  changes. `monthly` is now supported (the 1st at 02:00). The dashboard
+  shows each job's own next rotation. Adds `RotationEngine.rotate_jobs()`,
+  `RotationScheduler.next_rotation_for()` and
+  `refresh_rotation_schedules()`, and the `schedule_spec` module.
+
+### Upgrade notes
+
+- **Per-job `schedule` values now take effect.** Previously they were
+  ignored and every job rotated on the global schedule. A job configured
+  with `schedule: "weekly"` or `"monthly"` (as in the example config)
+  will now rotate that often instead of daily. Remove or change a job's
+  `schedule` if you want it to follow the global one.
+- **An invalid schedule now stops startup** with an error naming the
+  setting (or job), instead of silently scheduling nothing. Valid values:
+  `daily`, `weekly`, `monthly`, `every_<N>_minutes`, `every_<N>_hours`.
 
 ### Fixed
 

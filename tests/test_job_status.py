@@ -136,13 +136,25 @@ class TestJobSummaries(AuditFixture):
         self.assertEqual(jobs["db_job"]["schedule"], "weekly")
         self.assertEqual(jobs["api_job"]["schedule"], "daily")
 
-    def test_next_rotation_comes_from_the_scheduler(self):
-        when = NOW + timedelta(hours=3)
+    def test_next_rotation_comes_from_the_scheduler_per_schedule(self):
+        weekly = NOW + timedelta(days=3)
+        daily = NOW + timedelta(hours=3)
         scheduler = MagicMock()
-        scheduler.next_rotation_time.return_value = when
+        scheduler.next_rotation_for.side_effect = {"weekly": weekly, "daily": daily}.get
+        engine = FakeEngine(JOBS, scheduler=scheduler)
+        with patch("secret_rotator.job_status.settings") as fake_settings:
+            fake_settings.get.return_value = "daily"
+            jobs = self.by_name(self.service(engine).job_summaries())
+        # db_job has its own "weekly" schedule; api_job follows the default.
+        self.assertEqual(jobs["db_job"]["next_rotation"], weekly.isoformat())
+        self.assertEqual(jobs["api_job"]["next_rotation"], daily.isoformat())
+
+    def test_next_rotation_is_none_when_the_scheduler_does_not_know_the_schedule(self):
+        scheduler = MagicMock()
+        scheduler.next_rotation_for.return_value = None
         engine = FakeEngine(JOBS, scheduler=scheduler)
         job = self.by_name(self.service(engine).job_summaries())["db_job"]
-        self.assertEqual(job["next_rotation"], when.isoformat())
+        self.assertIsNone(job["next_rotation"])
 
     def test_next_rotation_is_none_without_a_scheduler(self):
         job = self.by_name(self.service().job_summaries())["db_job"]

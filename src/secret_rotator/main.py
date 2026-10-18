@@ -47,7 +47,10 @@ class SecretRotationApp:
         # Set up scheduler with backup manager
         schedule_config = settings.get("rotation.schedule", "daily")
         self.scheduler = RotationScheduler(
-            rotation_function=self.engine.rotate_all_secrets, backup_manager=self.backup_manager
+            rotation_function=self.engine.rotate_all_secrets,
+            backup_manager=self.backup_manager,
+            rotate_jobs_function=self.engine.rotate_jobs,
+            jobs_provider=lambda: self.engine.rotation_jobs,
         )
         self.scheduler.setup_schedule(schedule_config)
 

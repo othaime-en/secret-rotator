@@ -10,9 +10,8 @@ dashboard can never disagree with the audit trail.
 
 Known limits, by design for now:
 
-* ``next_rotation`` is the *global* schedule's next tick: the scheduler
-  runs one schedule for every job, and does not read a per-job
-  ``schedule`` field. It becomes per-job when per-job scheduling lands.
+* ``next_rotation`` is when the job's own schedule (its ``schedule``
+  setting, else the global default) next fires in this process.
 * ``rotating`` only reflects rotations running in this process (see
   RotationEngine.active_job_names).
 """
@@ -101,18 +100,18 @@ class JobStatusService:
 
     # ---- jobs --------------------------------------------------------
 
-    def _next_rotation(self) -> Optional[str]:
+    def _next_rotation(self, schedule_name: str) -> Optional[str]:
+        """When the given schedule next fires, or None if unknown."""
         scheduler = getattr(self.engine, "scheduler", None)
         if scheduler is None:
             return None
-        next_time = scheduler.next_rotation_time()
+        next_time = scheduler.next_rotation_for(schedule_name)
         return next_time.isoformat() if next_time else None
 
     def job_summaries(self) -> List[Dict[str, Any]]:
         """One status record per configured job, in configuration order."""
         latest = self._latest_by_job(self._rotation_events())
         active = self.engine.active_job_names()
-        next_rotation = self._next_rotation()
         default_schedule = settings.get("rotation.schedule", "daily")
 
         summaries = []
@@ -135,18 +134,19 @@ class JobStatusService:
             if status == STATUS_FAILED:
                 last_error = (attempt.get("details") or {}).get("reason")
 
+            schedule_name = job.get("schedule") or default_schedule
             summaries.append(
                 {
                     "name": name,
                     "secret_id": job.get("secret_id"),
                     "provider": job.get("provider"),
                     "rotator": job.get("rotator"),
-                    "schedule": job.get("schedule") or default_schedule,
+                    "schedule": schedule_name,
                     "status": status,
                     "last_rotated": success["timestamp"] if success else None,
                     "last_attempt": attempt["timestamp"] if attempt else None,
                     "last_error": last_error,
-                    "next_rotation": next_rotation,
+                    "next_rotation": self._next_rotation(schedule_name),
                 }
             )
         return summaries
