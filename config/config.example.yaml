@@ -7,6 +7,16 @@
 #
 # DO NOT commit config.yaml with secrets to version control!
 
+# Changes made in the web dashboard (jobs, providers, rotators, settings) are
+# NOT written to this file. They are saved in a separate file and layered
+# over this one when the configuration is loaded, so this file can stay
+# read-only or in version control. Default location, in the data volume:
+#   data/dashboard-settings.json
+# Override with the SECRET_ROTATOR_DASHBOARD_SETTINGS environment variable
+# or:
+# dashboard:
+#   settings_file: "data/dashboard-settings.json"
+
 rotation:
   # Default schedule for every job that does not set its own `schedule`:
   #   daily | weekly | monthly | every_<N>_minutes | every_<N>_hours

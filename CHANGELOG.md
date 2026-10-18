@@ -122,6 +122,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   setting (or job), instead of silently scheduling nothing. Valid values:
   `daily`, `weekly`, `monthly`, `every_<N>_minutes`, `every_<N>_hours`.
 
+### Added (dashboard settings file)
+
+- The dashboard will save its own changes (jobs, providers, rotators and
+  settings) in `data/dashboard-settings.json` (override with
+  `SECRET_ROTATOR_DASHBOARD_SETTINGS` or `dashboard.settings_file`)
+  and layer them over `config.yaml`, which it never writes. This release
+  adds the storage and merge layer only; no dashboard page uses it yet.
+  Writes are atomic, keep a `.bak`, use file mode 0600, and never lose
+  concurrent changes. An unreadable file is ignored and reported instead
+  of stopping startup. Queue workers re-read the file before each
+  rotation sweep.
+- `Settings.save()` now writes only `config.yaml`'s own contents, never
+  the dashboard's changes merged in.
+
 ### Fixed
 
 - `pyproject.toml` package-data now includes the web templates and
