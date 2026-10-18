@@ -333,6 +333,11 @@ class OverridesStore:
             return SOURCE_DASHBOARD if "definition" in entry else None
         return SOURCE_MODIFIED
 
+    def names(self, kind: str) -> List[str]:
+        """Names of every item the dashboard has an entry for."""
+        self._check_kind(kind)
+        return list(self._data[kind])
+
     def has_entry(self, kind: str, name: str) -> bool:
         """Whether the dashboard has changed (or created) this item, so there
         is something to reset."""

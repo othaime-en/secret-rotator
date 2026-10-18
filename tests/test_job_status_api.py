@@ -107,7 +107,7 @@ class TestStatusApi(unittest.TestCase):
             set(data),
             {"summary", "attention", "jobs", "recent_activity", "verification"},
         )
-        self.assertEqual(data["summary"], {"jobs": 1, "backups": 7, "rotating": 0})
+        self.assertEqual(data["summary"], {"jobs": 1, "backups": 7, "rotating": 0, "paused": 0})
         self.assertEqual(data["attention"][0]["job"], "db_job")
         self.assertEqual(data["recent_activity"][0]["message"], "db_job failed")
         self.assertEqual(data["verification"]["status"], "unknown")

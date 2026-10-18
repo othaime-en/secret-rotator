@@ -154,10 +154,12 @@ class TestJobPage(unittest.TestCase):
         self.event(3)
         self.assertNotIn("The last attempt failed", self.page())
 
-    def test_edit_pause_and_delete_are_not_offered_yet(self):
+    def test_edit_pause_and_delete_controls_are_offered(self):
         html = self.page()
-        for word in (">Edit<", ">Pause<", "Delete job"):
-            self.assertNotIn(word, html)
+        self.assertIn('data-action="edit-job">Edit</button>', html)
+        self.assertRegex(html, r'data-action="pause-job" data-job="db_job">Pause</button>')
+        self.assertIn('data-open="m-delete">Delete job</button>', html)
+        self.assertNotIn('data-action="resume-job"', html)
 
     # ---- summary band ----
 

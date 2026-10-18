@@ -82,3 +82,27 @@ td .reason {
         grid-template-columns: 1fr 1fr;
     }
 }
+
+/* ---- hidden jobs (Jobs page) ---- */
+.hidden-jobs {
+    margin-top: 44px;
+}
+
+.hidden-jobs p {
+    font-size: 13px;
+    margin: 4px 0 12px;
+}
+
+.hidden-jobs ul {
+    list-style: none;
+    padding: 0;
+}
+
+.hidden-jobs li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--rule2);
+}

@@ -155,6 +155,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `paused` and `source` (config, modified or dashboard).
 - `RotationEngine.replace_rotation_jobs()` swaps the job list as a unit.
 
+### Added (job editor)
+
+- The dashboard can now manage jobs. **New job** on the Jobs page and
+  **Edit** on a job's page open a form (provider, rotator and schedule are
+  dropdowns of what exists; a job's name cannot change); the job page also
+  has **Pause / Resume**, **Delete job** and, for a `config.yaml` job that
+  was changed in the dashboard, **Reset to config.yaml**. Jobs deleted
+  from `config.yaml` are only hidden, and appear under **Hidden jobs** with
+  a **Restore** button. Validation messages show beside the field they
+  concern; a change made elsewhere since the page loaded is reported
+  instead of overwritten. Paused jobs show a Paused badge, are left out of
+  "Rotate all" and its count, and show no next run. The job page says
+  whether a job comes from `config.yaml`, was changed in the dashboard, or
+  was added there.
+
 ### Fixed
 
 - `pyproject.toml` package-data now includes the web templates and

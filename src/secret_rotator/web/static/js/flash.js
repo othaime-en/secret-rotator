@@ -13,8 +13,31 @@
 
     var KEY = "sr-flash";
 
+    // Show a message in the page's notice area: #notice if there is one,
+    // else the rotation banner. Returns false when the page has neither.
+    function show(message, failed) {
+        var notice = document.getElementById("notice");
+        var text = document.getElementById("notice-text");
+        if (!notice) {
+            notice = document.getElementById("rotate-banner");
+            text = document.getElementById("rotate-banner-text");
+            var bar = notice ? notice.querySelector(".bar") : null;
+            if (bar) {
+                bar.hidden = true;
+            }
+        }
+        if (!notice || !text) {
+            return false;
+        }
+        notice.hidden = false;
+        notice.classList.toggle("is-error", !!failed);
+        text.textContent = message;
+        return true;
+    }
+
     window.SR = window.SR || {};
     window.SR.flash = {
+        show: show,
         stash: function (message, failed) {
             try {
                 window.sessionStorage.setItem(KEY, JSON.stringify({ message: message, failed: !!failed }));

@@ -192,7 +192,7 @@ class TestOverview(AuditFixture):
     def test_summary_counts(self):
         engine = FakeEngine(JOBS, active={"api_job"}, backups=48)
         summary = self.overview(engine)["summary"]
-        self.assertEqual(summary, {"jobs": 2, "backups": 48, "rotating": 1})
+        self.assertEqual(summary, {"jobs": 2, "backups": 48, "rotating": 1, "paused": 0})
 
     def test_failed_jobs_need_attention(self):
         self.write(ts(2), job="db_job", success=False, reason="timeout")

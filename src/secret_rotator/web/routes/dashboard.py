@@ -86,7 +86,17 @@ def jobs():
     """Rotation jobs."""
     job_list = current_app.job_status.job_summaries()
     rotating = sum(1 for job in job_list if job["status"] == "rotating")
-    return render_page("jobs.html", "jobs", "Jobs", jobs=job_list, rotating=rotating)
+    options = current_app.job_admin.options()
+    return render_page(
+        "jobs.html",
+        "jobs",
+        "Jobs",
+        jobs=job_list,
+        rotating=rotating,
+        active_count=sum(1 for job in job_list if not job["paused"]),
+        options=options,
+        hidden_jobs=options["hidden"],
+    )
 
 
 @bp.app_template_filter("duration_label")
@@ -121,7 +131,14 @@ def job_detail(job_id):
             404,
         )
     rotating = 1 if detail["job"]["status"] == "rotating" else 0
-    return render_page("job.html", "jobs", job_id, detail=detail, rotating=rotating)
+    return render_page(
+        "job.html",
+        "jobs",
+        job_id,
+        detail=detail,
+        rotating=rotating,
+        options=current_app.job_admin.options(),
+    )
 
 
 BACKUPS_PER_PAGE = 25

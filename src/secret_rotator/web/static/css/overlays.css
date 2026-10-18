@@ -54,6 +54,13 @@
     animation: slide 0.2s ease-out;
 }
 
+.drawer form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
 .drawer .card-b {
     flex: 1;
     overflow: auto;

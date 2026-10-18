@@ -13,7 +13,7 @@
     <div>
         <h1>Overview</h1>
         <p>
-            {{ plural(summary.jobs, "job") }} and {{ plural(summary.backups, "backup") }}.
+            {{ plural(summary.jobs, "job") }}{% if summary.paused %} ({{ summary.paused }} paused){% endif %} and {{ plural(summary.backups, "backup") }}.
             {% if not verification.last_verification %}
             No backup verification has run yet.
             {% elif verification.failed == 0 %}
@@ -23,7 +23,7 @@
             {% endif %}
         </p>
     </div>
-    <button type="button" class="btn primary" data-open="m-rotate"{% if not summary.jobs or summary.rotating %} disabled{% endif %}>Rotate all</button>
+    <button type="button" class="btn primary" data-open="m-rotate"{% if summary.jobs == summary.paused or summary.rotating %} disabled{% endif %}>Rotate all</button>
 </div>
 
 {% with rotating = summary.rotating %}{% include "partials/rotate_banner.html" %}{% endwith %}
@@ -70,7 +70,7 @@
                     <td>{{ job.schedule|schedule_label }}</td>
                     <td>{{ last_rotated(job) }}</td>
                     <td>{{ next_rotation(job) }}</td>
-                    <td>{{ status_badge(job.status) }}</td>
+                    <td>{{ status_badge(job.status, job.paused) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -120,7 +120,7 @@
 {% endblock %}
 
 {% block overlays %}
-{% with job_count = data.summary.jobs %}{% include "partials/rotate_modal.html" %}{% endwith %}
+{% with job_count = data.summary.jobs - data.summary.paused %}{% include "partials/rotate_modal.html" %}{% endwith %}
 {% endblock %}
 
 {% block extra_js %}

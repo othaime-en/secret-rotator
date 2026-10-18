@@ -156,12 +156,14 @@ class TestJobsPage(unittest.TestCase):
         self.assertNotIn('type="search"', html)
         self.assertRegex(html, r'data-open="m-rotate" disabled')
 
-    def test_new_job_button_is_not_offered_until_it_works(self):
-        self.assertNotIn("New job", self.page())
+    def test_new_job_button_opens_the_editor(self):
+        html = self.page()
+        self.assertIn('data-action="new-job">New job</button>', html)
+        self.assertIn('id="d-job"', html)
 
     def test_loads_scripts_and_has_no_inline_handlers(self):
         html = self.page()
-        for name in ("http.js", "overlays.js", "table-filter.js", "rotate.js"):
+        for name in ("http.js", "overlays.js", "table-filter.js", "rotate.js", "job-admin.js"):
             self.assertIn(f"js/{name}", html)
         self.assertNotRegex(html, r"\son(click|load|error|input)=")
 

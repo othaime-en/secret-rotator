@@ -25,6 +25,7 @@ from secret_rotator.audit_log import audit_log as default_audit_log
 from secret_rotator.config.overrides import (
     SOURCE_CONFIG,
     SOURCE_DASHBOARD,
+    SOURCE_REMOVED,
     OverridesError,
     validate_name,
 )
@@ -77,6 +78,17 @@ class JobAdminService:
                 return job
         raise JobNotFoundError(name)
 
+    def hidden_jobs(self) -> List[str]:
+        """Jobs defined in config.yaml that were deleted in the dashboard
+        (hidden, not removed from config.yaml), so they can be restored."""
+        self.settings.reload_overrides()
+        store = self.settings.overrides
+        return sorted(
+            name
+            for name in store.names("jobs")
+            if store.item_source("jobs", name) == SOURCE_REMOVED
+        )
+
     def options(self) -> Dict[str, Any]:
         """What the job form can offer: providers, rotators and schedules."""
         return {
@@ -84,6 +96,7 @@ class JobAdminService:
             "rotators": sorted(self.engine.rotators),
             "schedules": list(SCHEDULE_CHOICES),
             "default_schedule": self.settings.get("rotation.schedule", "daily"),
+            "hidden": self.hidden_jobs(),
             "revision": self.revision,
         }
 
@@ -215,7 +228,14 @@ class JobAdminService:
         canonical = self._validate(definition, name, creating=False)
 
         tracked = ("provider", "rotator", "secret_id", "schedule", "notification")
-        changed = [f for f in tracked if current.get(f) != canonical.get(f)]
+
+        def same(field):
+            # An absent notification setting and "off" mean the same thing.
+            if field == "notification":
+                return bool(current.get(field)) == bool(canonical.get(field))
+            return current.get(field) == canonical.get(field)
+
+        changed = [f for f in tracked if not same(f)]
         if not changed:
             return []
 

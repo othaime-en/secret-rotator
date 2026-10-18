@@ -392,6 +392,43 @@ class TestUpdate(Fixture):
         )
 
 
+class TestHiddenJobsAndNormalisation(Fixture):
+    def test_hidden_jobs_lists_deleted_config_jobs_only(self):
+        self.assertEqual(self.admin.hidden_jobs(), [])
+        self.admin.delete("db", "alice")
+        self.admin.create(self.new_job(), "alice")
+        self.admin.delete("new", "alice")  # a dashboard job is gone, not hidden
+        self.assertEqual(self.admin.hidden_jobs(), ["db"])
+        self.assertEqual(self.admin.options()["hidden"], ["db"])
+        self.admin.reset("db", "alice")
+        self.assertEqual(self.admin.hidden_jobs(), [])
+
+    def test_unset_and_off_notifications_are_the_same_thing(self):
+        same = {"provider": "file_storage", "rotator": "password_gen", "secret_id": "api_key"}
+        self.assertEqual(self.admin.update("api", {**same, "notification": False}, "alice"), [])
+        self.assertFalse(self.overrides_path.exists())
+        self.assertEqual(
+            self.admin.update("api", {**same, "notification": True}, "alice"), ["notification"]
+        )
+        self.assertEqual(
+            self.admin.update("api", {**same, "notification": False}, "alice"), ["notification"]
+        )
+
+    def test_detail_exposes_what_the_editor_needs(self):
+        status = JobStatusService(
+            self.engine,
+            audit=self.audit,
+            source_of=lambda n: self.settings.overrides.item_source("jobs", n),
+        )
+        self.admin.set_paused("db", True, "alice")
+        config = status.job_detail("db")["config"]
+        self.assertEqual(config["own_schedule"], "weekly")
+        self.assertIsNone(config["notification"])
+        self.assertTrue(config["paused"])
+        self.assertEqual(config["source"], "modified")
+        self.assertIsNone(status.job_detail("api")["config"]["own_schedule"])
+
+
 class TestDelete(Fixture):
     def test_deleting_a_dashboard_job(self):
         self.admin.create(self.new_job(schedule="monthly"), "alice")

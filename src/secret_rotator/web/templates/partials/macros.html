@@ -14,7 +14,9 @@
 {{ count }} {{ singular if count == 1 else (plural_form or singular ~ "s") }}
 {%- endmacro %}
 
-{% macro status_badge(status) -%}
+{% macro status_badge(status, paused=False) -%}
+{%- if paused -%}<span class="badge" title="Paused: scheduled rotation is off">Paused</span>
+{%- else -%}
 {%- set kinds = {
     "current": ("ok", "Current"),
     "failed": ("err", "Failed"),
@@ -23,6 +25,7 @@
 } -%}
 {%- set kind = kinds.get(status, ("", status)) -%}
 <span class="badge {{ kind[0] }}">{{ kind[1] }}</span>
+{%- endif -%}
 {%- endmacro %}
 
 {# "Last rotated" table cell for a job status record. #}

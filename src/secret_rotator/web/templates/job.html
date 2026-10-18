@@ -16,8 +16,15 @@
     <div class="row" style="gap:14px">
         <h1>{{ job.name }}</h1>
         {{ status_badge(job.status) }}
+        {% if job.paused %}<span class="badge" title="Paused: scheduled rotation is off">Paused</span>{% endif %}
     </div>
     <div class="row">
+        <button type="button" class="btn" data-action="edit-job">Edit</button>
+        {% if job.paused %}
+        <button type="button" class="btn" data-action="resume-job" data-job="{{ job.name }}">Resume</button>
+        {% else %}
+        <button type="button" class="btn" data-action="pause-job" data-job="{{ job.name }}">Pause</button>
+        {% endif %}
         <button type="button" class="btn primary" data-action="rotate-job" data-job="{{ job.name }}"{% if job.status == "rotating" %} disabled{% endif %}>Rotate now</button>
     </div>
 </div>
@@ -33,7 +40,7 @@
 {% endif %}
 
 <dl class="band">
-    <div><dt>Next run</dt><dd>{% if job.next_rotation %}{{ when(job.next_rotation, "datetime") }}{% else %}<span class="muted">Not scheduled</span>{% endif %}</dd></div>
+    <div><dt>Next run</dt><dd>{% if job.paused %}<span class="muted">Paused</span>{% elif job.next_rotation %}{{ when(job.next_rotation, "datetime") }}{% else %}<span class="muted">Not scheduled</span>{% endif %}</dd></div>
     <div><dt>Last rotated</dt><dd>{% if job.last_rotated %}{{ when(job.last_rotated, "datetime") }}{% else %}Never{% endif %}</dd></div>
     <div><dt>Success rate</dt><dd{% if stats.runs %} title="{{ stats.succeeded }} of {{ stats.runs }} runs succeeded"{% endif %}>{% if stats.success_rate is none %}<span class="muted">—</span>{% else %}{{ "%g"|format(stats.success_rate) }}%{% endif %}</dd></div>
     <div><dt>Backups</dt><dd>{{ stats.backups }}</dd></div>
@@ -116,6 +123,12 @@
                 <dt>Rotator</dt><dd>{{ config.rotator_name }}</dd>
                 <dt>Schedule</dt><dd>{{ config.schedule|schedule_label }}</dd>
                 <dt>Notifications</dt><dd>{{ "On" if config.notifications else "Off" }}</dd>
+                <dt>Source</dt>
+                <dd>
+                    {% if config.source == "dashboard" %}Added in the dashboard
+                    {% elif config.source == "modified" %}config.yaml, changed in the dashboard
+                    {% else %}config.yaml{% endif %}
+                </dd>
             </dl>
         </div>
 
@@ -136,15 +149,38 @@
             <p class="muted" style="font-size:13px">{{ config.rotator.type }} rotator. No settings to show.</p>
             {% endif %}
         </div>
+
+        <div class="sec">
+            {% if config.source == "modified" %}
+            <button type="button" class="btn" data-open="m-reset">Reset to config.yaml</button>
+            <p class="muted" style="margin-top:8px;font-size:13px">Drops the changes made in the dashboard.</p>
+            {% endif %}
+            <div style="margin-top:{% if config.source == 'modified' %}16px{% else %}0{% endif %}">
+                <button type="button" class="btn danger" data-open="m-delete">Delete job</button>
+                <p class="muted" style="margin-top:8px;font-size:13px">Existing backups are kept.</p>
+            </div>
+        </div>
     </div>
 </div>
+<script type="application/json" id="job-data">{{ {
+    "name": config.name,
+    "provider": config.provider,
+    "rotator": config.rotator_name,
+    "secret_id": config.secret_id,
+    "schedule": config.own_schedule,
+    "notification": config.notification,
+    "source": config.source,
+}|tojson }}</script>
 {% endblock %}
 
 {% block overlays %}
 {% include "partials/restore_modal.html" %}
+{% include "partials/job_drawer.html" %}
+{% include "partials/job_confirm_modals.html" %}
 {% endblock %}
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/rotate.js') }}"></script>
 <script src="{{ url_for('static', filename='js/backups.js') }}"></script>
+<script src="{{ url_for('static', filename='js/job-admin.js') }}"></script>
 {% endblock %}
