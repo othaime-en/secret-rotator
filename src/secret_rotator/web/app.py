@@ -87,6 +87,10 @@ def create_app(rotation_engine, config=None):
     )
     app.job_admin = JobAdminService(rotation_engine, app_settings)
 
+    from secret_rotator.component_admin import ComponentAdminService
+
+    app.component_admin = ComponentAdminService(rotation_engine, app_settings)
+
     from secret_rotator.backup_health import BackupHealthService
 
     app.backup_health = BackupHealthService(rotation_engine)

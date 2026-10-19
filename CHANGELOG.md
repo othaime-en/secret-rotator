@@ -170,6 +170,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whether a job comes from `config.yaml`, was changed in the dashboard, or
   was added there.
 
+### Added (provider and rotator management API)
+
+- Providers and rotators can be added, changed, deleted, reset and tried
+  out through the API: `GET` / `POST /api/providers` and `/api/rotators`,
+  `PUT` / `DELETE /api/<kind>/<name>`, `POST /api/<kind>/<name>/reset`,
+  `POST /api/providers/<name>/test` (can the provider be used?) and
+  `POST /api/rotators/<name>/sample` or `/api/rotators/sample` (an example
+  of what the settings generate). Changes are saved in the dashboard's
+  settings file (never `config.yaml`) and applied to the running engine
+  immediately.
+- The dashboard offers what the daemon can actually build: the file
+  provider and the password, API key and JWT secret rotators. Only the
+  fields listed for each type are accepted, so no credentials or other
+  data can be stored; a rotator's settings are trial-run before saving, so
+  combinations that cannot work are refused up front; a file provider's
+  path must be a `.json` file inside the data directory (configurable with
+  `dashboard.provider_root`) and cannot be the master key, backups, audit
+  log or the dashboard's own settings file. A name or type cannot change,
+  and a provider or rotator that jobs use cannot be deleted.
+- `bootstrap.build_provider()` and `build_rotator()` now build one
+  component, shared by startup and the dashboard.
+
 ### Fixed
 
 - `pyproject.toml` package-data now includes the web templates and

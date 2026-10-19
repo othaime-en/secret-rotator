@@ -14,6 +14,12 @@ from flask import Blueprint, jsonify, request, current_app, session
 from urllib.parse import unquote
 from secret_rotator.utils.logger import logger
 from secret_rotator.audit_log import audit_log
+from secret_rotator.component_admin import (
+    ComponentExistsError,
+    ComponentInUseError,
+    ComponentNotFoundError,
+    ComponentValidationError,
+)
 from secret_rotator.config.overrides import ConflictError, OverridesError
 from secret_rotator.job_admin import JobExistsError, JobNotFoundError, JobValidationError
 from secret_rotator.rotation_engine import RotationInProgressError
@@ -937,3 +943,166 @@ def restore():
             details={"backup_file": backup_file, "reason": str(e)},
         )
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ---- providers and rotators ---------------------------------------------------
+#
+# The two kinds have identical management endpoints, so they are registered
+# from one definition below:
+#
+#   GET    /api/<kind>                      list, with the type descriptions
+#                                           the forms are built from
+#   POST   /api/<kind>                      create
+#   PUT    /api/<kind>/<name>               change settings (not name/type)
+#   DELETE /api/<kind>/<name>               delete, or hide a config.yaml one
+#                                           (409 while jobs use it)
+#   POST   /api/<kind>/<name>/reset         drop dashboard changes
+#   POST   /api/providers/<name>/test       check a provider can be used
+#   POST   /api/rotators/<name>/sample      an example of a saved rotator's output
+#   POST   /api/rotators/sample             ... or of unsaved form settings
+#
+# Changes are saved in the dashboard's settings file (never config.yaml) and
+# applied to the running engine immediately. Only the fields listed for each
+# type in component_catalog.py are accepted. An optional ``revision`` in the
+# body gives conflict detection, as for jobs (409 with ``conflict: true``).
+
+
+def _component_admin(action, kind):
+    """Run a provider/rotator action and translate its failures to HTTP."""
+    noun = kind[:-1]
+    try:
+        return action()
+    except ComponentValidationError as e:
+        return jsonify({"error": f"Invalid {noun}", "fields": e.fields}), 400
+    except ComponentNotFoundError:
+        return jsonify({"error": f"{noun.capitalize()} not found"}), 404
+    except ComponentExistsError as e:
+        return jsonify({"error": str(e), "fields": {"name": "already exists"}}), 409
+    except ComponentInUseError as e:
+        return jsonify({"error": str(e), "jobs": e.jobs}), 409
+    except ConflictError as e:
+        return jsonify({"error": str(e), "conflict": True}), 409
+    except OverridesError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+def _item_response(kind, name, status=200, **extra):
+    service = current_app.component_admin
+    item = service.describe(kind, name, service.effective(kind).get(name))
+    return jsonify({"item": item, "revision": service.revision, **extra}), status
+
+
+def _register_component_routes(kind):
+    write_limit = limiter.limit("30 per minute")
+
+    def listing():
+        return jsonify(current_app.component_admin.listing(kind))
+
+    def create():
+        body = _json_body()
+        if body is None:
+            return jsonify({"error": "Send the definition as a JSON object"}), 400
+        actor = session.get("username", "unknown")
+
+        def action():
+            name = current_app.component_admin.create(
+                kind, _definition_from(body), actor, revision=_revision_from(body)
+            )
+            return _item_response(kind, name, 201)
+
+        return _component_admin(action, kind)
+
+    def update(name):
+        body = _json_body()
+        if body is None:
+            return jsonify({"error": "Send the definition as a JSON object"}), 400
+        actor = session.get("username", "unknown")
+
+        def action():
+            changed = current_app.component_admin.update(
+                kind, name, _definition_from(body), actor, revision=_revision_from(body)
+            )
+            return _item_response(kind, name, 200, changed=changed)
+
+        return _component_admin(action, kind)
+
+    def delete(name):
+        body = _json_body()
+        actor = session.get("username", "unknown")
+
+        def action():
+            service = current_app.component_admin
+            source = service.delete(kind, name, actor, revision=_revision_from(body))
+            return jsonify({"deleted": True, "source": source, "revision": service.revision}), 200
+
+        return _component_admin(action, kind)
+
+    def reset(name):
+        body = _json_body()
+        actor = session.get("username", "unknown")
+
+        def action():
+            service = current_app.component_admin
+            source = service.reset(kind, name, actor, revision=_revision_from(body))
+            current = service.effective(kind)
+            item = service.describe(kind, name, current[name]) if name in current else None
+            return (
+                jsonify(
+                    {"reset": True, "source": source, "item": item, "revision": service.revision}
+                ),
+                200,
+            )
+
+        return _component_admin(action, kind)
+
+    bp.add_url_rule(f"/{kind}", f"{kind}_list", limiter.limit("120 per minute")(listing))
+    bp.add_url_rule(f"/{kind}", f"{kind}_create", write_limit(create), methods=["POST"])
+    bp.add_url_rule(f"/{kind}/<path:name>", f"{kind}_update", write_limit(update), methods=["PUT"])
+    bp.add_url_rule(
+        f"/{kind}/<path:name>", f"{kind}_delete", write_limit(delete), methods=["DELETE"]
+    )
+    bp.add_url_rule(
+        f"/{kind}/<path:name>/reset", f"{kind}_reset", write_limit(reset), methods=["POST"]
+    )
+
+
+_register_component_routes("providers")
+_register_component_routes("rotators")
+
+
+@bp.route("/providers/<path:name>/test", methods=["POST"])
+@limiter.limit("10 per minute")
+def test_provider(name):
+    """Check that a saved provider can be reached and used. Returns
+    ``{"ok": bool, "message": str}``; 404 for an unknown provider."""
+    return _component_admin(
+        lambda: jsonify(current_app.component_admin.test_provider(name)), "providers"
+    )
+
+
+@bp.route("/rotators/sample", methods=["POST"])
+@limiter.limit("30 per minute")
+def sample_unsaved_rotator():
+    """An example of what a rotator with the given (unsaved) settings would
+    generate, e.g. for the form's preview. The example is random, is never
+    stored or logged, and exists only to show the shape of the values.
+    Body: the same fields as creating a rotator."""
+    body = _json_body()
+    if body is None:
+        return jsonify({"error": "Send the settings as a JSON object"}), 400
+    return _component_admin(
+        lambda: jsonify(
+            current_app.component_admin.sample_rotator(definition=_definition_from(body))
+        ),
+        "rotators",
+    )
+
+
+@bp.route("/rotators/<path:name>/sample", methods=["POST"])
+@limiter.limit("30 per minute")
+def sample_saved_rotator(name):
+    """An example of what a saved rotator generates (see POST
+    /api/rotators/sample). 404 for an unknown rotator."""
+    return _component_admin(
+        lambda: jsonify(current_app.component_admin.sample_rotator(name=name)), "rotators"
+    )
