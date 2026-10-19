@@ -206,16 +206,35 @@ def activity():
     )
 
 
+_COMPONENT_PAGES = {
+    "providers": ("Providers", "Where secrets are stored and written back.", "provider"),
+    "rotators": ("Rotators", "How each new secret value is generated.", "rotator"),
+}
+
+
+def _components_page(kind):
+    title, blurb, noun = _COMPONENT_PAGES[kind]
+    return render_page(
+        "components.html",
+        kind,
+        title,
+        kind=kind,
+        noun=noun,
+        page_blurb=blurb,
+        listing=current_app.component_admin.listing(kind),
+    )
+
+
 @bp.route("/providers")
 def providers():
-    """Providers."""
-    return _stub("providers", "Providers", "Where secrets are stored and written back.")
+    """Providers: where secrets are stored; add, edit, test, delete."""
+    return _components_page("providers")
 
 
 @bp.route("/rotators")
 def rotators():
-    """Rotators."""
-    return _stub("rotators", "Rotators", "How each new secret value is generated.")
+    """Rotators: how new secret values are generated; add, edit, preview, delete."""
+    return _components_page("rotators")
 
 
 @bp.route("/settings")

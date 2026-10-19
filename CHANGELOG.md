@@ -192,6 +192,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `bootstrap.build_provider()` and `build_rotator()` now build one
   component, shared by startup and the dashboard.
 
+### Added (providers and rotators pages)
+
+- New **Providers** (`/providers`) and **Rotators** (`/rotators`) pages.
+  Each lists its items with type, source (config.yaml, changed or added
+  in the dashboard), display-safe settings, availability and how many jobs
+  use it. **Add** and **Edit** open a form built from the server's own type
+  descriptions (number fields with their limits, switches, choices, text);
+  **Test** checks that a provider can be used; **Sample** (and **Preview**
+  in the rotator form) shows a random example of what the settings
+  generate; **Delete** is blocked while jobs use the item and only hides a
+  `config.yaml` item; **Reset to config.yaml** and **Restore** bring such
+  items back. Validation messages appear beside the field concerned.
+
 ### Fixed
 
 - `pyproject.toml` package-data now includes the web templates and
