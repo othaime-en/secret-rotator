@@ -16,6 +16,12 @@
 # or:
 # dashboard:
 #   settings_file: "data/dashboard-settings.json"
+#
+# Credentials entered in the dashboard (the S3 access keys for remote
+# backups, the Redis URL) are stored in that file encrypted, with a key in
+# data/dashboard-settings.key (mode 0600, separate from the master key).
+# Back it up with the rest of the data directory; if it is lost, those
+# values are ignored and have to be entered again.
 
 rotation:
   # Default schedule for every job that does not set its own `schedule`:

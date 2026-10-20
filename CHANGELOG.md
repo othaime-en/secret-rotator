@@ -205,6 +205,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `config.yaml` item; **Reset to config.yaml** and **Restore** bring such
   items back. Validation messages appear beside the field concerned.
 
+### Added (encrypted secret settings)
+
+- The dashboard settings file can now hold credentials safely: the S3
+  access keys for remote backups
+  (`backup.remote_backup.access_key_id` / `secret_access_key`) and
+  `distributed.redis_url` are stored only encrypted (Fernet), with a key in
+  `data/dashboard-settings.key` (mode 0600, created on first use and
+  deliberately separate from the master key, so master key rotation cannot
+  make them undecryptable). The rest of the program reads them decrypted
+  through `settings.get()` as if they were in `config.yaml`, which never
+  receives them. They are never listed, returned or logged. A missing or
+  wrong key, a tampered value, or a credential found as plain text in the
+  file makes that one setting ignored with a warning, never an error.
+  Nothing in the dashboard uses this yet; the Settings page will.
+
 ### Fixed
 
 - `pyproject.toml` package-data now includes the web templates and

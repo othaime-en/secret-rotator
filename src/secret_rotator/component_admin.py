@@ -150,6 +150,7 @@ class ComponentAdminService:
             Path(self.settings.get("security.encryption.master_key_file", "data/.master.key")),
             Path(self.settings.get("backup.storage_path", "data/backup")),
             self.settings.overrides.path,
+            self.settings.overrides.key_path,
         ]
         paths.append(
             self.settings.overrides.path.with_name(self.settings.overrides.path.name + ".bak")

@@ -43,6 +43,27 @@ Safety properties:
   alone applies), ``load_error`` says why, and the first write moves the
   broken file aside instead of overwriting it.
 * Item definitions and setting values are never written to logs.
+* Settings that hold credentials (SECRET_SETTING_KEYS) are stored only
+  encrypted, with a key of their own (see "Secret settings" below).
+
+Secret settings
+---------------
+A few settings are credentials: the S3 access keys for remote backups and
+the Redis URL (which usually carries a password). They are written to the
+file as ``{"__encrypted__": "<Fernet token>"}``, never as plain text, and
+the configuration seen by the rest of the program (``apply()``) contains
+them decrypted, exactly as if they had been written in config.yaml.
+
+The key is a Fernet key in its own file next to the settings file
+(``dashboard-settings.key``, mode 0600), created the first time a secret
+is saved. It is deliberately not the master key: rotating the master key
+re-encrypts the secrets and backups it knows about, and would leave these
+values undecryptable. If the key is lost, the encrypted values are ignored
+with a warning (they can be entered again); nothing else is affected. As
+with the master key, protecting the data directory protects both.
+
+A secret setting found in the file as plain text (e.g. hand-edited) is
+ignored with a warning rather than used.
 """
 
 import copy
@@ -56,7 +77,9 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional
+
+from cryptography.fernet import Fernet, InvalidToken
 
 try:  # POSIX only; Windows falls back to the in-process lock alone.
     import fcntl
@@ -70,6 +93,17 @@ logger = logging.getLogger("secret-rotator.config.overrides")
 
 FORMAT_VERSION = 1
 KINDS = ("jobs", "providers", "rotators")
+
+# Settings that are credentials: stored encrypted, never returned in clear.
+SECRET_SETTING_KEYS: FrozenSet[str] = frozenset(
+    {
+        "backup.remote_backup.access_key_id",
+        "backup.remote_backup.secret_access_key",
+        "distributed.redis_url",
+    }
+)
+WRAPPER_KEY = "__encrypted__"
+MAX_SECRET_LENGTH = 4096
 
 MAX_NAME_LENGTH = 100
 MAX_DEFINITION_BYTES = 20_000
@@ -138,15 +172,27 @@ def _empty() -> Dict[str, Any]:
 class OverridesStore:
     """Reads, merges and atomically writes the dashboard settings file."""
 
-    def __init__(self, path: Path, base_provider: Callable[[], Dict[str, Any]]):
+    def __init__(
+        self,
+        path: Path,
+        base_provider: Callable[[], Dict[str, Any]],
+        secret_keys: FrozenSet[str] = SECRET_SETTING_KEYS,
+        key_path: Optional[Path] = None,
+    ):
         """
         Args:
             path: where the JSON file lives (it need not exist yet).
             base_provider: returns config.yaml's parsed contents; needed to
                 tell "hide a config.yaml item" from "delete a dashboard one".
+            secret_keys: dotted setting keys that are stored encrypted.
+            key_path: the encryption key file; by default
+                ``dashboard-settings.key`` beside ``path``.
         """
         self.path = Path(path)
         self._base_provider = base_provider
+        self.secret_keys = frozenset(secret_keys)
+        self._key_path = Path(key_path) if key_path else None
+        self._warned_key_permissions = False
         self._thread_lock = threading.RLock()
         self._data: Dict[str, Any] = _empty()
         self.load_error: Optional[str] = None
@@ -233,6 +279,18 @@ class OverridesStore:
                 except OverridesError as e:
                     warnings.append(f"setting {key!r}: {e}; ignored")
                     continue
+                wrapped = self._is_wrapper(value)
+                if key in self.secret_keys and not wrapped:
+                    warnings.append(
+                        f"setting {key!r} is a credential but is stored as plain text; ignored "
+                        "(set it again in the dashboard to store it encrypted)"
+                    )
+                    continue
+                if key not in self.secret_keys and wrapped:
+                    warnings.append(
+                        f"setting {key!r} holds an encrypted value but is not a secret setting; ignored"
+                    )
+                    continue
                 clean["settings"][key] = value
         return clean, None, warnings
 
@@ -268,6 +326,10 @@ class OverridesStore:
                 effective[kind] = self._merged_named(effective.get(kind), data[kind])
 
         for key, value in data["settings"].items():
+            if key in self.secret_keys:
+                value = self._decrypt_setting(key, value)
+                if value is None:
+                    continue  # undecryptable: config.yaml's value (if any) applies
             node = effective
             parts = key.split(".")
             for part in parts[:-1]:
@@ -529,11 +591,17 @@ class OverridesStore:
     def set_setting(
         self, key: str, value: Any, actor: str, expected_revision: Optional[int] = None
     ) -> int:
-        """Override one setting by dotted key."""
+        """Override one setting by dotted key. Credentials (SECRET_SETTING_KEYS)
+        are encrypted before they are written."""
         validate_setting_key(key)
-        if _json_size(value, "value") > MAX_SETTING_BYTES:
-            raise OverridesError(f"value is too large (over {MAX_SETTING_BYTES} bytes)")
-        stored = copy.deepcopy(value)
+        if key in self.secret_keys:
+            stored = self._encrypt_setting(value)
+        else:
+            if self._is_wrapper(value):
+                raise OverridesError("that value is reserved for encrypted settings")
+            if _json_size(value, "value") > MAX_SETTING_BYTES:
+                raise OverridesError(f"value is too large (over {MAX_SETTING_BYTES} bytes)")
+            stored = copy.deepcopy(value)
         return self._change(
             actor,
             f"setting {key} changed",
@@ -557,5 +625,118 @@ class OverridesStore:
             raise OverridesError(f"unknown kind {kind!r}; expected one of {', '.join(KINDS)}")
 
     def overridden_settings(self) -> Dict[str, Any]:
-        """A copy of the setting overrides (for the Settings page)."""
-        return copy.deepcopy(self._data["settings"])
+        """A copy of the setting overrides (for the Settings page). Secret
+        settings are left out: see secrets_set()."""
+        return {
+            key: copy.deepcopy(value)
+            for key, value in self._data["settings"].items()
+            if key not in self.secret_keys
+        }
+
+    def secrets_set(self) -> List[str]:
+        """Secret settings that have a value stored here and can be
+        decrypted. The values themselves are never returned."""
+        return sorted(
+            key
+            for key, value in self._data["settings"].items()
+            if key in self.secret_keys and self._decrypt_setting(key, value, quiet=True) is not None
+        )
+
+    # ---- secret settings ---------------------------------------------------
+
+    @staticmethod
+    def _is_wrapper(value: Any) -> bool:
+        return (
+            isinstance(value, dict)
+            and set(value) == {WRAPPER_KEY}
+            and isinstance(value[WRAPPER_KEY], str)
+        )
+
+    @property
+    def key_path(self) -> Path:
+        """Where the encryption key for secret settings lives."""
+        return self._key_path or self.path.with_name(self.path.stem + ".key")
+
+    def _warn_about_key_permissions(self) -> None:
+        if self._warned_key_permissions:
+            return
+        try:
+            mode = os.stat(self.key_path).st_mode & 0o077
+        except OSError:
+            return
+        if mode:
+            self._warned_key_permissions = True
+            logger.warning(
+                f"The dashboard settings key {self.key_path} is readable by other users; "
+                f"run: chmod 600 {self.key_path}"
+            )
+
+    def _load_key(self) -> Optional[Fernet]:
+        """The encryption key, or None if there is no usable key file."""
+        try:
+            fernet = Fernet(self.key_path.read_bytes().strip())
+        except (OSError, ValueError):
+            return None
+        self._warn_about_key_permissions()
+        return fernet
+
+    def _create_key(self) -> Fernet:
+        """The encryption key, creating the file (mode 0600) if needed.
+
+        Safe against two processes creating it at once: the file is created
+        exclusively, and whoever loses the race reads the winner's key.
+        """
+        existing = self._load_key()
+        if existing is not None:
+            return existing
+
+        self.key_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            fd = os.open(self.key_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            existing = self._load_key()
+            if existing is None:
+                raise OverridesError(
+                    f"the settings key file {self.key_path} exists but is not a valid key; "
+                    "fix or remove it"
+                )
+            return existing
+
+        key = Fernet.generate_key()
+        with os.fdopen(fd, "wb") as f:
+            f.write(key)
+            f.flush()
+            os.fsync(f.fileno())
+        logger.info(f"Created the dashboard settings encryption key at {self.key_path}")
+        return Fernet(key)
+
+    def _encrypt_setting(self, value: Any) -> Dict[str, str]:
+        if not isinstance(value, str) or not value:
+            raise OverridesError("a secret value must be non-empty text")
+        if len(value) > MAX_SECRET_LENGTH or any(ord(c) < 32 for c in value):
+            raise OverridesError(
+                f"a secret value must be at most {MAX_SECRET_LENGTH} characters, "
+                "with no control characters"
+            )
+        token = self._create_key().encrypt(value.encode("utf-8")).decode("ascii")
+        return {WRAPPER_KEY: token}
+
+    def _decrypt_setting(self, key: str, wrapper: Any, quiet: bool = False) -> Optional[str]:
+        if not self._is_wrapper(wrapper):
+            return None
+        fernet = self._load_key()
+        if fernet is None:
+            problem = f"the settings key file {self.key_path} is missing or unreadable"
+        else:
+            try:
+                return fernet.decrypt(wrapper[WRAPPER_KEY].encode("ascii")).decode("utf-8")
+            except (InvalidToken, UnicodeError):
+                problem = "it cannot be decrypted with the current settings key"
+        if not quiet:
+            message = (
+                f"secret setting {key!r} is ignored: {problem}; enter it again in the dashboard"
+            )
+            if message not in self.warnings:
+                self.warnings.append(message)
+                logger.warning(f"Dashboard settings file: {message}")
+        return None
