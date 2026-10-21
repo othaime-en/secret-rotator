@@ -23,6 +23,7 @@ from secret_rotator.component_admin import (
 from secret_rotator.config.overrides import ConflictError, OverridesError
 from secret_rotator.job_admin import JobExistsError, JobNotFoundError, JobValidationError
 from secret_rotator.rotation_engine import RotationInProgressError
+from secret_rotator.settings_admin import SettingsValidationError
 from secret_rotator.web.rate_limit import limiter
 
 bp = Blueprint("api", __name__)
@@ -1106,3 +1107,68 @@ def sample_saved_rotator(name):
     return _component_admin(
         lambda: jsonify(current_app.component_admin.sample_rotator(name=name)), "rotators"
     )
+
+
+# ---- settings -------------------------------------------------------------------
+
+
+@bp.route("/settings")
+@limiter.limit("120 per minute")
+def get_settings():
+    """
+    Every setting the dashboard can show, grouped by section.
+
+    Each setting has its constraints (for building the form), its current
+    value, where that value comes from (``default``, ``config`` for
+    config.yaml, or ``dashboard``), whether changing it needs a restart,
+    and whether a change is pending a restart. Credentials are write-only:
+    they have ``is_set`` but no value. Settings that cannot be changed here
+    carry the reason. Each section also lists ``unavailable`` controls this
+    version cannot honour, with why.
+
+    Example Response (abridged):
+        {"sections": [{"key": "rotation", "label": "Rotation",
+           "settings": [{"key": "rotation.schedule", "kind": "schedule",
+                         "value": "daily", "source": "default",
+                         "restart": false, "restart_pending": false}],
+           "unavailable": [...]}],
+         "pending_restart": [], "warnings": [], "revision": 3}
+    """
+    return jsonify(current_app.settings_admin.listing())
+
+
+@bp.route("/settings", methods=["PUT"])
+@limiter.limit("30 per minute")
+def update_settings():
+    """
+    Save several settings at once, all or nothing.
+
+    Request Body (JSON):
+        changes: {"rotation.retry_attempts": 5, ...}
+        reset: ["web.port", ...]  (drop the dashboard's value for these)
+        revision (optional): the revision you loaded, to be told if the
+            settings changed meanwhile
+
+    Saved in the dashboard's settings file, never config.yaml; credentials
+    are stored encrypted. Returns 200 with ``saved``, ``reset``,
+    ``restart_required`` and the refreshed ``settings`` listing; 400 with
+    a message per setting (nothing saved); 409 on a stale revision.
+    """
+    body = _json_body()
+    if body is None:
+        return jsonify({"error": "Send the changes as a JSON object"}), 400
+    actor = session.get("username", "unknown")
+    service = current_app.settings_admin
+
+    try:
+        result = service.update(
+            body.get("changes", {}), body.get("reset", []), actor, revision=_revision_from(body)
+        )
+    except SettingsValidationError as e:
+        return jsonify({"error": "Invalid settings", "fields": e.fields}), 400
+    except ConflictError as e:
+        return jsonify({"error": str(e), "conflict": True}), 409
+    except OverridesError as e:
+        return jsonify({"error": str(e)}), 400
+
+    return jsonify({**result, "revision": service.revision, "settings": service.listing()})

@@ -118,6 +118,23 @@ class RotationScheduler:
 
         logger.info(f"Scheduled backup cleanup: daily at {cleanup_time}")
 
+    def set_default_schedule(self, schedule_config: str):
+        """Change the global default schedule while running: jobs that
+        follow it are rescheduled, the rest and the maintenance schedules
+        are left alone.
+
+        Raises:
+            ValueError: the schedule is invalid; nothing is changed.
+        """
+        default = parse_schedule(schedule_config)
+        previous = self.default_schedule
+        self.default_schedule = default.name
+        try:
+            self.refresh_rotation_schedules()
+        except ValueError:
+            self.default_schedule = previous
+            raise
+
     def refresh_rotation_schedules(self):
         """Re-read the jobs and rebuild only the rotation schedules.
 

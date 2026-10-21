@@ -97,6 +97,10 @@ def _message(event: Dict[str, Any]) -> str:
         return f"Failed sign-in for {actor}"
     if action == "logout":
         return f"{actor} signed out"
+    if action == "settings_update":
+        names = list(details.get("changed", [])) + list(details.get("reset", []))
+        shown = ", ".join(names[:3]) + (f" and {len(names) - 3} more" if len(names) > 3 else "")
+        return f"{actor} changed settings: {shown}" if names else f"{actor} changed settings"
     for noun in ("provider", "rotator"):
         if action.startswith(noun + "_") and action[len(noun) + 1 :] in _COMPONENT_VERBS:
             verb = _COMPONENT_VERBS[action[len(noun) + 1 :]]

@@ -220,6 +220,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file makes that one setting ignored with a warning, never an error.
   Nothing in the dashboard uses this yet; the Settings page will.
 
+### Added (settings API)
+
+- `GET /api/settings` lists the settings the dashboard can show, in the
+  design's eight sections, each with its constraints, current value, where
+  the value comes from (default, `config.yaml` or the dashboard), whether
+  a change needs a restart and whether one is pending. `PUT /api/settings`
+  saves a whole form at once (`changes` and `reset`), validated first and
+  written in one step, in the dashboard's settings file (never
+  `config.yaml`). Credentials (the S3 access keys and the Redis URL) are
+  write-only and stored encrypted. Changes are audit-logged by key name
+  (`settings_update`).
+- Only settings the program actually reads are offered. Controls that would
+  change nothing (rotation timeout and retry attempts, a backup master
+  switch, backup compression, max backups per secret, log masking, rate
+  limiting, and e-mail/Slack notifications, which no code sends) are listed
+  per section as unavailable, with the reason. Four settings are shown but
+  cannot be changed from the dashboard (encryption on/off, the master key
+  file, the backup directory and the log file), and the Flask secret key,
+  admin credentials and dashboard on/off switch are not offered at all.
+- Six settings take effect without a restart (default schedule, log level,
+  backing up old secrets, retention days and two distributed-mode
+  timeouts); every other change is flagged as needing one until it is
+  reverted or the process restarts. `RotationScheduler.set_default_schedule()`
+  applies a new default schedule live.
+- Cross-field checks: remote backup needs a bucket, distributed mode needs
+  a Redis URL (or `REDIS_URL`), and the two S3 keys go together.
+
 ### Fixed
 
 - `pyproject.toml` package-data now includes the web templates and

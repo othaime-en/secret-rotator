@@ -91,6 +91,10 @@ def create_app(rotation_engine, config=None):
 
     app.component_admin = ComponentAdminService(rotation_engine, app_settings)
 
+    from secret_rotator.settings_admin import SettingsAdminService
+
+    app.settings_admin = SettingsAdminService(rotation_engine, app_settings)
+
     from secret_rotator.backup_health import BackupHealthService
 
     app.backup_health = BackupHealthService(rotation_engine)

@@ -609,6 +609,38 @@ class OverridesStore:
             expected_revision,
         )
 
+    def change_settings(
+        self,
+        set_values: Dict[str, Any],
+        reset_keys: List[str],
+        actor: str,
+        expected_revision: Optional[int] = None,
+    ) -> int:
+        """Set several settings and drop others in one atomic write, so a
+        form that changes many fields is saved entirely or not at all.
+        Credentials among ``set_values`` are encrypted first."""
+        stored: Dict[str, Any] = {}
+        for key, value in set_values.items():
+            validate_setting_key(key)
+            if key in self.secret_keys:
+                stored[key] = self._encrypt_setting(value)
+                continue
+            if self._is_wrapper(value):
+                raise OverridesError("that value is reserved for encrypted settings")
+            if _json_size(value, "value") > MAX_SETTING_BYTES:
+                raise OverridesError(f"value is too large (over {MAX_SETTING_BYTES} bytes)")
+            stored[key] = copy.deepcopy(value)
+        for key in reset_keys:
+            validate_setting_key(key)
+
+        def mutate(data):
+            data["settings"].update(stored)
+            for key in reset_keys:
+                data["settings"].pop(key, None)
+
+        names = ", ".join(sorted(set(stored) | set(reset_keys)))
+        return self._change(actor, f"settings changed: {names}", mutate, expected_revision)
+
     def reset_setting(self, key: str, actor: str, expected_revision: Optional[int] = None) -> int:
         """Drop a setting override: config.yaml's value (or the default) applies."""
         validate_setting_key(key)
