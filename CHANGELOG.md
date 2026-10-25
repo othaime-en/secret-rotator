@@ -247,6 +247,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-field checks: remote backup needs a bucket, distributed mode needs
   a Redis URL (or `REDIS_URL`), and the two S3 keys go together.
 
+### Added (Settings page)
+
+- New **Settings** page at `/settings`: the design's eight sections (a
+  list on the left, one card per section, reachable by `#section`), with a
+  control suited to each setting (switch, number, choice, time, text), its
+  help text, where the value comes from and **Reset** for dashboard
+  changes. Edits are collected and saved together from an "Unsaved
+  changes" bar (**Save** / **Discard**); the server validates the whole
+  form and messages appear beside the settings concerned. Settings that
+  take effect immediately say so; others show **Restart required** once
+  edited or saved, and a banner lists what is waiting for a restart.
+  Credentials are write-only (**Set…** / **Replace…** / **Clear**) and are
+  never in the page. Settings that cannot be changed here are shown with
+  the reason, and features this version does not have (notifications,
+  retry attempts, ...) are listed as not available instead of being given
+  controls that do nothing. Leaving the page with unsaved edits asks first.
+
 ### Fixed
 
 - `pyproject.toml` package-data now includes the web templates and

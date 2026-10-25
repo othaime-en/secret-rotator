@@ -239,8 +239,16 @@ def rotators():
 
 @bp.route("/settings")
 def settings():
-    """Settings."""
-    return _stub("settings", "Settings", "Edits config.yaml. Some changes need a restart.")
+    """Settings: the configuration the dashboard can change, by section."""
+    from secret_rotator.schedule_spec import SCHEDULE_CHOICES
+
+    return render_page(
+        "settings.html",
+        "settings",
+        "Settings",
+        listing=current_app.settings_admin.listing(),
+        schedule_choices=SCHEDULE_CHOICES,
+    )
 
 
 @bp.route("/legacy")
