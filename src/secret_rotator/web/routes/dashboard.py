@@ -5,18 +5,12 @@ Every page lives at a real URL and renders inside the shared app shell
 (``app_base.html``). Authentication is enforced app-wide by the
 ``before_request`` hook registered in ``web/app.py``, so nothing here
 needs to repeat it.
-
-Pages are rebuilt one at a time as part of the dashboard redesign; those
-not yet rebuilt render a placeholder (``page_stub.html``). The previous
-single-page dashboard stays reachable at ``/legacy`` until the redesign is
-complete, so rotation/restore remain usable in the meantime.
 """
 
 import os
 from datetime import datetime, timezone
 
 from flask import Blueprint, render_template, current_app, request, session
-from secret_rotator.utils.logger import logger
 
 bp = Blueprint("dashboard", __name__)
 
@@ -48,10 +42,6 @@ def render_page(template, active, title, **context):
         env_is_production=env_is_production,
         **context,
     )
-
-
-def _stub(active, title, blurb, **context):
-    return render_page("page_stub.html", active, title, page_blurb=blurb, **context)
 
 
 @bp.app_template_filter("schedule_label")
@@ -249,29 +239,3 @@ def settings():
         listing=current_app.settings_admin.listing(),
         schedule_choices=SCHEDULE_CHOICES,
     )
-
-
-@bp.route("/legacy")
-def legacy_dashboard():
-    """Previous single-page dashboard.
-
-    Temporary: kept only so rotation and restore stay usable while the
-    redesigned pages are built. Removed together with web_interface.py
-    and the old static bundle at the end of the redesign.
-    """
-    logger.info("Legacy dashboard page accessed")
-
-    engine = current_app.rotation_engine
-    stats = {
-        "total_jobs": len(engine.rotation_jobs),
-        "total_providers": len(engine.providers),
-        "total_rotators": len(engine.rotators),
-    }
-    return render_template("dashboard.html", stats=stats, username=session.get("username"))
-
-
-@bp.route("/health")
-def health_page():
-    """Previous backup health page (superseded by /backup-health)."""
-    logger.info("Health page accessed")
-    return render_template("health.html")

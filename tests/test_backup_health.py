@@ -422,10 +422,16 @@ class TestVerificationApi(ServiceFixture):
         body = self.client.get("/api/verification/summary").get_data(as_text=True)
         self.assertNotIn(str(self.backup_dir), body)
 
-    def test_legacy_endpoints_are_untouched(self):
+    def test_the_old_verification_endpoints_are_gone(self):
         self.login()
-        # Legacy routes still exist (they answer 503 without a scheduler).
-        self.assertEqual(self.client.get("/api/verification-history").status_code, 503)
+        for method, url in (
+            ("get", "/api/backup-health"),
+            ("get", "/api/verification-history"),
+            ("post", "/api/run-verification"),
+        ):
+            self.assertEqual(getattr(self.client, method)(url).status_code, 404, url)
+        # ... and the liveness probe the container healthcheck uses is not
+        self.assertEqual(self.client.application.test_client().get("/api/healthz").status_code, 200)
 
 
 if __name__ == "__main__":

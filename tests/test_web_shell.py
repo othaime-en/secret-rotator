@@ -88,7 +88,7 @@ class TestAppShell(unittest.TestCase):
     # ---- authentication ----
 
     def test_every_page_requires_login(self):
-        for url, _, _ in PAGES + [("/legacy", None, None)]:
+        for url, _, _ in PAGES:
             resp = self.client.get(url, follow_redirects=False)
             self.assertEqual(resp.status_code, 302, url)
             self.assertIn("/login", resp.headers["Location"], url)
@@ -186,13 +186,30 @@ class TestAppShell(unittest.TestCase):
         _, html = self._get("/")
         self.assertNotRegex(html, r'(?:src|href)="https?://')
 
-    # ---- temporary legacy route ----
+    # ---- the previous dashboard is gone ----
 
-    def test_legacy_dashboard_still_available(self):
+    def test_the_previous_dashboard_pages_are_gone(self):
         self._login()
-        resp, html = self._get("/legacy")
-        self.assertEqual(resp.status_code, 200)
-        self.assertIn("dashboard.js", html)
+        for url in ("/legacy", "/health"):
+            resp, html = self._get(url)
+            self.assertEqual(resp.status_code, 404, url)
+            self.assertIn("<h1>Page not found</h1>", html)
+
+    def test_the_previous_dashboards_static_files_are_gone(self):
+        self._login()
+        for url in (
+            "/static/js/dashboard.js",
+            "/static/js/api-client.js",
+            "/static/js/tabs.js",
+            "/static/css/dashboard.css",
+        ):
+            self.assertEqual(self.client.get(url).status_code, 404, url)
+
+    def test_the_previous_web_server_module_is_gone(self):
+        import importlib
+
+        with self.assertRaises(ImportError):
+            importlib.import_module("secret_rotator.web_interface")
 
 
 def _nav_url(key):

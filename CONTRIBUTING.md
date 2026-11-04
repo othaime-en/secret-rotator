@@ -35,8 +35,7 @@ pytest tests/ -k "test_rotation"       # by name
 ```
 
 Run this from the **repo root**, not from inside `tests/` — coverage
-configuration in `pyproject.toml` (the `web_interface.py` exclusion, the
-64% floor) is only discovered relative to the current directory.
+configuration in `pyproject.toml` (the 64% floor) is only discovered relative to the current directory.
 
 A few tests (in `test_distributed_lock.py`, `test_job_queue.py`,
 `test_remote_backup.py`) need `fakeredis`/`moto`, which `.[dev]` already
@@ -63,18 +62,12 @@ CI enforces a coverage floor (`--cov-fail-under`, currently 64%, see
 ```bash
 black src/ tests/          # auto-format
 flake8 src/secret_rotator tests   # lint
-mypy src/secret_rotator --exclude 'web_interface.py'   # type check
+mypy src/secret_rotator   # type check
 ```
 
 `black`, `flake8`, and `mypy` are all enforced in CI and will block
 merging. mypy is a hard gate now like the other two, so a
 new type error should be caught locally before it reaches a PR.
-
-`web_interface.py` is excluded from both flake8 and mypy — it's
-deprecated and scheduled for removal in 1.4.0 (see `CHANGELOG.md`), and
-isn't worth polishing lint debt in code that's on its way out. Please
-don't add new features there; extend `src/secret_rotator/web/` (the
-Flask blueprint implementation) instead.
 
 ## Security-sensitive changes
 

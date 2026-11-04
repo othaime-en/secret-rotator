@@ -50,8 +50,8 @@ jobs:
       - name: Run tests with coverage
         run: |
           # Run from repo root, not tests/: coverage.py only auto-discovers
-          # pyproject.toml's [tool.coverage.*] config (the web_interface.py
-          # omit, the exclude_also patterns) relative to the current
+          # pyproject.toml's [tool.coverage.*] config (the exclude_also
+          # patterns) relative to the current
           # directory, and pytest's own addopts (--cov-fail-under=64) is
           # what actually gates the build — the old `cd tests &&
           # python run_tests.py` invocation used a plain unittest runner
@@ -93,7 +93,7 @@ jobs:
         run: flake8 src/secret_rotator tests
 
       - name: mypy (static typing)
-        run: mypy src/secret_rotator --exclude 'web_interface.py'
+        run: mypy src/secret_rotator
 
   security-scan:
     # This app runs with access to database credentials and a

@@ -50,11 +50,7 @@ class TestCatalog(unittest.TestCase):
     def test_every_listed_setting_is_actually_read_by_the_program(self):
         """The catalog must never offer a control the code ignores."""
         skip = {"settings_catalog.py", "settings_admin.py", "overrides.py"}
-        text = "\n".join(
-            p.read_text()
-            for p in SRC.rglob("*.py")
-            if p.name not in skip and "web_interface" not in p.name
-        )
+        text = "\n".join(p.read_text() for p in SRC.rglob("*.py") if p.name not in skip)
         missing = [s.key for s in SETTINGS if f'"{s.key}"' not in text and f"'{s.key}'" not in text]
         self.assertEqual(missing, [])
 

@@ -1,6 +1,5 @@
 """
-Flask-based web interface for Secret Rotation System.
-This is the new implementation that will gradually replace web_interface.py.
+Flask-based web dashboard for the Secret Rotation System.
 """
 
 from threading import Thread

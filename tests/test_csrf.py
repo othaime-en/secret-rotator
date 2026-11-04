@@ -135,10 +135,24 @@ class TestCSRFProtection(unittest.TestCase):
         self.assertNotEqual(resp.status_code, 400)
         self.assertEqual(resp.status_code, 404)
 
-    def test_run_verification_without_csrf_token_is_rejected(self):
+    def test_verification_run_without_csrf_token_is_rejected(self):
         self._login()
-        resp = self.client.post("/api/run-verification")
+        resp = self.client.post("/api/verification/run")
         self.assertEqual(resp.status_code, 400)
+
+    def test_job_changes_without_csrf_token_are_rejected(self):
+        self._login()
+        for method, url in (
+            ("post", "/api/jobs"),
+            ("put", "/api/jobs/x"),
+            ("delete", "/api/jobs/x"),
+            ("post", "/api/jobs/x/pause"),
+            ("post", "/api/providers"),
+            ("post", "/api/rotators"),
+        ):
+            resp = getattr(self.client, method)(url, json={})
+            self.assertEqual(resp.status_code, 400, url)
+        self.assertEqual(self.client.put("/api/settings", json={"changes": {}}).status_code, 400)
 
     # ---- GET requests are unaffected ----
 

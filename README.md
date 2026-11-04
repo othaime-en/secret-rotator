@@ -339,7 +339,7 @@ black src/ tests/
 flake8 src/secret_rotator tests
 
 # Type checking (enforced in CI)
-mypy src/secret_rotator --exclude 'web_interface.py'
+mypy src/secret_rotator
 ```
 
 ## Configuration Reference

@@ -264,6 +264,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   retry attempts, ...) are listed as not available instead of being given
   controls that do nothing. Leaving the page with unsaved edits asks first.
 
+### Removed
+
+- The previous single-page dashboard: `web_interface.py` (deprecated since
+  the Flask dashboard became the default), the `/legacy` and `/health`
+  pages, their templates and their JavaScript/CSS bundle. Every page now
+  lives at its own URL: `/`, `/jobs`, `/jobs/<name>`, `/backups`,
+  `/backup-health`, `/activity`, `/providers`, `/rotators` and `/settings`.
+- The `web.use_flask` setting (the Flask dashboard is the only one). It is
+  ignored if still present in `config.yaml`.
+- Three API endpoints that only the previous dashboard used:
+  `GET /api/backup-health` and `GET /api/verification-history` (the same
+  data under two names) and `POST /api/run-verification` (which ran the
+  whole verification inside the request). Use `GET
+  /api/verification/summary`, `POST /api/verification/run` and `GET
+  /api/verification/status` instead. The other read-only endpoints
+  (`/api/status`, `GET /api/jobs`, `GET /api/backups`) and
+  `/api/healthz` are unchanged.
+- The `web_interface.py` exclusions from flake8, mypy and coverage.
+
 ### Fixed
 
 - `pyproject.toml` package-data now includes the web templates and
