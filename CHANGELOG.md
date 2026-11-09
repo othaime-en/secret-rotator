@@ -121,6 +121,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **An invalid schedule now stops startup** with an error naming the
   setting (or job), instead of silently scheduling nothing. Valid values:
   `daily`, `weekly`, `monthly`, `every_<N>_minutes`, `every_<N>_hours`.
+- **The dashboard has been rebuilt and the previous one removed.** Pages
+  now live at their own URLs (`/jobs`, `/backups`, `/settings`, ...);
+  bookmarks to `/legacy` or `/health` stop working, and so do
+  `GET /api/backup-health`, `GET /api/verification-history` and
+  `POST /api/run-verification` (see **Removed**). `web.use_flask` is
+  ignored.
+- **Changes made in the dashboard are not saved in `config.yaml`.** They go
+  to `data/dashboard-settings.json`, with credentials encrypted by
+  `data/dashboard-settings.key`. Include both in your backups of the data
+  directory. A new install, or one where nobody uses the dashboard to
+  change anything, creates neither file.
+- **Queue workers re-read the dashboard's settings file before each
+  rotation sweep**, so jobs added in the dashboard are included. They do
+  not re-read `config.yaml`, which still needs a restart.
+- **`Settings.save()` and `settings.set()` now deal only with
+  `config.yaml`'s own contents.** The admin-credentials command is
+  unaffected, and dashboard changes can no longer be written into
+  `config.yaml` by accident.
+- **Some controls in older documentation never did anything** and are not
+  offered: rotation `retry_attempts` and `timeout`, `backup.enabled`,
+  backup compression, `max_backups_per_secret`, `logging.mask_sensitive_data`
+  and the `notifications` section. The README and the Settings page now say
+  so. Rotators of type database, SSH key, certificate and OAuth2, and
+  providers of type `aws`, are skipped at startup with a warning, as before.
 
 ### Added (dashboard settings file)
 

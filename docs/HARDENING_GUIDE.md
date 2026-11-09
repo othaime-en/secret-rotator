@@ -17,8 +17,8 @@ You don't need to configure these — they're on by default:
   login (see [Set the admin password](#set-the-admin-password) below);
   only `/login` and the liveness probe `/api/healthz` are reachable
   without one.
-- **CSRF protection** on all state-changing (POST) endpoints, via
-  Flask-WTF.
+- **CSRF protection** on all state-changing (POST, PUT and DELETE)
+  endpoints, via Flask-WTF.
 - **Path traversal protection** on backup restore — restore paths are
   resolved and checked against the backup directory before any file is
   opened.
@@ -27,10 +27,16 @@ You don't need to configure these — they're on by default:
 - **A real WSGI server** (waitress) instead of Flask's development
   server — the dev server explicitly isn't hardened against slow
   clients or production traffic.
-- **Audit logging** of rotations, restores, logins, and login failures
-  to an append-only log (`logs/audit.log` by default, configurable via
+- **Audit logging** of rotations, restores, backup verifications, log
+  exports, logins and login failures, and of every change made in the
+  dashboard (jobs, providers, rotators, settings: who, what, never the
+  values) to an append-only log (`logs/audit.log` by default, configurable via
   `audit.log_file`). This is logging, not access control — see
   [What this does _not_ give you](#what-this-does-not-give-you) below.
+- **Server-side validation of everything the dashboard saves**, and
+  write-only credentials: the S3 access keys and Redis URL entered in the
+  dashboard are stored encrypted and are never sent back to the browser.
+  A file provider's path is confined to the data directory.
 - **Secret masking in logs** — the log formatter redacts values
   adjacent to keywords like `password`, `secret`, `token`. This is a
   best-effort net, not a guarantee — see the note in that section.
@@ -187,6 +193,29 @@ your secrets and every backup of the key that decrypts them. See
 `docs/BACKUP_ARCHITECTURE.md` for the full disaster-recovery design and
 `docs/BACKUP_QUICK_REFERENCE.md` for command reference.
 
+### Protect the dashboard's settings files
+
+Changes made in the dashboard are saved in `data/dashboard-settings.json`,
+with credentials encrypted by the key in `data/dashboard-settings.key`
+(mode 0600; `config.yaml` is never written, so it can stay read-only).
+Treat them like the master key:
+
+- Keep the data directory private to the service account. Anyone who can
+  read **both** files can read the credentials stored there; either file
+  alone gives nothing.
+- Back both up with the rest of the data directory, and with the same care
+  as master key backups. Losing the key only means those credentials have
+  to be entered again; nothing else depends on it.
+- The key is separate from the master key on purpose: rotating the master
+  key does not touch it.
+- Anyone who can sign in to the dashboard can create and change jobs,
+  providers, rotators and settings (including the remote backup bucket
+  and endpoint and the port and host the dashboard listens on). There are
+  no per-user permissions; see below. Changing the port or host from the
+  dashboard takes effect at the next restart and can lock you out if you
+  get it wrong: edit `data/dashboard-settings.json`, or remove the
+  setting, from the host to recover.
+
 ### Rotate the master key periodically
 
 ```bash
@@ -205,7 +234,8 @@ Being direct about the current limits, rather than letting the feature
 list imply more than what's built:
 
 - **No per-secret access policies or RBAC.** There's one admin login
-  for the whole dashboard. Audit logging tells you _who did what_
+  for the whole dashboard, and whoever has it can also manage jobs,
+  providers, rotators and settings. Audit logging tells you _who did what_
   after the fact; it doesn't let you restrict _who can do what_ ahead
   of time (e.g., "this user can rotate `stripe_key` but not
   `db_password`"). If you need that, you're currently looking at
