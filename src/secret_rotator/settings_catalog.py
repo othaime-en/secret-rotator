@@ -439,7 +439,9 @@ def validate_value(setting: Setting, value: Any) -> Tuple[Any, Optional[str]]:
     if kind == "int":
         if isinstance(value, bool) or not isinstance(value, int):
             return None, "must be a whole number"
-        if not setting.minimum <= value <= setting.maximum:
+        if (setting.minimum is not None and value < setting.minimum) or (
+            setting.maximum is not None and value > setting.maximum
+        ):
             return None, f"must be between {setting.minimum} and {setting.maximum}"
         return value, None
 

@@ -234,7 +234,9 @@ def validate_fields(
         if item.kind == "int":
             if isinstance(value, bool) or not isinstance(value, int):
                 problems[item.name] = "must be a whole number"
-            elif not item.minimum <= value <= item.maximum:
+            elif (item.minimum is not None and value < item.minimum) or (
+                item.maximum is not None and value > item.maximum
+            ):
                 problems[item.name] = f"must be between {item.minimum} and {item.maximum}"
             else:
                 canonical[item.name] = value
@@ -251,7 +253,7 @@ def validate_fields(
         elif item.kind == "text":
             if not isinstance(value, str):
                 problems[item.name] = "must be text"
-            elif len(value) > item.maximum:
+            elif item.maximum is not None and len(value) > item.maximum:
                 problems[item.name] = f"must be at most {item.maximum} characters"
             elif not set(value) <= _PREFIX_CHARS:
                 problems[item.name] = "may only contain letters, numbers, underscore, dash and dot"
