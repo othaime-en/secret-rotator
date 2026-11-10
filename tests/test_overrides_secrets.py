@@ -185,6 +185,13 @@ class TestKeyFile(Fixture):
         value = self.effective(self.make())["backup"]["remote_backup"]["secret_access_key"]
         self.assertTrue(value.startswith("value-"))
 
+    def test_key_creation_leaves_no_temporary_files_and_a_private_key(self):
+        self.store.set_setting(SECRET_KEY, PLAINTEXT, "alice")
+        leftovers = [p.name for p in self.store.key_path.parent.glob("*.tmp")]
+        self.assertEqual(leftovers, [])
+        if os.name == "posix":
+            self.assertEqual(os.stat(self.store.key_path).st_mode & 0o777, 0o600)
+
     def test_loose_permissions_are_reported(self):
         self.store.set_setting(SECRET_KEY, PLAINTEXT, "alice")
         os.chmod(self.store.key_path, 0o644)

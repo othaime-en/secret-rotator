@@ -715,30 +715,41 @@ class OverridesStore:
     def _create_key(self) -> Fernet:
         """The encryption key, creating the file (mode 0600) if needed.
 
-        Safe against two processes creating it at once: the file is created
-        exclusively, and whoever loses the race reads the winner's key.
+        Safe against two processes or threads creating it at once. The key is
+        written in full to a private temporary file first and then published
+        under its real name with ``os.link``, which is atomic and fails if the
+        name already exists. Whoever loses the race therefore always finds the
+        winner's complete key, never a file that exists but is still empty.
         """
         existing = self._load_key()
         if existing is not None:
             return existing
 
         self.key_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            fd = os.open(self.key_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        except FileExistsError:
-            existing = self._load_key()
-            if existing is None:
-                raise OverridesError(
-                    f"the settings key file {self.key_path} exists but is not a valid key; "
-                    "fix or remove it"
-                )
-            return existing
-
         key = Fernet.generate_key()
-        with os.fdopen(fd, "wb") as f:
-            f.write(key)
-            f.flush()
-            os.fsync(f.fileno())
+        fd, tmp_name = tempfile.mkstemp(
+            dir=self.key_path.parent, prefix=self.key_path.name + ".", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "wb") as f:  # mkstemp creates the file with mode 0600
+                f.write(key)
+                f.flush()
+                os.fsync(f.fileno())
+            try:
+                os.link(tmp_name, self.key_path)
+            except FileExistsError:
+                existing = self._load_key()
+                if existing is None:
+                    raise OverridesError(
+                        f"the settings key file {self.key_path} exists but is not a valid key; "
+                        "fix or remove it"
+                    )
+                return existing
+        finally:
+            try:
+                os.unlink(tmp_name)
+            except OSError:  # pragma: no cover
+                pass
         logger.info(f"Created the dashboard settings encryption key at {self.key_path}")
         return Fernet(key)
 

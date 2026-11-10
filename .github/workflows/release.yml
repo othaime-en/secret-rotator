@@ -18,7 +18,7 @@ jobs:
     # Both of these have drifted before this pipeline existed (see
     # scripts/check_version.py's docstring) - this is the enforcement
     # that stops it happening silently again.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.extract.outputs.version }}
     steps:
@@ -51,7 +51,7 @@ jobs:
 
   build-and-publish:
     needs: [verify-version, test]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       # Configure this environment in GitHub repo settings with required
       # reviewers for a manual approval gate before anything actually
