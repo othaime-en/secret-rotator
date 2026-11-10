@@ -78,7 +78,7 @@ class ComponentAdminService:
 
     @property
     def revision(self) -> int:
-        return self.settings.overrides.revision
+        return int(self.settings.overrides.revision)
 
     def effective(self, kind: str) -> Dict[str, Any]:
         self.settings.reload_overrides()
@@ -86,7 +86,10 @@ class ComponentAdminService:
         return items if isinstance(items, dict) else {}
 
     def _registry(self, kind: str) -> Dict[str, Any]:
-        return self.engine.providers if kind == KIND_PROVIDERS else self.engine.rotators
+        registry: Dict[str, Any] = (
+            self.engine.providers if kind == KIND_PROVIDERS else self.engine.rotators
+        )
+        return registry
 
     def used_by(self, kind: str, name: str) -> List[str]:
         jobs = self.settings.get("jobs", []) or []
@@ -106,7 +109,10 @@ class ComponentAdminService:
     def _summary(self, kind: str, name: str, config: Dict[str, Any]) -> List[Dict[str, str]]:
         """Display-safe settings of an item, as label/value pairs."""
         if kind == KIND_ROTATORS:
-            return describe_rotator(self.engine.rotators.get(name))["settings"]
+            shown: List[Dict[str, str]] = describe_rotator(self.engine.rotators.get(name))[
+                "settings"
+            ]
+            return shown
         if config.get("type") == "file":
             return [{"label": "File path", "value": str(config.get("file_path", ""))}]
         return []
@@ -248,9 +254,8 @@ class ComponentAdminService:
     def create(self, kind: str, definition: Any, actor: str, revision: Optional[int] = None) -> str:
         if not isinstance(definition, dict):
             raise ComponentValidationError({"_": "the definition must be an object"})
-        name = definition.get("name")
         try:
-            validate_name(name, "name")
+            name = validate_name(definition.get("name"), "name")
         except OverridesError as e:
             raise ComponentValidationError({"name": str(e)}) from e
         if name in self.effective(kind):
@@ -357,7 +362,7 @@ class ComponentAdminService:
         """
         if name is not None:
             current = self._current(KIND_ROTATORS, name)
-            type_key = current.get("type")
+            type_key = current.get("type", "")
             rotator = self.engine.rotators.get(name)
             if rotator is None:
                 return {"sample": None, "message": "This rotator is not available."}

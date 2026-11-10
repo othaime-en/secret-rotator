@@ -73,7 +73,7 @@ class SettingsAdminService:
 
     @property
     def revision(self) -> int:
-        return self.settings.overrides.revision
+        return int(self.settings.overrides.revision)
 
     def _effective(self, setting: Setting) -> Any:
         return self.settings.get(setting.key, setting.default)

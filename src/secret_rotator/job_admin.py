@@ -66,7 +66,7 @@ class JobAdminService:
     def revision(self) -> int:
         """Revision of the dashboard settings file; send it back with a
         change to be told if someone else changed things meanwhile."""
-        return self.settings.overrides.revision
+        return int(self.settings.overrides.revision)
 
     def _current_jobs(self) -> List[Dict[str, Any]]:
         self.settings.reload_overrides()
@@ -205,9 +205,8 @@ class JobAdminService:
         """Add a job. Returns its name."""
         if not isinstance(definition, dict):
             raise JobValidationError({"_": "the job must be an object"})
-        name = definition.get("name")
         try:
-            validate_name(name, "name")
+            name = validate_name(definition.get("name"), "name")
         except OverridesError as e:
             raise JobValidationError({"name": str(e)}) from e
         if any(isinstance(j, dict) and j.get("name") == name for j in self._current_jobs()):
