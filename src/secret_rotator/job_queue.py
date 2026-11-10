@@ -164,6 +164,10 @@ def run_rotation_job(actor: str) -> Dict[str, bool]:
     from secret_rotator import bootstrap
 
     current_job = get_current_job()
+    # This worker may have started long before the latest change made in
+    # the dashboard; pick up the dashboard's settings file as it is now so
+    # the sweep covers the jobs that exist now.
+    settings.reload_overrides()
     engine, _, _ = bootstrap.build_rotation_engine()
 
     if current_job is not None:

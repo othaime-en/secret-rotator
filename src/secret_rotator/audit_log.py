@@ -96,6 +96,35 @@ class AuditLog:
 
         return events
 
+    def read_events(self) -> List[Dict[str, Any]]:
+        """Every event in the file, oldest first.
+
+        Each event gains a ``seq`` key: its 1-based line number in the
+        file. The file is append-only, so a line's number never changes
+        and a larger ``seq`` is always a later event, which lets a client
+        ask "what happened after #1234?". Blank and malformed lines are
+        skipped (but still counted, so numbers stay stable).
+        """
+        if not self.audit_file.exists():
+            return []
+
+        events = []
+        with open(self.audit_file, "r") as f:
+            for number, line in enumerate(f, start=1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    datetime.fromisoformat(event["timestamp"])
+                except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                event["seq"] = number
+                events.append(event)
+        return events
+
 
 # Module-level singleton, matching the existing `settings`/`logger`
 # convention in this codebase — import and use directly:

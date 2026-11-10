@@ -1,42 +1,85 @@
 import schedule
 import time
 import threading
-from typing import Callable
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional
 from secret_rotator.utils.logger import logger
 from secret_rotator.config.settings import settings
 from secret_rotator.backup_manager import BackupManager, BackupIntegrityChecker
 from secret_rotator.rotation_engine import RotationInProgressError
+from secret_rotator.schedule_spec import (
+    DAILY_TIME,
+    KIND_DAILY,
+    KIND_MONTHLY,
+    KIND_WEEKLY,
+    ScheduleSpec,
+    next_monthly,
+    parse_schedule,
+)
+
+# Tag on the schedule jobs that trigger rotation, so the dashboard can ask
+# when the next rotation is due without touching the maintenance jobs
+# (cleanup, verification, remote sync) scheduled alongside it. Each
+# distinct schedule also gets its own tag, ROTATION_TAG + ":" + its name.
+ROTATION_TAG = "rotation"
 
 
 class RotationScheduler:
-    """Handle scheduled secret rotations and backup verification"""
+    """Handle scheduled secret rotations and backup verification.
 
-    def __init__(self, rotation_function: Callable, backup_manager: BackupManager):
+    Rotation schedules are per job. Every job follows the global
+    ``rotation.schedule`` unless it has a ``schedule`` of its own, and
+    the jobs that share a schedule are rotated together when it fires.
+    When every job follows one schedule (the common case) that is a
+    plain full rotation, exactly as before per-job schedules existed.
+    """
+
+    def __init__(
+        self,
+        rotation_function: Callable,
+        backup_manager: BackupManager,
+        rotate_jobs_function: Optional[Callable[[List[str]], Dict[str, bool]]] = None,
+        jobs_provider: Optional[Callable[[], List[Dict[str, Any]]]] = None,
+    ):
+        """
+        Args:
+            rotation_function: rotates every job (RotationEngine.rotate_all_secrets).
+            backup_manager: for backup maintenance and verification.
+            rotate_jobs_function: rotates the named jobs
+                (RotationEngine.rotate_jobs). Needed only when some jobs
+                have a schedule different from the default.
+            jobs_provider: returns the configured jobs, read each time a
+                schedule fires so jobs added later are picked up. Without
+                it every schedule rotates every job, as in older versions.
+        """
         self.rotation_function = rotation_function
+        self.rotate_jobs_function = rotate_jobs_function
+        self.jobs_provider = jobs_provider
         self.backup_manager = backup_manager
         self.running = False
         self.thread = None
+        self.default_schedule = "daily"
+        self._rotation_schedules: List[str] = []
 
         self.integrity_checker = BackupIntegrityChecker(backup_manager)
 
-    def setup_schedule(self, schedule_config: str):
-        """Set up rotation schedule and backup verification"""
-        schedule.clear()
+    # ---- schedule setup ----------------------------------------------------
 
-        if schedule_config == "daily":
-            schedule.every().day.at("02:00").do(self._run_rotation)
-        elif schedule_config == "weekly":
-            schedule.every().week.do(self._run_rotation)
-        elif schedule_config.startswith("every_"):
-            # Format: "every_30_minutes" or "every_2_hours"
-            parts = schedule_config.split("_")
-            if len(parts) >= 3:
-                interval = int(parts[1])
-                unit = parts[2]
-                if unit == "minutes":
-                    schedule.every(interval).minutes.do(self._run_rotation)
-                elif unit == "hours":
-                    schedule.every(interval).hours.do(self._run_rotation)
+    def setup_schedule(self, schedule_config: str):
+        """Set up rotation schedules and backup maintenance.
+
+        Raises:
+            ValueError: the global schedule, or a job's own schedule, is
+                not a valid schedule (see schedule_spec.py). Failing here
+                is deliberate: an unrecognised schedule used to mean
+                nothing was ever rotated, with no error.
+        """
+        default = parse_schedule(schedule_config)  # fail before touching anything
+        self.default_schedule = default.name
+        self._validated_schedules()  # same for per-job schedules
+
+        schedule.clear()
+        self._register_rotations()
 
         # Schedule backup cleanup (daily at 03:00)
         cleanup_time = settings.get("backup.cleanup_time", "03:00")
@@ -73,14 +116,163 @@ class RotationScheduler:
             schedule.every().day.at(remote_sync_time).do(self._sync_remote_backups)
             logger.info(f"Scheduled remote backup sync: daily at {remote_sync_time}")
 
-        logger.info(f"Scheduled rotation: {schedule_config}")
         logger.info(f"Scheduled backup cleanup: daily at {cleanup_time}")
 
-    def _run_rotation(self):
+    def set_default_schedule(self, schedule_config: str):
+        """Change the global default schedule while running: jobs that
+        follow it are rescheduled, the rest and the maintenance schedules
+        are left alone.
+
+        Raises:
+            ValueError: the schedule is invalid; nothing is changed.
+        """
+        default = parse_schedule(schedule_config)
+        previous = self.default_schedule
+        self.default_schedule = default.name
+        try:
+            self.refresh_rotation_schedules()
+        except ValueError:
+            self.default_schedule = previous
+            raise
+
+    def refresh_rotation_schedules(self):
+        """Re-read the jobs and rebuild only the rotation schedules.
+
+        Call after a job is added, changed or removed. Backup maintenance
+        schedules are left alone.
+
+        Raises:
+            ValueError: a job has an invalid schedule; nothing is changed.
+        """
+        self._validated_schedules()
+        schedule.clear(ROTATION_TAG)
+        self._register_rotations()
+
+    def effective_schedule(self, job: Dict[str, Any]) -> str:
+        """The canonical schedule a job runs on (its own, else the default).
+
+        Raises:
+            ValueError: the job's own schedule is invalid.
+        """
+        return parse_schedule(job.get("schedule") or self.default_schedule).name
+
+    def _jobs(self) -> List[Dict[str, Any]]:
+        return list(self.jobs_provider()) if self.jobs_provider else []
+
+    def _validated_schedules(self) -> List[str]:
+        """Every distinct schedule in use, default first. Collects all
+        problems into one error instead of stopping at the first."""
+        names = [self.default_schedule]
+        problems = []
+        for job in self._jobs():
+            try:
+                name = self.effective_schedule(job)
+            except ValueError as e:
+                problems.append(f"job '{job.get('name', '?')}': {e}")
+                continue
+            if name not in names:
+                names.append(name)
+        if problems:
+            raise ValueError("Invalid rotation schedule(s):\n  - " + "\n  - ".join(problems))
+        return names
+
+    def _register_rotations(self):
+        names = self._validated_schedules()
+        self._rotation_schedules = names
+        for name in names:
+            self._register_rotation(parse_schedule(name))
+            logger.info(f"Scheduled rotation: {name}")
+
+    def _register_rotation(self, spec: ScheduleSpec):
+        tags = (ROTATION_TAG, f"{ROTATION_TAG}:{spec.name}")
+
+        if spec.kind in (KIND_DAILY, KIND_MONTHLY):
+            # "monthly" ticks daily and _run_rotation only acts on the 1st.
+            schedule.every().day.at(DAILY_TIME).tag(*tags).do(self._run_rotation, spec.name)
+        elif spec.kind == KIND_WEEKLY:
+            schedule.every().week.tag(*tags).do(self._run_rotation, spec.name)
+        else:
+            # The schedule library wants "every(1).hour", not "every(1).hours".
+            every = schedule.every(spec.interval)
+            unit = spec.unit[:-1] if spec.interval == 1 else spec.unit
+            getattr(every, unit).tag(*tags).do(self._run_rotation, spec.name)
+
+    # ---- when will it run --------------------------------------------------
+
+    def next_rotation_for(self, schedule_name: str) -> Optional[datetime]:
+        """When the given schedule next fires (UTC), or None if it is not
+        scheduled in this process."""
+        try:
+            spec = parse_schedule(schedule_name)
+        except ValueError:
+            return None
+
+        entries = schedule.get_jobs(f"{ROTATION_TAG}:{spec.name}")
+        if not entries:
+            return None
+
+        # schedule stores naive local times; astimezone() on a naive
+        # datetime interprets it as local time.
+        if spec.kind == KIND_MONTHLY:
+            return next_monthly(datetime.now()).astimezone(timezone.utc)
+        runs = [entry.next_run for entry in entries if entry.next_run]
+        return min(runs).astimezone(timezone.utc) if runs else None
+
+    def next_rotation_time(self) -> Optional[datetime]:
+        """When the soonest rotation of any schedule fires (UTC), or None
+        if no rotation schedule is set up in this process."""
+        times = [self.next_rotation_for(name) for name in self._rotation_schedules]
+        scheduled = [t for t in times if t is not None]
+        return min(scheduled) if scheduled else None
+
+    # ---- firing ------------------------------------------------------------
+
+    def _jobs_due(self, schedule_name: str) -> Optional[List[str]]:
+        """Names of the jobs on this schedule, or None meaning "all of
+        them" (no per-job information, or every job is on it)."""
+        if self.jobs_provider is None:
+            return None
+        jobs = self._jobs()
+        due = []
+        for job in jobs:
+            if job.get("paused"):
+                continue  # paused in the dashboard: no scheduled rotation
+            try:
+                if self.effective_schedule(job) == schedule_name:
+                    due.append(job["name"])
+            except ValueError:
+                continue  # reported when the schedule was set up
+        return None if len(due) == len(jobs) else due
+
+    def _rotate_for(self, schedule_name: str) -> Dict[str, bool]:
+        due = self._jobs_due(schedule_name)
+        if due is None:
+            return dict(self.rotation_function())
+        if not due:
+            return {}
+        if self.rotate_jobs_function is None:
+            logger.error(
+                f"Schedule '{schedule_name}' covers only some jobs but no "
+                "rotate_jobs_function was given; skipping this run"
+            )
+            return {}
+        return self.rotate_jobs_function(due)
+
+    def _run_rotation(self, schedule_name: Optional[str] = None):
         """Internal method to run rotation with error handling"""
         try:
-            logger.info("Scheduled rotation starting")
-            results = self.rotation_function()
+            if schedule_name == KIND_MONTHLY and datetime.now().day != 1:
+                return
+
+            logger.info(f"Scheduled rotation starting ({schedule_name or 'all jobs'})")
+            if schedule_name is None:
+                results = self.rotation_function()
+            else:
+                results = self._rotate_for(schedule_name)
+
+            if not results:
+                logger.info(f"Scheduled rotation '{schedule_name}': no jobs are due")
+                return
             successful = sum(1 for result in results.values() if result)
             logger.info(f"Scheduled rotation complete: {successful}/{len(results)} successful")
 

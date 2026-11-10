@@ -47,7 +47,10 @@ class SecretRotationApp:
         # Set up scheduler with backup manager
         schedule_config = settings.get("rotation.schedule", "daily")
         self.scheduler = RotationScheduler(
-            rotation_function=self.engine.rotate_all_secrets, backup_manager=self.backup_manager
+            rotation_function=self.engine.rotate_all_secrets,
+            backup_manager=self.backup_manager,
+            rotate_jobs_function=self.engine.rotate_jobs,
+            jobs_provider=lambda: self.engine.rotation_jobs,
         )
         self.scheduler.setup_schedule(schedule_config)
 
@@ -153,15 +156,7 @@ class SecretRotationApp:
             self.web_server.start()
             web_host = settings.get("web.host", "localhost")
             web_port = settings.get("web.port", 8080)
-            use_flask = settings.get("web.use_flask", False)
-
-            server_type = "Flask" if use_flask else "Legacy"
-            logger.info(f"{server_type} web interface: http://{web_host}:{web_port}")
-
-        # Start Flask test server if enabled
-        if hasattr(self, "flask_test_server") and self.flask_test_server:
-            self.flask_test_server.start()
-            logger.info("Flask test server: http://localhost:8081")
+            logger.info(f"Web dashboard: http://{web_host}:{web_port}")
 
         logger.info("Secret Rotation System started")
         logger.info("Press Ctrl+C to stop")
@@ -187,10 +182,6 @@ class SecretRotationApp:
 
         if self.web_server:
             self.web_server.stop()
-
-        # Stop Flask test server if running
-        if hasattr(self, "flask_test_server") and self.flask_test_server:
-            self.flask_test_server.stop()
 
         logger.info("Secret Rotation System stopped")
 

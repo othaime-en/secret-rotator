@@ -7,8 +7,28 @@
 #
 # DO NOT commit config.yaml with secrets to version control!
 
+# Changes made in the web dashboard (jobs, providers, rotators, settings) are
+# NOT written to this file. They are saved in a separate file and layered
+# over this one when the configuration is loaded, so this file can stay
+# read-only or in version control. Default location, in the data volume:
+#   data/dashboard-settings.json
+# Override with the SECRET_ROTATOR_DASHBOARD_SETTINGS environment variable
+# or:
+# dashboard:
+#   settings_file: "data/dashboard-settings.json"
+#
+# Credentials entered in the dashboard (the S3 access keys for remote
+# backups, the Redis URL) are stored in that file encrypted, with a key in
+# data/dashboard-settings.key (mode 0600, separate from the master key).
+# Back it up with the rest of the data directory; if it is lost, those
+# values are ignored and have to be entered again.
+
 rotation:
-  schedule: "daily" # daily, weekly, every_30_minutes, every_2_hours
+  # Default schedule for every job that does not set its own `schedule`:
+  #   daily | weekly | monthly | every_<N>_minutes | every_<N>_hours
+  # daily and monthly run at 02:00 (monthly on the 1st). An unrecognised
+  # value stops the daemon at startup instead of silently never rotating.
+  schedule: "daily"
   retry_attempts: 3
   timeout: 30
   backup_old_secrets: true
@@ -59,7 +79,6 @@ web:
   enabled: true
   port: 8080
   host: "0.0.0.0"
-  use_flask: true
   enable_flask_testing: false
 
   # Flask configuration
@@ -126,6 +145,8 @@ rotators:
     length: 32
     format: "hex" # hex, base64, alphanumeric
 
+# Each job rotates on the global schedule above unless it sets its own
+# `schedule` (same values). Jobs that share a schedule rotate together.
 jobs:
   - name: "database_password"
     provider: "file_storage"

@@ -1,0 +1,64 @@
+{# Create / edit job form. Expects: options (see JobAdminService.options).
+   Driven by static/js/job-admin.js. #}
+<aside class="drawer" id="d-job" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="d-job-title"
+       data-revision="{{ options.revision }}" data-default-schedule="{{ options.default_schedule }}">
+    <form id="job-form" novalidate>
+        <div class="card-h">
+            <h2 id="d-job-title">New job</h2>
+            <button type="button" class="btn icon sm" data-close aria-label="Close">
+                <svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>
+            </button>
+        </div>
+        <div class="card-b">
+            <p class="badge err form-error" id="job-form-error" role="alert" hidden></p>
+            <button type="button" class="btn sm" id="job-reload" hidden>Reload the page</button>
+
+            <label class="field" for="job-name">Job name
+                <input class="input" id="job-name" name="name" type="text" maxlength="100" autocomplete="off"
+                       aria-describedby="err-name">
+                <small class="field-error" id="err-name" hidden></small>
+            </label>
+            <label class="field" for="job-secret-id">Secret ID
+                <input class="input mono" id="job-secret-id" name="secret_id" type="text" maxlength="200" autocomplete="off"
+                       aria-describedby="err-secret_id">
+                <small class="field-error" id="err-secret_id" hidden></small>
+            </label>
+            <label class="field" for="job-provider">Provider
+                <select class="input" id="job-provider" name="provider" aria-describedby="err-provider">
+                    {% for name in options.providers %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+                </select>
+                <small class="field-error" id="err-provider" hidden></small>
+            </label>
+            <label class="field" for="job-rotator">Rotator
+                <select class="input" id="job-rotator" name="rotator" aria-describedby="err-rotator">
+                    {% for name in options.rotators %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+                </select>
+                <small class="field-error" id="err-rotator" hidden></small>
+            </label>
+            <label class="field" for="job-schedule">Schedule
+                <select class="input" id="job-schedule" name="schedule" aria-describedby="err-schedule">
+                    <option value="">Follow the default ({{ options.default_schedule|schedule_label|lower }})</option>
+                    {% for name in options.schedules %}<option value="{{ name }}">{{ name|schedule_label }}</option>{% endfor %}
+                </select>
+                <small class="field-error" id="err-schedule" hidden></small>
+            </label>
+            <div class="set">
+                <div><b id="job-notification-label">Notifications</b><small>Alert when this job rotates or fails.</small></div>
+                <div class="ctl">
+                    <label class="sw"><input type="checkbox" id="job-notification" name="notification" aria-labelledby="job-notification-label"><i></i></label>
+                </div>
+            </div>
+            {% if not options.providers or not options.rotators %}
+            <p class="muted" style="font-size:13px">
+                {% if not options.providers %}No providers are configured. {% endif %}
+                {% if not options.rotators %}No rotators are configured. {% endif %}
+                A job needs one of each.
+            </p>
+            {% endif %}
+        </div>
+        <div class="card-f">
+            <button type="button" class="btn" data-close>Cancel</button>
+            <button type="submit" class="btn primary" id="job-save"{% if not options.providers or not options.rotators %} disabled{% endif %}>Save job</button>
+        </div>
+    </form>
+</aside>

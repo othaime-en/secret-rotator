@@ -1,0 +1,99 @@
+{% extends "app_base.html" %}
+{% from "partials/macros.html" import plural %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/registry.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/job.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set items = listing["items"] %}
+<div class="head">
+    <div>
+        <h1>{{ page_title }}</h1>
+        <p>{{ page_blurb }}</p>
+    </div>
+    <button type="button" class="btn primary" data-action="new-component">Add {{ noun }}</button>
+</div>
+
+{% include "partials/notice.html" %}
+
+{% if items %}
+<div class="reg-list" id="component-list">
+    {% for item in items %}
+    <div class="reg" data-name="{{ item.name }}">
+        <div>
+            <b>{{ item.name }}</b>
+            <div class="muted">{{ item.type_label }}</div>
+            <div class="src">
+                {% if item.source == "dashboard" %}Added in the dashboard
+                {% elif item.source == "modified" %}config.yaml, changed in the dashboard
+                {% else %}From config.yaml{% endif %}
+            </div>
+        </div>
+        <div class="facts2">
+            {% for setting in item.summary %}
+            <div><b{% if setting.label == "File path" %} class="mono"{% endif %}>{{ setting.value }}</b>{{ setting.label }}</div>
+            {% endfor %}
+            {% if kind == "rotators" and item.registered %}
+            <div><b class="mono" data-sample>—</b>Sample</div>
+            {% endif %}
+        </div>
+        <div>
+            {% if not item.registered %}
+            <span class="badge warn" title="{% if not item.supported %}This type is not available in this version{% else %}Not loaded{% endif %}">Unavailable</span>
+            {% elif kind == "providers" %}
+            <span class="badge ok">Available</span>
+            {% elif item.used_by %}
+            <span class="badge acc">In use</span>
+            {% else %}
+            <span class="badge">Not used</span>
+            {% endif %}
+            <div class="muted note">Used by {{ plural(item.used_by|length, "job") }}</div>
+            {% if kind == "providers" %}<div class="muted" data-test-result role="status"></div>{% endif %}
+        </div>
+        <div class="row">
+            <button type="button" class="btn sm" data-action="test-component" data-name="{{ item.name }}"
+                    aria-label="{{ 'Test' if kind == 'providers' else 'Show a sample from' }} {{ item.name }}"
+                    {% if not item.registered %}disabled{% endif %}>{{ "Test" if kind == "providers" else "Sample" }}</button>
+            <button type="button" class="btn sm" data-action="edit-component" data-name="{{ item.name }}"
+                    aria-label="Edit {{ item.name }}">Edit</button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty" style="margin-top:8px">No {{ kind }} yet. Use <b>Add {{ noun }}</b> to create one.</div>
+{% endif %}
+
+{% if listing.hidden %}
+<section class="hidden-jobs" aria-labelledby="hidden-title">
+    <h2 id="hidden-title">Hidden {{ kind }}</h2>
+    <p class="muted">Defined in config.yaml but deleted in the dashboard. config.yaml itself is not changed.</p>
+    <ul>
+        {% for name in listing.hidden %}
+        <li>
+            <span class="mono">{{ name }}</span>
+            <button type="button" class="btn sm" data-action="restore-component" data-name="{{ name }}">Restore</button>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<script type="application/json" id="component-data">{{ {
+    "kind": kind,
+    "noun": noun,
+    "items": items,
+    "types": listing.types,
+    "revision": listing.revision,
+} | tojson }}</script>
+{% endblock %}
+
+{% block overlays %}
+{% include "partials/component_drawer.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/components.js') }}"></script>
+{% endblock %}

@@ -1,7 +1,12 @@
+import copy
 import yaml
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
+
+from secret_rotator.config.overrides import OverridesStore
+
+DEFAULT_OVERRIDES_FILE = "data/dashboard-settings.json"
 
 
 class Settings:
@@ -52,7 +57,23 @@ class Settings:
         else:
             self.config_path = self._find_config()
 
+        self.base_config: Dict[str, Any] = {}
+        self.overrides = OverridesStore(
+            path=Path(DEFAULT_OVERRIDES_FILE), base_provider=lambda: self.base_config
+        )
         self.config = self.load_config()
+
+    def _overrides_path(self) -> Path:
+        """Where the dashboard keeps its own settings (see config/overrides.py):
+        $SECRET_ROTATOR_DASHBOARD_SETTINGS, else ``dashboard.settings_file``
+        in config.yaml, else data/dashboard-settings.json."""
+        configured = os.getenv("SECRET_ROTATOR_DASHBOARD_SETTINGS")
+        if not configured:
+            section = (
+                self.base_config.get("dashboard") if isinstance(self.base_config, dict) else None
+            )
+            configured = section.get("settings_file") if isinstance(section, dict) else None
+        return Path(configured or DEFAULT_OVERRIDES_FILE)
 
     def _find_config(self) -> Path:
         """Search for config file in standard locations"""
@@ -139,10 +160,36 @@ class Settings:
         print(f"Created minimal config: {config_path}")
 
     def load_config(self):
-        """Load configuration from YAML file"""
+        """Load the effective configuration: config.yaml with the
+        dashboard's own settings file (config/overrides.py) applied over it.
+
+        ``base_config`` keeps config.yaml's contents exactly as read.
+        """
+        self.base_config = self._read_yaml()
+        self.overrides.path = self._overrides_path()
+        self.overrides.load()
+        return self.overrides.apply(self.base_config)
+
+    def reload(self):
+        """Re-read config.yaml and the dashboard's settings file."""
+        self.config = self.load_config()
+
+    def reload_overrides(self):
+        """Re-read only the dashboard's settings file and re-apply it over
+        the config.yaml contents already in memory.
+
+        Long-lived processes (queue workers) call this before each piece of
+        work so they see changes made in the dashboard after they started.
+        config.yaml itself is deliberately not re-read: like the web
+        process, a worker picks up edits to it on restart.
+        """
+        self.overrides.load()
+        self.config = self.overrides.apply(self.base_config)
+
+    def _read_yaml(self):
         try:
             with open(self.config_path, "r") as file:
-                return yaml.safe_load(file)
+                return yaml.safe_load(file) or {}
         except FileNotFoundError:
             print(f"Config file not found at {self.config_path}")
             return {}
@@ -162,18 +209,25 @@ class Settings:
         return value if value != {} else default
 
     def set(self, key: str, value):
-        """Set configuration value by key (supports dot notation)"""
+        """Set a value in config.yaml's contents (supports dot notation).
+
+        Used by the command line tools that edit config.yaml, together with
+        save(). The dashboard never goes through here; it uses
+        ``overrides`` and leaves config.yaml alone.
+        """
         keys = key.split(".")
-        config = self.config
-        for k in keys[:-1]:
-            config = config.setdefault(k, {})
-        config[keys[-1]] = value
+        for target in (self.base_config, self.config):
+            node = target
+            for k in keys[:-1]:
+                node = node.setdefault(k, {})
+            node[keys[-1]] = copy.deepcopy(value)
 
     def save(self):
-        """Save configuration back to file"""
+        """Write config.yaml. Only config.yaml's own contents are written,
+        never the dashboard's overrides merged over it."""
         try:
             with open(self.config_path, "w") as file:
-                yaml.dump(self.config, file, default_flow_style=False)
+                yaml.dump(self.base_config, file, default_flow_style=False)
             return True
         except Exception as e:
             print(f"Error saving config: {e}")

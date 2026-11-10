@@ -1,0 +1,127 @@
+{% extends "app_base.html" %}
+{% from "partials/macros.html" import when %}
+
+{% block content %}
+{% set backups = result.backups %}
+<div class="head">
+    <div>
+        <h1>Backups</h1>
+        <p>Encrypted snapshots created on every rotation.</p>
+    </div>
+</div>
+
+<form class="row" method="get" action="{{ url_for('dashboard.backups') }}" role="search" style="margin-bottom:16px">
+    <input class="input" style="width:260px" type="search" name="q" value="{{ q }}"
+           placeholder="Filter by secret ID" aria-label="Filter by secret ID">
+    <button type="submit" class="btn">Search</button>
+    {% if q %}<a class="btn" href="{{ url_for('dashboard.backups') }}">Clear</a>{% endif %}
+</form>
+
+{% include "partials/notice.html" %}
+
+{% if backups %}
+{% set first = (result.page - 1) * result.per_page + 1 %}
+<div class="card">
+    <div class="tw">
+        <table>
+            <thead>
+                <tr>
+                    <th>Secret</th>
+                    <th>Created</th>
+                    <th>File</th>
+                    <th>Encryption</th>
+                    <th><span class="sr-only">Actions</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in backups %}
+                <tr>
+                    <td class="cell-t">{{ item.secret_id }}</td>
+                    <td>{{ when(item.created, "datetime") }}</td>
+                    <td class="mono">{{ item.file }}</td>
+                    <td>
+                        {% if not item.readable %}<span class="badge">Unreadable</span>
+                        {% elif item.encrypted %}<span class="badge ok">Encrypted</span>
+                        {% else %}<span class="badge warn">Unencrypted</span>{% endif %}
+                    </td>
+                    <td>
+                        <div class="row" style="justify-content:flex-end">
+                            <button type="button" class="btn sm" data-action="view-backup"
+                                    data-file="{{ item.file }}" data-secret="{{ item.secret_id }}"
+                                    data-created="{{ item.created or '' }}"
+                                    aria-label="View backup {{ item.file }}">View</button>
+                            <button type="button" class="btn sm danger" data-open="m-restore"
+                                    data-file="{{ item.file }}" data-secret="{{ item.secret_id }}"
+                                    aria-label="Restore backup {{ item.file }}"
+                                    {% if not item.readable %}disabled{% endif %}>Restore</button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="card-f">
+        <span class="muted">Showing {{ first }}–{{ first + backups|length - 1 }} of {{ result.total }}</span>
+        <nav class="row" aria-label="Pagination">
+            {% if result.page > 1 %}
+            <a class="btn sm" rel="prev"
+               href="{{ url_for('dashboard.backups', q=q or None, page=(result.page - 1) if result.page > 2 else None) }}">Previous</a>
+            {% else %}
+            <span class="btn sm" aria-disabled="true">Previous</span>
+            {% endif %}
+            {% if result.page < result.pages %}
+            <a class="btn sm" rel="next"
+               href="{{ url_for('dashboard.backups', q=q or None, page=result.page + 1) }}">Next</a>
+            {% else %}
+            <span class="btn sm" aria-disabled="true">Next</span>
+            {% endif %}
+        </nav>
+    </div>
+</div>
+{% elif q %}
+<div class="empty">No backups match “{{ q }}”. <a class="lnk" href="{{ url_for('dashboard.backups') }}">Clear the filter</a></div>
+{% else %}
+<div class="empty">No backups yet. A backup is created each time a secret is rotated.</div>
+{% endif %}
+{% endblock %}
+
+{% block overlays %}
+<aside class="drawer" id="d-backup" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="d-backup-title">
+    <div class="card-h">
+        <h2 id="d-backup-title">Backup details</h2>
+        <button type="button" class="btn icon sm" data-close aria-label="Close">
+            <svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>
+        </button>
+    </div>
+    <div class="card-b">
+        <dl class="kv">
+            <dt>Secret ID</dt><dd class="mono" id="d-backup-secret"></dd>
+            <dt>Created</dt><dd id="d-backup-created"></dd>
+            <dt>Encrypted</dt><dd id="d-backup-encrypted">—</dd>
+            <dt>File</dt><dd class="mono" id="d-backup-file"></dd>
+        </dl>
+        <p class="muted" id="d-backup-loading" hidden>Loading…</p>
+        <p class="badge err" id="d-backup-error" role="alert" hidden></p>
+        <div>
+            <div class="muted" style="margin-bottom:6px">Old value</div>
+            <div class="secret mono" id="d-backup-old">—</div>
+        </div>
+        <div>
+            <div class="muted" style="margin-bottom:6px">New value</div>
+            <div class="secret mono" id="d-backup-new">—</div>
+        </div>
+        <p class="muted" style="font-size:13px">Secret values are masked and never shown in full here. Restoring applies the old value on the server.</p>
+    </div>
+    <div class="card-f">
+        <button type="button" class="btn" data-close>Close</button>
+        <button type="button" class="btn danger" data-open="m-restore" id="d-backup-restore" disabled>Restore this backup</button>
+    </div>
+</aside>
+
+{% include "partials/restore_modal.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/backups.js') }}"></script>
+{% endblock %}

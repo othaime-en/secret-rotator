@@ -1,0 +1,13 @@
+{% extends "app_base.html" %}
+
+{% block content %}
+<div class="head">
+    <div>
+        <h1>{{ heading or "Page not found" }}</h1>
+        <p>{{ message or "That page does not exist." }}</p>
+    </div>
+</div>
+<div class="empty">
+    <a class="lnk" href="{{ back_url or url_for('dashboard.index') }}">{{ back_label or "Back to the overview" }}</a>
+</div>
+{% endblock %}

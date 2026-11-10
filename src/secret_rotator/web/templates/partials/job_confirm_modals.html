@@ -1,0 +1,34 @@
+{# Delete and reset confirmations for the job page. Expects: detail.
+   The reset dialog exists only for config.yaml jobs changed in the dashboard. #}
+{% set config = detail.config %}
+<div class="modal card" id="m-delete" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="m-delete-title">
+    <div class="card-b">
+        <h1 id="m-delete-title">Delete job?</h1>
+        <p class="muted">
+            {% if config.source == "dashboard" %}
+            <b class="mono">{{ config.name }}</b> will stop rotating <span class="mono">{{ config.secret_id }}</span> and be removed.
+            {% else %}
+            <b class="mono">{{ config.name }}</b> will stop rotating <span class="mono">{{ config.secret_id }}</span>.
+            It is defined in config.yaml, which is not changed: the job is only hidden, and you can restore it from the Jobs page.
+            {% endif %}
+            Existing backups are kept.
+        </p>
+        <div class="row" style="justify-content:flex-end">
+            <button type="button" class="btn" data-close data-autofocus>Cancel</button>
+            <button type="button" class="btn danger" data-action="confirm-delete" data-job="{{ config.name }}">Delete job</button>
+        </div>
+    </div>
+</div>
+
+{% if config.source == "modified" %}
+<div class="modal card" id="m-reset" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="m-reset-title">
+    <div class="card-b">
+        <h1 id="m-reset-title">Reset to config.yaml?</h1>
+        <p class="muted">The changes made to <b class="mono">{{ config.name }}</b> in the dashboard are dropped and it goes back to exactly what config.yaml says.</p>
+        <div class="row" style="justify-content:flex-end">
+            <button type="button" class="btn" data-close data-autofocus>Cancel</button>
+            <button type="button" class="btn primary" data-action="confirm-reset" data-job="{{ config.name }}">Reset</button>
+        </div>
+    </div>
+</div>
+{% endif %}

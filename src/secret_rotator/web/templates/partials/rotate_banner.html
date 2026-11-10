@@ -1,0 +1,7 @@
+{# Progress / result banner for rotations. Expects: rotating (count of jobs
+   rotating now). Driven by static/js/rotate.js. #}
+<div class="banner" id="rotate-banner" role="status" aria-live="polite"{% if not rotating %} hidden{% endif %}
+     {% if rotating %}data-refresh-ms="3000"{% endif %}>
+    <span id="rotate-banner-text">{% if rotating %}Rotating, {{ rotating }} {{ "job" if rotating == 1 else "jobs" }} in progress{% endif %}</span>
+    <div class="bar" hidden><i style="width:0%"></i></div>
+</div>

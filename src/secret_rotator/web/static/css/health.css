@@ -1,0 +1,52 @@
+/* Backup health page. */
+
+.hero {
+    margin: 32px 0 36px;
+}
+
+.hero h1 {
+    font-size: 20px;
+    max-width: none;
+    letter-spacing: -0.02em;
+}
+
+.hero .lede {
+    margin: 12px 0 0;
+    font-size: 16px;
+    max-width: 52ch;
+}
+
+.hero .strip {
+    max-width: 420px;
+    margin-top: 22px;
+}
+
+.hero .caption {
+    font-size: 12.5px;
+}
+
+.facts {
+    display: flex;
+    gap: 44px;
+    flex-wrap: wrap;
+    margin-top: 22px;
+}
+
+.facts b {
+    display: block;
+    font: 600 26px/1.1 var(--font);
+    letter-spacing: -0.025em;
+}
+
+.facts b.bad {
+    color: var(--err);
+}
+
+.facts span {
+    color: var(--ink2);
+    font-size: 13px;
+}
+
+.stack > * + * {
+    margin-top: 24px;
+}

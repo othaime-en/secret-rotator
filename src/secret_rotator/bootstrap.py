@@ -18,13 +18,15 @@ and forgotten in the other, the job list built subtly differently - so
 it's factored out here once, and both call sites use it.
 """
 
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from secret_rotator.backup_manager import BackupManager
 from secret_rotator.config.settings import settings
 from secret_rotator.encryption_manager import EncryptionManager
 from secret_rotator.providers.file_provider import FileSecretProvider
+from secret_rotator.providers.base import SecretProvider
 from secret_rotator.rotation_engine import RotationEngine
+from secret_rotator.rotators.base import SecretRotator
 from secret_rotator.rotators.password_rotator import PasswordRotator
 from secret_rotator.utils.logger import logger
 
@@ -64,59 +66,79 @@ def build_backup_manager() -> BackupManager:
     )
 
 
+def build_provider(name: str, config: Dict[str, Any]) -> Optional[SecretProvider]:
+    """Build one provider from its config, or None if its type is not
+    available (not implemented yet, or unknown).
+
+    Used for every provider at startup and by the dashboard when it adds or
+    changes one, so both build them identically.
+    """
+    provider_type = config.get("type") if isinstance(config, dict) else None
+
+    if provider_type == "file":
+        encrypt_secrets = settings.get("security.encryption.enabled", True)
+        return FileSecretProvider(
+            name=name,
+            config={
+                "file_path": config.get("file_path", "data/secrets.json"),
+                "encrypt_secrets": encrypt_secrets,
+                "encryption_key_file": settings.get(
+                    "security.encryption.master_key_file", "data/.master.key"
+                ),
+            },
+        )
+
+    # Add support for other provider types here (AWS, Azure, etc.)
+    if provider_type == "aws":
+        logger.warning(f"AWS provider '{name}' not yet implemented")
+    else:
+        logger.warning(f"Unknown provider type '{provider_type}' for '{name}'")
+    return None
+
+
+def build_rotator(name: str, config: Dict[str, Any]) -> Optional[SecretRotator]:
+    """Build one rotator from its config, or None for an unknown type."""
+    rotator_type = config.get("type") if isinstance(config, dict) else None
+
+    if rotator_type == "password":
+        return PasswordRotator(name=name, config=config)
+
+    if rotator_type == "api_key":
+        from secret_rotator.rotators.advanced_rotators import APIKeyRotator
+
+        return APIKeyRotator(name=name, config=config)
+
+    if rotator_type == "jwt_secret":
+        from secret_rotator.rotators.advanced_rotators import JWTSecretRotator
+
+        return JWTSecretRotator(name=name, config=config)
+
+    logger.warning(f"Unknown rotator type '{rotator_type}' for '{name}'")
+    return None
+
+
 def _setup_providers(engine: RotationEngine) -> None:
     providers_config = settings.get("providers", {})
 
     for provider_name, provider_config in providers_config.items():
-        provider_type = provider_config.get("type")
+        provider = build_provider(provider_name, provider_config)
+        if provider is None:
+            continue
 
-        if provider_type == "file":
-            encrypt_secrets = settings.get("security.encryption.enabled", True)
-            file_provider = FileSecretProvider(
-                name=provider_name,
-                config={
-                    "file_path": provider_config.get("file_path", "data/secrets.json"),
-                    "encrypt_secrets": encrypt_secrets,
-                    "encryption_key_file": settings.get(
-                        "security.encryption.master_key_file", "data/.master.key"
-                    ),
-                },
-            )
-            engine.register_provider(file_provider)
-
-            if file_provider.validate_connection():
-                logger.info(f"Provider '{provider_name}' validated successfully")
-            else:
-                logger.error(f"Provider '{provider_name}' validation failed!")
-
-        # Add support for other provider types here (AWS, Azure, etc.)
-        elif provider_type == "aws":
-            logger.warning(f"AWS provider '{provider_name}' not yet implemented")
+        engine.register_provider(provider)
+        if provider.validate_connection():
+            logger.info(f"Provider '{provider_name}' validated successfully")
         else:
-            logger.warning(f"Unknown provider type '{provider_type}' for '{provider_name}'")
+            logger.error(f"Provider '{provider_name}' validation failed!")
 
 
 def _setup_rotators(engine: RotationEngine) -> None:
     rotators_config = settings.get("rotators", {})
 
     for rotator_name, rotator_config in rotators_config.items():
-        rotator_type = rotator_config.get("type")
-
-        if rotator_type == "password":
-            engine.register_rotator(PasswordRotator(name=rotator_name, config=rotator_config))
-
-        elif rotator_type == "api_key":
-            from secret_rotator.rotators.advanced_rotators import APIKeyRotator
-
-            engine.register_rotator(APIKeyRotator(name=rotator_name, config=rotator_config))
-
-        elif rotator_type == "jwt_secret":
-            from secret_rotator.rotators.advanced_rotators import JWTSecretRotator
-
-            engine.register_rotator(JWTSecretRotator(name=rotator_name, config=rotator_config))
-
-        else:
-            logger.warning(f"Unknown rotator type '{rotator_type}' for '{rotator_name}'")
+        rotator = build_rotator(rotator_name, rotator_config)
+        if rotator is not None:
+            engine.register_rotator(rotator)
 
 
 def _setup_rotation_jobs(engine: RotationEngine) -> None:

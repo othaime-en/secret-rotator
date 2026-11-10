@@ -1,0 +1,46 @@
+{# The control for one setting. Used by settings.html.
+   Every control carries data-key, data-kind and data-original (JSON) so
+   static/js/settings.js can tell what was changed. #}
+{% macro control(item, schedule_choices) -%}
+{%- set value = item.value if item.value is not none else "" -%}
+{%- if not item.editable -%}
+<span class="mono readonly" title="{{ item.reason }}">{{ value if value != "" else "—" }}</span>
+{%- elif item.kind == "bool" -%}
+<label class="sw"><input type="checkbox" id="c-{{ item.key }}" data-key="{{ item.key }}" data-kind="bool"
+       data-original='{{ (value is true)|tojson }}' aria-labelledby="l-{{ item.key }}"
+       aria-describedby="err-{{ item.key }}"{% if value is true %} checked{% endif %}><i></i></label>
+{%- elif item.kind == "int" -%}
+<input class="input" type="number" step="1" min="{{ item.min }}" max="{{ item.max }}" style="width:100px"
+       id="c-{{ item.key }}" data-key="{{ item.key }}" data-kind="int" data-original='{{ value|tojson }}'
+       aria-labelledby="l-{{ item.key }}" aria-describedby="err-{{ item.key }}" value="{{ value }}">
+{%- if item.unit %}<span class="muted unit">{{ item.unit }}</span>{% endif %}
+{%- elif item.kind == "choice" -%}
+<select class="input" style="width:200px" id="c-{{ item.key }}" data-key="{{ item.key }}" data-kind="choice"
+        data-original='{{ value|tojson }}' aria-labelledby="l-{{ item.key }}" aria-describedby="err-{{ item.key }}">
+    {% for choice in item.choices %}<option value="{{ choice }}"{% if choice == value %} selected{% endif %}>{{ choice }}</option>{% endfor %}
+</select>
+{%- elif item.kind == "schedule" -%}
+<select class="input" style="width:200px" id="c-{{ item.key }}" data-key="{{ item.key }}" data-kind="schedule"
+        data-original='{{ value|tojson }}' aria-labelledby="l-{{ item.key }}" aria-describedby="err-{{ item.key }}">
+    {% for choice in schedule_choices %}<option value="{{ choice }}"{% if choice == value %} selected{% endif %}>{{ choice|schedule_label }}</option>{% endfor %}
+    {% if value not in schedule_choices %}<option value="{{ value }}" selected>{{ value|schedule_label }}</option>{% endif %}
+</select>
+{%- elif item.kind == "time" -%}
+<input class="input" type="time" style="width:110px" id="c-{{ item.key }}" data-key="{{ item.key }}" data-kind="time"
+       data-original='{{ value|tojson }}' aria-labelledby="l-{{ item.key }}" aria-describedby="err-{{ item.key }}" value="{{ value }}">
+{%- elif item.kind == "secret" -%}
+<div class="secret-ctl" data-key="{{ item.key }}" data-kind="secret" data-set="{{ 'true' if item.is_set else 'false' }}">
+    <span class="badge{% if item.is_set %} ok{% endif %}" id="s-{{ item.key }}">{{ "Set" if item.is_set else "Not set" }}</span>
+    {% if item.is_set %}<small class="muted">{{ "config.yaml" if item.source == "config" else "dashboard" }}</small>{% endif %}
+    <button type="button" class="btn sm" data-action="replace-secret" aria-describedby="s-{{ item.key }}">{{ "Replace…" if item.is_set else "Set…" }}</button>
+    <input class="input" type="password" autocomplete="new-password" spellcheck="false" style="width:260px" hidden
+           data-secret-input id="c-{{ item.key }}" aria-labelledby="l-{{ item.key }}" aria-describedby="err-{{ item.key }}">
+    {% if item.source == "dashboard" %}<button type="button" class="btn sm ghost" data-action="clear-secret">Clear</button>{% endif %}
+</div>
+{%- else -%}
+<input class="input{% if item.kind in ('url', 'host', 'bucket', 'region', 'prefix', 'queue', 'size') %} mono{% endif %}" type="text"
+       style="width:{{ 300 if item.kind == 'url' else 240 }}px" id="c-{{ item.key }}" data-key="{{ item.key }}" data-kind="{{ item.kind }}"
+       data-original='{{ value|tojson }}' aria-labelledby="l-{{ item.key }}" aria-describedby="err-{{ item.key }}"
+       autocomplete="off" spellcheck="false" value="{{ value }}">
+{%- endif -%}
+{%- endmacro %}

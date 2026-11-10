@@ -8,11 +8,6 @@ exclude =
     venv,
     build,
     dist,
-    *.egg-info,
-    # Deprecated legacy web server, superseded by web/ (Flask blueprints).
-    # Scheduled for removal in 1.4.0 (see README/CHANGELOG) - not worth
-    # polishing lint debt in code that's on its way out; the replacement
-    # (src/secret_rotator/web/) is fully linted.
-    src/secret_rotator/web_interface.py
+    *.egg-info
 show-source = True
 statistics = True

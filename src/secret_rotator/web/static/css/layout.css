@@ -1,0 +1,197 @@
+/* App shell: sidebar, main column, page header. */
+
+.skip {
+    position: absolute;
+    left: 8px;
+    top: -48px;
+    z-index: 40;
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--ink);
+    color: var(--bg);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.skip:focus {
+    top: 8px;
+}
+
+.app {
+    display: grid;
+    grid-template-columns: 224px 1fr;
+    min-height: 100vh;
+}
+
+/* ---- sidebar ---- */
+.side {
+    background: var(--side);
+    border-right: 1px solid var(--rule);
+    padding: 22px 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+}
+
+.side .brand {
+    text-decoration: none;
+}
+
+.nav {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.nav .gap {
+    height: 14px;
+}
+
+.nav a {
+    padding: 6px 8px;
+    border-radius: 6px;
+    color: var(--ink2);
+    text-decoration: none;
+    font-weight: 450;
+}
+
+.nav a:hover {
+    background: var(--hover);
+    color: var(--ink);
+}
+
+.nav a.on {
+    background: var(--hover);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.side-foot {
+    margin-top: auto;
+    padding: 0 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 13px;
+}
+
+.side-foot .row {
+    justify-content: space-between;
+    flex-wrap: nowrap;
+}
+
+.side-foot .who {
+    font-weight: 550;
+}
+
+.side-foot form {
+    display: inline;
+}
+
+.env {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink2);
+}
+
+.dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ok);
+}
+
+.dot.dev {
+    background: var(--warn);
+}
+
+/* ---- main column ---- */
+.main {
+    min-width: 0;
+}
+
+.content {
+    padding: 52px 56px 120px;
+    max-width: 1040px;
+}
+
+.head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 32px;
+}
+
+.head p {
+    color: var(--ink2);
+    margin-top: 4px;
+    max-width: 60ch;
+}
+
+.crumb {
+    margin-bottom: 14px;
+    font-size: 13px;
+}
+
+/* ---- responsive ---- */
+@media (max-width: 1000px) {
+    .content {
+        padding: 32px 24px 110px;
+    }
+}
+
+@media (max-width: 760px) {
+    .app {
+        grid-template-columns: 1fr;
+    }
+
+    .side {
+        position: static;
+        height: auto;
+        flex-direction: row;
+        align-items: center;
+        padding: 12px 16px;
+        overflow-x: auto;
+        gap: 16px;
+        border-right: 0;
+        border-bottom: 1px solid var(--rule);
+    }
+
+    .side .brand {
+        flex: none;
+        padding: 0;
+    }
+
+    .nav {
+        flex-direction: row;
+    }
+
+    .nav .gap,
+    .env {
+        display: none;
+    }
+
+    .nav a {
+        white-space: nowrap;
+    }
+
+    /* Keep theme switch and sign-out reachable on small screens. */
+    .side-foot {
+        margin: 0;
+        padding: 0;
+        flex-direction: row;
+        align-items: center;
+        gap: 14px;
+        white-space: nowrap;
+    }
+
+    .side-foot .row {
+        gap: 12px;
+    }
+}

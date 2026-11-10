@@ -1,0 +1,205 @@
+/* Settings page. */
+
+.setgrid {
+    display: grid;
+    grid-template-columns: 170px 1fr;
+    gap: 48px;
+    align-items: start;
+}
+
+.snav {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    position: sticky;
+    top: 52px;
+}
+
+.snav a {
+    padding: 6px 8px;
+    border-radius: 6px;
+    color: var(--ink2);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.snav a:hover {
+    color: var(--ink);
+}
+
+.snav a.on {
+    background: var(--hover);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+/* Without JavaScript every section is shown, one after another. With it,
+   one at a time (the script adds .tabs to the grid). */
+.setgrid.tabs .spanel {
+    display: none;
+}
+
+.setgrid.tabs .spanel.on {
+    display: block;
+}
+
+.spanel + .spanel {
+    margin-top: 24px;
+}
+
+.setgrid.tabs .spanel + .spanel {
+    margin-top: 0;
+}
+
+.card .set {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--rule2);
+}
+
+.card .set:last-of-type {
+    border-bottom: 0;
+}
+
+.set small {
+    display: block;
+}
+
+.set .restart-badge {
+    margin-left: 8px;
+}
+
+.pill {
+    margin-left: 8px;
+    font-size: 12px;
+    color: var(--ink2);
+    border: 1px solid var(--rule);
+    border-radius: 99px;
+    padding: 1px 8px;
+}
+
+.set .origin {
+    margin-top: 2px;
+}
+
+.linkbtn {
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    text-decoration: underline;
+}
+
+.set .unit {
+    margin-left: 8px;
+    font-size: 13px;
+}
+
+.secret-ctl {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.readonly {
+    overflow-wrap: anywhere;
+    text-align: right;
+}
+
+.set.reset-staged .ctl {
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+.set.changed {
+    background: var(--hover);
+}
+
+.unavail {
+    padding: 14px 18px;
+    border-top: 1px solid var(--rule);
+    font-size: 13px;
+}
+
+.unavail ul {
+    list-style: none;
+    padding: 0;
+    margin-top: 6px;
+}
+
+.unavail li {
+    padding: 3px 0;
+}
+
+.savebar {
+    position: sticky;
+    bottom: 24px;
+    margin-top: 16px;
+    padding: 10px 14px 10px 18px;
+    display: none;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+.savebar.show {
+    display: flex;
+}
+
+.savebar .muted {
+    color: var(--ink3);
+}
+
+.savebar .btn {
+    background: transparent;
+    border-color: rgba(127, 127, 127, 0.5);
+    color: var(--bg);
+}
+
+.savebar .btn.primary {
+    background: var(--bg);
+    border-color: var(--bg);
+    color: var(--ink);
+}
+
+.savebar .btn:disabled {
+    opacity: 0.5;
+}
+
+@media (max-width: 1000px) {
+    .setgrid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .snav {
+        flex-direction: row;
+        overflow-x: auto;
+        position: static;
+    }
+
+    .snav a {
+        white-space: nowrap;
+    }
+
+    .card .set {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .set .ctl,
+    .secret-ctl {
+        justify-content: flex-start;
+    }
+
+    .readonly {
+        text-align: left;
+    }
+}

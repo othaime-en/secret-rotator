@@ -1,3 +1,5 @@
+import functools
+import threading
 import time
 from typing import Callable, Dict, List, Any, Optional
 from secret_rotator.providers.base import SecretProvider
@@ -30,6 +32,27 @@ class RotationInProgressError(Exception):
     """
 
 
+def _tracks_active_job(func):
+    """Record which job is mid-rotation, for dashboard status display.
+
+    Wraps ``RotationEngine.rotate_secret`` so every caller (sweep,
+    scheduler, CLI, future per-job triggers) is tracked the same way,
+    without re-indenting that method's body.
+    """
+
+    @functools.wraps(func)
+    def wrapper(self, job_config, *args, **kwargs):
+        name = job_config.get("name")
+        self._rotation_timing.started = time.monotonic()
+        self._mark_job_active(name)
+        try:
+            return func(self, job_config, *args, **kwargs)
+        finally:
+            self._mark_job_inactive(name)
+
+    return wrapper
+
+
 class RotationEngine:
     """This is the main engine that orchestrates secret rotation"""
 
@@ -37,6 +60,13 @@ class RotationEngine:
         self.providers: Dict[str, SecretProvider] = {}
         self.rotators: Dict[str, SecretRotator] = {}
         self.rotation_jobs: List[Dict[str, Any]] = []
+        # Jobs currently being rotated *by this process* (name -> count).
+        # Read via active_job_names(); see _tracks_active_job.
+        self._active_jobs: Dict[str, int] = {}
+        self._active_lock = threading.Lock()
+        # Start time of the rotation running on this thread, for the
+        # duration recorded in each rotate audit event.
+        self._rotation_timing = threading.local()
         self.backup_manager = BackupManager(
             backup_dir=settings.get("providers.file_storage.backup_path", "data/backup")
         )  # Use config or default
@@ -71,9 +101,68 @@ class RotationEngine:
         logger.info(f"Added rotation job: {job_config['name']}")
         return True
 
+    def replace_rotation_jobs(self, job_configs: List[Dict[str, Any]]) -> int:
+        """Replace the whole job list, e.g. after the dashboard added,
+        changed or removed a job.
+
+        Entries that lack a required field are logged and skipped. The new
+        list is swapped in as a unit, so a sweep already running (which
+        works on its own copy) is unaffected.
+
+        Returns:
+            How many jobs the engine now has.
+        """
+        required = ("name", "provider", "rotator", "secret_id")
+        accepted = []
+        for config in job_configs:
+            missing = [f for f in required if not isinstance(config, dict) or f not in config]
+            if missing:
+                logger.error(f"Skipping job with missing field(s): {', '.join(missing)}")
+                continue
+            accepted.append(config)
+        self.rotation_jobs = accepted
+        logger.info(f"Rotation jobs updated: {len(accepted)} configured")
+        return len(accepted)
+
+    def _rotation_details(self, job_name: str, **extra: Any) -> Dict[str, Any]:
+        """Audit details for a rotation event: the job, anything extra
+        (a failure reason, provider and rotator names) and how long this
+        rotation has taken so far, in milliseconds."""
+        details: Dict[str, Any] = {"job": job_name, **extra}
+        started = getattr(self._rotation_timing, "started", None)
+        if started is not None:
+            details["duration_ms"] = int((time.monotonic() - started) * 1000)
+        return details
+
+    def _mark_job_active(self, name: Optional[str]) -> None:
+        if name is None:
+            return
+        with self._active_lock:
+            self._active_jobs[name] = self._active_jobs.get(name, 0) + 1
+
+    def _mark_job_inactive(self, name: Optional[str]) -> None:
+        if name is None:
+            return
+        with self._active_lock:
+            remaining = self._active_jobs.get(name, 0) - 1
+            if remaining > 0:
+                self._active_jobs[name] = remaining
+            else:
+                self._active_jobs.pop(name, None)
+
+    def active_job_names(self) -> set:
+        """Names of jobs being rotated right now by this process.
+
+        Process-local: with ``distributed.enabled`` a job running on a
+        worker in another process is not visible here.
+        """
+        with self._active_lock:
+            return set(self._active_jobs)
+
     @retry_with_backoff(
         max_attempts=settings.get("rotation.retry_attempts", 3), exceptions=(Exception,)
     )
+    @_tracks_active_job
     def rotate_secret(self, job_config: Dict[str, Any], actor: str = "system") -> bool:
         """Rotate a single secret based on job configuration.
 
@@ -101,7 +190,9 @@ class RotationEngine:
                 actor,
                 secret_id=secret_id,
                 success=False,
-                details={"job": job_name, "reason": f"provider '{provider_name}' not found"},
+                details=self._rotation_details(
+                    job_name, reason=f"provider '{provider_name}' not found"
+                ),
             )
             return False
 
@@ -112,7 +203,9 @@ class RotationEngine:
                 actor,
                 secret_id=secret_id,
                 success=False,
-                details={"job": job_name, "reason": f"rotator '{rotator_name}' not found"},
+                details=self._rotation_details(
+                    job_name, reason=f"rotator '{rotator_name}' not found"
+                ),
             )
             return False
 
@@ -138,7 +231,7 @@ class RotationEngine:
                         actor,
                         secret_id=secret_id,
                         success=False,
-                        details={"job": job_name, "reason": f"backup failed: {e}"},
+                        details=self._rotation_details(job_name, reason=f"backup failed: {e}"),
                     )
                     return False
 
@@ -155,7 +248,7 @@ class RotationEngine:
                     actor,
                     secret_id=secret_id,
                     success=False,
-                    details={"job": job_name, "reason": "secret generation failed"},
+                    details=self._rotation_details(job_name, reason="secret generation failed"),
                 )
                 return False
 
@@ -167,7 +260,9 @@ class RotationEngine:
                     actor,
                     secret_id=secret_id,
                     success=False,
-                    details={"job": job_name, "reason": "generated secret failed validation"},
+                    details=self._rotation_details(
+                        job_name, reason="generated secret failed validation"
+                    ),
                 )
                 return False
 
@@ -180,7 +275,9 @@ class RotationEngine:
                     actor,
                     secret_id=secret_id,
                     success=True,
-                    details={"job": job_name, "provider": provider_name, "rotator": rotator_name},
+                    details=self._rotation_details(
+                        job_name, provider=provider_name, rotator=rotator_name
+                    ),
                 )
                 return True
             else:
@@ -190,7 +287,9 @@ class RotationEngine:
                     actor,
                     secret_id=secret_id,
                     success=False,
-                    details={"job": job_name, "reason": "provider update_secret returned False"},
+                    details=self._rotation_details(
+                        job_name, reason="provider update_secret returned False"
+                    ),
                 )
                 return False
 
@@ -201,7 +300,7 @@ class RotationEngine:
                 actor,
                 secret_id=secret_id,
                 success=False,
-                details={"job": job_name, "reason": str(e)},
+                details=self._rotation_details(job_name, reason=str(e)),
             )
             return False
 
@@ -231,6 +330,51 @@ class RotationEngine:
                 a CLI run) is already in progress in this process, or
                 (with `distributed.enabled: true`) in another instance.
         """
+        return self._rotate_sweep(self._active_jobs_in_order(), actor, on_job_complete)
+
+    def rotate_jobs(
+        self,
+        job_names: List[str],
+        actor: str = "system",
+        on_job_complete: Optional[Callable[[str, bool, int, int], None]] = None,
+    ) -> Dict[str, bool]:
+        """Rotate the named jobs, in configuration order.
+
+        This is what a per-job schedule fires: the jobs that share one
+        schedule are rotated together, under the same lock as
+        rotate_all_secrets(). Names that match no configured job are
+        logged and skipped.
+
+        Raises:
+            RotationInProgressError: as for rotate_all_secrets().
+        """
+        wanted = set(job_names)
+        jobs = [job for job in self._active_jobs_in_order() if job.get("name") in wanted]
+        known = {job.get("name") for job in self.rotation_jobs}
+        unknown = wanted - known
+        if unknown:
+            logger.warning(f"Skipping unknown job(s) in rotation: {', '.join(sorted(unknown))}")
+        if not jobs:
+            return {}
+        return self._rotate_sweep(jobs, actor, on_job_complete)
+
+    def _active_jobs_in_order(self) -> List[Dict[str, Any]]:
+        """The jobs a sweep covers, in configuration order: all of them
+        except those paused in the dashboard. (Rotating one job by name with
+        rotate_job() still works while it is paused: that is a deliberate
+        request.)"""
+        jobs = list(self.rotation_jobs)
+        paused = [job.get("name") for job in jobs if job.get("paused")]
+        if paused:
+            logger.info(f"Skipping paused job(s): {', '.join(map(str, paused))}")
+        return [job for job in jobs if not job.get("paused")]
+
+    def _rotate_sweep(
+        self,
+        jobs: List[Dict[str, Any]],
+        actor: str,
+        on_job_complete: Optional[Callable[[str, bool, int, int], None]],
+    ) -> Dict[str, bool]:
         try:
             self._rotation_lock.acquire()
         except LockAcquisitionError as e:
@@ -241,10 +385,10 @@ class RotationEngine:
 
         try:
             results = {}
-            total = len(self.rotation_jobs)
+            total = len(jobs)
             logger.info(f"Starting rotation of {total} secrets")
 
-            for index, job in enumerate(self.rotation_jobs, start=1):
+            for index, job in enumerate(jobs, start=1):
                 job_name = job["name"]
                 success = self.rotate_secret(job, actor=actor)
                 results[job_name] = success
@@ -265,6 +409,43 @@ class RotationEngine:
             logger.info(f"Rotation complete: {successful}/{len(results)} successful")
 
             return results
+        finally:
+            self._rotation_lock.release()
+
+    def rotate_job(self, job_name: str, actor: str = "system") -> bool:
+        """Rotate a single configured job by name.
+
+        Takes the same lock as rotate_all_secrets(), so a single-job
+        rotation never overlaps a full sweep (here or, with
+        ``distributed.enabled``, on another instance) or another
+        single-job rotation.
+
+        Args:
+            job_name: the job's ``name`` from configuration.
+            actor: who triggered this, recorded in the audit log.
+
+        Returns:
+            True if the secret was rotated, False if the rotation ran
+            but failed (the reason is in the audit log).
+
+        Raises:
+            KeyError: no configured job has this name.
+            RotationInProgressError: a sweep or another single-job
+                rotation is already running.
+        """
+        job = next((j for j in self.rotation_jobs if j.get("name") == job_name), None)
+        if job is None:
+            raise KeyError(job_name)
+
+        try:
+            self._rotation_lock.acquire()
+        except LockAcquisitionError as e:
+            raise RotationInProgressError(
+                f"A rotation is already running elsewhere; try again once it finishes. ({e})"
+            ) from e
+
+        try:
+            return bool(self.rotate_secret(job, actor=actor))
         finally:
             self._rotation_lock.release()
 

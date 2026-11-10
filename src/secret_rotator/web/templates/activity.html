@@ -1,0 +1,69 @@
+{% extends "app_base.html" %}
+{% from "partials/macros.html" import when, log_line %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/activity.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="head">
+    <div>
+        <h1>Activity log</h1>
+        <p>Rotations, restores, and system events.</p>
+    </div>
+    <div class="row">
+        <nav class="seg" aria-label="Filter by level">
+            {% for key, label in levels %}
+            <a href="{{ url_for('dashboard.activity', level=key if key != 'all' else None, q=q or None) }}"{% if key == level %} class="on" aria-current="true"{% endif %}>{{ label }}</a>
+            {% endfor %}
+        </nav>
+        <a class="btn" download
+           href="{{ url_for('api.export_activity', format='csv', level=level if level != 'all' else None, q=q or None) }}">Export</a>
+        <a class="lnk" download
+           href="{{ url_for('api.export_activity', format='json', level=level if level != 'all' else None, q=q or None) }}">JSON</a>
+    </div>
+</div>
+
+{% set live = result.page == 1 %}
+<div class="card{% if result.pages > 1 %} has-foot{% endif %}">
+    <div class="card-h">
+        <form method="get" action="{{ url_for('dashboard.activity') }}" role="search">
+            {% if level != "all" %}<input type="hidden" name="level" value="{{ level }}">{% endif %}
+            <input class="input" style="width:260px" type="search" name="q" value="{{ q }}"
+                   placeholder="Search activity…" aria-label="Search activity">
+            <button type="submit" class="btn sm">Search</button>
+            {% if q %}<a class="btn sm" href="{{ url_for('dashboard.activity', level=level if level != 'all' else None) }}">Clear</a>{% endif %}
+        </form>
+        {% if live %}
+        <button type="button" class="badge acc" id="live-toggle" aria-pressed="true"
+                title="Follow new events as they happen">Live</button>
+        {% endif %}
+    </div>
+    <div class="log" id="log" role="log" aria-label="Activity log" tabindex="0"
+         data-latest="{{ result.latest_seq }}" data-live="{{ 'true' if live else 'false' }}"
+         data-level="{{ level }}" data-q="{{ q }}">
+        {% for event in events %}{{ log_line(event) }}
+        {% else %}<div class="line none" id="log-empty">{% if q or level != "all" %}No activity matches.{% else %}No activity yet.{% endif %}</div>
+        {% endfor %}
+    </div>
+    {% if result.pages > 1 %}
+    <div class="card-f">
+        <span class="muted">Page {{ result.page }} of {{ result.pages }} · {{ result.total }} events</span>
+        <nav class="row" aria-label="Pagination">
+            {% if result.page < result.pages %}
+            <a class="btn sm" rel="next"
+               href="{{ url_for('dashboard.activity', level=level if level != 'all' else None, q=q or None, page=result.page + 1) }}">Older</a>
+            {% else %}<span class="btn sm" aria-disabled="true">Older</span>{% endif %}
+            {% if result.page > 1 %}
+            <a class="btn sm" rel="prev"
+               href="{{ url_for('dashboard.activity', level=level if level != 'all' else None, q=q or None, page=(result.page - 1) if result.page > 2 else None) }}">Newer</a>
+            {% else %}<span class="btn sm" aria-disabled="true">Newer</span>{% endif %}
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/activity.js') }}"></script>
+{% endblock %}

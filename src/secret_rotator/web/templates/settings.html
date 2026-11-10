@@ -1,0 +1,105 @@
+{% extends "app_base.html" %}
+{% from "partials/setting_control.html" import control %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/settings.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set labels = {} %}
+{% for section in listing.sections %}{% for item in section.settings %}{% set _ = labels.update({item.key: item.label}) %}{% endfor %}{% endfor %}
+
+<div class="head">
+    <div>
+        <h1>Settings</h1>
+        <p>Changes are saved in the dashboard's own settings file; config.yaml is not modified. Most changes need a restart, except those marked <em>Applies immediately</em>.</p>
+    </div>
+</div>
+
+{% include "partials/notice.html" %}
+
+{% if listing.pending_restart %}
+<div class="warnbox" id="restart-banner" role="status" style="margin-bottom:20px">
+    <svg class="icon" aria-hidden="true"><use href="#i-warn"/></svg>
+    <span>Restart the daemon to apply: {% for key in listing.pending_restart %}{{ labels[key] }}{% if not loop.last %}, {% endif %}{% endfor %}.</span>
+</div>
+{% endif %}
+{% if listing.file_error %}
+<div class="warnbox" role="alert" style="margin-bottom:20px">
+    <svg class="icon" aria-hidden="true"><use href="#i-warn"/></svg>
+    <span>The dashboard settings file could not be read, so only config.yaml applies: {{ listing.file_error }}.</span>
+</div>
+{% endif %}
+{% for warning in listing.warnings %}
+<div class="warnbox" role="status" style="margin-bottom:12px">
+    <svg class="icon" aria-hidden="true"><use href="#i-warn"/></svg>
+    <span>{{ warning }}</span>
+</div>
+{% endfor %}
+
+<form id="settings-form" novalidate data-revision="{{ listing.revision }}">
+<div class="setgrid" id="settings-root">
+    <nav class="snav" aria-label="Settings sections">
+        {% for section in listing.sections %}
+        <a href="#{{ section.key }}" data-sec="{{ section.key }}"{% if loop.first %} class="on" aria-current="true"{% endif %}>{{ section.label }}</a>
+        {% endfor %}
+    </nav>
+
+    <div>
+        {% for section in listing.sections %}
+        <section class="spanel{% if loop.first %} on{% endif %}" id="s-{{ section.key }}" aria-labelledby="h-{{ section.key }}">
+            <div class="card">
+                <div class="card-h">
+                    <div>
+                        <h2 id="h-{{ section.key }}">{{ section.label }}</h2>
+                        <small class="muted">{{ section.description }}</small>
+                    </div>
+                </div>
+
+                {% for item in section.settings %}
+                <div class="set" data-row="{{ item.key }}" data-restart="{{ 'true' if item.restart else 'false' }}">
+                    <div>
+                        <b id="l-{{ item.key }}">{{ item.label }}</b>
+                        {% if item.restart_pending %}<span class="badge warn restart-badge" data-pending>Restart required</span>
+                        {% elif item.restart %}<span class="badge warn restart-badge" hidden>Restart required</span>
+                        {% elif item.editable %}<span class="pill">Applies immediately</span>{% endif %}
+                        {% if item.help %}<small>{{ item.help }}</small>{% endif %}
+                        {% if not item.editable %}<small>{{ item.reason }}</small>{% endif %}
+                        {% if item.source == "dashboard" and item.editable and not item.secret %}
+                        <small class="origin">Changed in the dashboard · <button type="button" class="lnk linkbtn" data-action="reset-setting">Reset</button></small>
+                        {% endif %}
+                        <small class="field-error" id="err-{{ item.key }}" hidden></small>
+                    </div>
+                    <div class="ctl">{{ control(item, schedule_choices) }}</div>
+                </div>
+                {% endfor %}
+
+                {% if section.unavailable %}
+                <div class="unavail" role="note">
+                    <b>Not available in this version</b>
+                    <ul>
+                        {% for note in section.unavailable %}
+                        <li><span>{{ note.label }}</span> <span class="muted">{{ note.reason }}</span></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+        {% endfor %}
+
+        <div class="savebar card" id="savebar" role="region" aria-label="Unsaved changes">
+            <span><b>Unsaved changes</b> <span class="muted">· validated before saving</span></span>
+            <div class="row">
+                <button type="button" class="btn" id="discard">Discard</button>
+                <button type="submit" class="btn primary" id="save">Save changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,65 @@
+{# Add / edit form for providers and rotators, and the confirmation dialog.
+   The type-specific fields are built by static/js/components.js from the
+   type descriptions in #component-data. #}
+<aside class="drawer" id="d-component" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="d-component-title">
+    <form id="component-form" novalidate>
+        <div class="card-h">
+            <h2 id="d-component-title">Add {{ noun }}</h2>
+            <button type="button" class="btn icon sm" data-close aria-label="Close">
+                <svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>
+            </button>
+        </div>
+        <div class="card-b">
+            <p class="badge err form-error" id="component-error" role="alert" hidden></p>
+            <button type="button" class="btn sm" id="component-reload" hidden>Reload the page</button>
+            <p class="muted" id="component-unsupported" hidden style="font-size:13px">
+                This type is not available in this version, so its settings cannot be edited here. You can still delete it.
+            </p>
+
+            <label class="field" for="component-name">Name
+                <input class="input" id="component-name" name="name" type="text" maxlength="100" autocomplete="off" aria-describedby="err-name">
+                <small class="field-error" id="err-name" hidden></small>
+            </label>
+            <label class="field" for="component-type">Type
+                <select class="input" id="component-type" name="type" aria-describedby="err-type"></select>
+                <small class="field-error" id="err-type" hidden></small>
+            </label>
+
+            <div class="field-group" id="component-fields"></div>
+
+            {% if kind == "rotators" %}
+            <div class="sample-box" id="sample-box">
+                <div>
+                    <div class="muted" style="font-size:12.5px">Sample</div>
+                    <div class="mono" id="sample-value" aria-live="polite">—</div>
+                </div>
+                <button type="button" class="btn sm" id="sample-button">Preview</button>
+            </div>
+            <p class="muted" style="font-size:13px">A random example of what these settings generate. It is not stored and is not used for anything.</p>
+            {% endif %}
+
+            <div id="component-reset-row" hidden>
+                <button type="button" class="btn" data-action="reset-component">Reset to config.yaml</button>
+                <p class="muted" style="margin-top:8px;font-size:13px">Drops the changes made in the dashboard.</p>
+            </div>
+        </div>
+        <div class="card-f">
+            <div class="left">
+                <button type="button" class="btn danger" id="component-delete" data-action="delete-component" hidden>Delete</button>
+            </div>
+            <button type="button" class="btn" data-close>Cancel</button>
+            <button type="submit" class="btn primary" id="component-save">Save {{ noun }}</button>
+        </div>
+    </form>
+</aside>
+
+<div class="modal card" id="m-component-confirm" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="m-component-confirm-title">
+    <div class="card-b">
+        <h1 id="m-component-confirm-title">Are you sure?</h1>
+        <p class="muted" id="m-component-confirm-text"></p>
+        <div class="row" style="justify-content:flex-end">
+            <button type="button" class="btn" data-close data-autofocus>Cancel</button>
+            <button type="button" class="btn danger" id="m-component-confirm-ok">Confirm</button>
+        </div>
+    </div>
+</div>

@@ -7,6 +7,311 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Dashboard redesign, step 1: new design-system foundation (CSS design
+  tokens with light, dark and follow-the-system themes, a no-flash
+  `theme.js`, self-hosted Geist / Geist Mono fonts) and a restyled
+  sign-in page. No third-party font requests are made.
+- Dashboard redesign, step 2: new app shell (sidebar navigation, theme
+  switch, signed-in user, environment label) and real URLs for every
+  page: `/`, `/jobs`, `/jobs/<id>`, `/backups`, `/backup-health`,
+  `/activity`, `/providers`, `/rotators`, `/settings`. Pages not yet
+  rebuilt show a placeholder. The previous dashboard remains available
+  at `/legacy` until the redesign is complete.
+- Dashboard redesign, step 3 (backend for the Overview and Jobs pages):
+  new `GET /api/job-status` and `GET /api/overview` endpoints report
+  each job's status (current, failed, rotating, never rotated), last
+  rotated time, last error and next rotation, plus items needing
+  attention, recent activity and backup verification results. Status is
+  derived from the existing audit log, so there is no separate run
+  history to keep in sync. `RotationScheduler.next_rotation_time()`,
+  `RotationEngine.active_job_names()` and
+  `BackupManager.count_backups()` support this.
+- Dashboard redesign, step 4: new Overview page at `/` showing job and
+  backup totals, failed jobs needing attention, every job's status and
+  schedule, recent backup verification runs and recent activity. "Rotate
+  all" now confirms in an accessible dialog, shows live progress and
+  joins a rotation that is already running. Timestamps are shown in the
+  viewer's local time zone.
+- Dashboard redesign, step 5 (backend for per-job actions): new
+  `POST /api/jobs/<name>/rotate` rotates a single job and returns its
+  updated status (404 for an unknown job, 409 while another rotation is
+  running). It shares the rotation lock with full sweeps, so the two
+  can never overlap. Backed by `RotationEngine.rotate_job()`.
+- Dashboard redesign, step 6: new Jobs page at `/jobs` listing every job
+  with schedule, last and next rotation and status, a search box, and
+  per-job Rotate / Retry buttons. Failed jobs on the Overview now have a
+  Retry button too. Job names containing `/` now work in page and API
+  URLs.
+- Dashboard redesign, step 7 (backend for the Backups page): new
+  `GET /api/backup-list` returns one page of backups, newest first, with
+  an optional secret ID filter. It decrypts nothing, opens only the files
+  on the requested page, and returns file names rather than server paths,
+  so it stays fast with thousands of backups. Backed by
+  `BackupManager.list_backup_page()`. `GET /api/backups` is unchanged.
+- Dashboard redesign, step 8: new Backups page at `/backups` with a
+  secret ID filter, 25-per-page pagination, an encryption badge per
+  backup, a details drawer and a restore confirmation. Secret values are
+  masked everywhere and never shown in full in the browser; restoring
+  applies the old value on the server. Results of actions that reload the
+  page now appear as a message afterwards (`flash.js`).
+- Dashboard redesign, step 9 (backend for the Backup health page): new
+  `GET /api/verification/summary?days=` (latest run with the backups that
+  failed, last seven runs, history table, overall status),
+  `POST /api/verification/run` and `GET /api/verification/status`.
+  A manual verification now runs in a background thread, one at a time,
+  instead of blocking a web request while every backup is decrypted, and
+  is recorded in the audit log as `verify_backups`. Responses contain file
+  names, never server paths. Backed by the new `BackupHealthService` and
+  `BackupIntegrityChecker.classify_success_rate()`. The legacy
+  `/api/run-verification` and `/api/verification-history` are unchanged.
+- Dashboard redesign, step 10: new Backup health page at `/backup-health`
+  with a headline result, the last seven runs, backups verified and
+  failed, which backups failed in the latest run and why, and a history
+  table switchable between 7, 30 and 90 days. "Run verification now"
+  starts a background verification and follows it to the end.
+- Dashboard redesign, step 11 (backend for the Activity page): new
+  `GET /api/activity` (audit events, newest first, filtered by level
+  and text, paged, with an `after` mode for live updates) and
+  `GET /api/activity/export` (CSV or JSON download, capped at the newest
+  10,000 matches, spreadsheet-formula safe, itself recorded in the audit
+  log as `export_activity`). Built on the audit log, so entries are
+  structured and carry no secret values; the free-text application log
+  is deliberately not exposed. Adds `AuditLog.read_events()` and the
+  `ActivityService`.
+- Dashboard redesign, step 12: new Activity page at `/activity`: the
+  audit log as a terminal-style pane (oldest to newest) with an
+  All / Info / Warnings / Errors switch, text search, pagination, CSV and
+  JSON export of the current filter, and a Live mode that appends new
+  events as they happen (pausable; stops itself when the tab is hidden
+  or the server stops answering).
+- Dashboard redesign, step 13 (backend for the job page): new
+  `GET /api/jobs/<name>/detail` returns a job's status, configuration,
+  run history (when, who or what triggered it, how long it took, the
+  failure reason), success rate and its newest backups. Rotation audit
+  events now record `duration_ms`. Only display-safe rotator settings
+  are returned: connection details such as a database host, database or
+  account name are never shown, and neither are the settings of
+  rotators the dashboard does not know. `BackupManager.list_backup_page()`
+  gains an exact `secret_id` filter.
+- Dashboard redesign, step 14: new job page at `/jobs/<name>` with a
+  status header and Rotate now, next run / last rotated / success rate /
+  backups, run history (trigger, duration, result and failure reason), the
+  job's backups with Restore, its configuration and display-safe rotator
+  settings. Unknown pages and jobs now show a proper "not found" page
+  inside the dashboard (anonymous visitors are sent to sign in); API and
+  static URLs still answer with JSON.
+- Dashboard redesign, step 15 (per-job schedules): a job's `schedule`
+  setting now actually controls when it rotates. The jobs that share a
+  schedule rotate together when it fires, and jobs without their own
+  schedule follow `rotation.schedule`. With no per-job schedules nothing
+  changes. `monthly` is now supported (the 1st at 02:00). The dashboard
+  shows each job's own next rotation. Adds `RotationEngine.rotate_jobs()`,
+  `RotationScheduler.next_rotation_for()` and
+  `refresh_rotation_schedules()`, and the `schedule_spec` module.
+
+### Upgrade notes
+
+- **Per-job `schedule` values now take effect.** Previously they were
+  ignored and every job rotated on the global schedule. A job configured
+  with `schedule: "weekly"` or `"monthly"` (as in the example config)
+  will now rotate that often instead of daily. Remove or change a job's
+  `schedule` if you want it to follow the global one.
+- **An invalid schedule now stops startup** with an error naming the
+  setting (or job), instead of silently scheduling nothing. Valid values:
+  `daily`, `weekly`, `monthly`, `every_<N>_minutes`, `every_<N>_hours`.
+- **The dashboard has been rebuilt and the previous one removed.** Pages
+  now live at their own URLs (`/jobs`, `/backups`, `/settings`, ...);
+  bookmarks to `/legacy` or `/health` stop working, and so do
+  `GET /api/backup-health`, `GET /api/verification-history` and
+  `POST /api/run-verification` (see **Removed**). `web.use_flask` is
+  ignored.
+- **Changes made in the dashboard are not saved in `config.yaml`.** They go
+  to `data/dashboard-settings.json`, with credentials encrypted by
+  `data/dashboard-settings.key`. Include both in your backups of the data
+  directory. A new install, or one where nobody uses the dashboard to
+  change anything, creates neither file.
+- **Queue workers re-read the dashboard's settings file before each
+  rotation sweep**, so jobs added in the dashboard are included. They do
+  not re-read `config.yaml`, which still needs a restart.
+- **`Settings.save()` and `settings.set()` now deal only with
+  `config.yaml`'s own contents.** The admin-credentials command is
+  unaffected, and dashboard changes can no longer be written into
+  `config.yaml` by accident.
+- **Some controls in older documentation never did anything** and are not
+  offered: rotation `retry_attempts` and `timeout`, `backup.enabled`,
+  backup compression, `max_backups_per_secret`, `logging.mask_sensitive_data`
+  and the `notifications` section. The README and the Settings page now say
+  so. Rotators of type database, SSH key, certificate and OAuth2, and
+  providers of type `aws`, are skipped at startup with a warning, as before.
+
+### Added (dashboard settings file)
+
+- The dashboard will save its own changes (jobs, providers, rotators and
+  settings) in `data/dashboard-settings.json` (override with
+  `SECRET_ROTATOR_DASHBOARD_SETTINGS` or `dashboard.settings_file`)
+  and layer them over `config.yaml`, which it never writes. This release
+  adds the storage and merge layer only; no dashboard page uses it yet.
+  Writes are atomic, keep a `.bak`, use file mode 0600, and never lose
+  concurrent changes. An unreadable file is ignored and reported instead
+  of stopping startup. Queue workers re-read the file before each
+  rotation sweep.
+- `Settings.save()` now writes only `config.yaml`'s own contents, never
+  the dashboard's changes merged in.
+
+### Added (job management API)
+
+- Jobs can now be created, changed, deleted, paused, resumed and reset
+  through the API: `POST /api/jobs`, `PUT` / `DELETE /api/jobs/<name>`,
+  `POST /api/jobs/<name>/pause`, `/resume` and `/reset`, plus
+  `GET /api/job-options` for the form. Changes are saved in the
+  dashboard's settings file (never `config.yaml`) and applied to the
+  running engine and scheduler immediately. A job needs an existing
+  provider and rotator and a secret ID; its schedule must be valid; two
+  jobs cannot rotate the same secret in the same provider; unknown fields
+  are rejected and a job cannot be renamed. Every change is audit-logged
+  (`job_create`, `job_update`, `job_delete`, `job_pause`, `job_resume`,
+  `job_reset`) and an optional `revision` lets a client detect that
+  something else changed meanwhile (HTTP 409).
+- Paused jobs are skipped by scheduled rotation and by "Rotate all";
+  rotating a paused job by name still works. Job status now includes
+  `paused` and `source` (config, modified or dashboard).
+- `RotationEngine.replace_rotation_jobs()` swaps the job list as a unit.
+
+### Added (job editor)
+
+- The dashboard can now manage jobs. **New job** on the Jobs page and
+  **Edit** on a job's page open a form (provider, rotator and schedule are
+  dropdowns of what exists; a job's name cannot change); the job page also
+  has **Pause / Resume**, **Delete job** and, for a `config.yaml` job that
+  was changed in the dashboard, **Reset to config.yaml**. Jobs deleted
+  from `config.yaml` are only hidden, and appear under **Hidden jobs** with
+  a **Restore** button. Validation messages show beside the field they
+  concern; a change made elsewhere since the page loaded is reported
+  instead of overwritten. Paused jobs show a Paused badge, are left out of
+  "Rotate all" and its count, and show no next run. The job page says
+  whether a job comes from `config.yaml`, was changed in the dashboard, or
+  was added there.
+
+### Added (provider and rotator management API)
+
+- Providers and rotators can be added, changed, deleted, reset and tried
+  out through the API: `GET` / `POST /api/providers` and `/api/rotators`,
+  `PUT` / `DELETE /api/<kind>/<name>`, `POST /api/<kind>/<name>/reset`,
+  `POST /api/providers/<name>/test` (can the provider be used?) and
+  `POST /api/rotators/<name>/sample` or `/api/rotators/sample` (an example
+  of what the settings generate). Changes are saved in the dashboard's
+  settings file (never `config.yaml`) and applied to the running engine
+  immediately.
+- The dashboard offers what the daemon can actually build: the file
+  provider and the password, API key and JWT secret rotators. Only the
+  fields listed for each type are accepted, so no credentials or other
+  data can be stored; a rotator's settings are trial-run before saving, so
+  combinations that cannot work are refused up front; a file provider's
+  path must be a `.json` file inside the data directory (configurable with
+  `dashboard.provider_root`) and cannot be the master key, backups, audit
+  log or the dashboard's own settings file. A name or type cannot change,
+  and a provider or rotator that jobs use cannot be deleted.
+- `bootstrap.build_provider()` and `build_rotator()` now build one
+  component, shared by startup and the dashboard.
+
+### Added (providers and rotators pages)
+
+- New **Providers** (`/providers`) and **Rotators** (`/rotators`) pages.
+  Each lists its items with type, source (config.yaml, changed or added
+  in the dashboard), display-safe settings, availability and how many jobs
+  use it. **Add** and **Edit** open a form built from the server's own type
+  descriptions (number fields with their limits, switches, choices, text);
+  **Test** checks that a provider can be used; **Sample** (and **Preview**
+  in the rotator form) shows a random example of what the settings
+  generate; **Delete** is blocked while jobs use the item and only hides a
+  `config.yaml` item; **Reset to config.yaml** and **Restore** bring such
+  items back. Validation messages appear beside the field concerned.
+
+### Added (encrypted secret settings)
+
+- The dashboard settings file can now hold credentials safely: the S3
+  access keys for remote backups
+  (`backup.remote_backup.access_key_id` / `secret_access_key`) and
+  `distributed.redis_url` are stored only encrypted (Fernet), with a key in
+  `data/dashboard-settings.key` (mode 0600, created on first use and
+  deliberately separate from the master key, so master key rotation cannot
+  make them undecryptable). The rest of the program reads them decrypted
+  through `settings.get()` as if they were in `config.yaml`, which never
+  receives them. They are never listed, returned or logged. A missing or
+  wrong key, a tampered value, or a credential found as plain text in the
+  file makes that one setting ignored with a warning, never an error.
+  Nothing in the dashboard uses this yet; the Settings page will.
+
+### Added (settings API)
+
+- `GET /api/settings` lists the settings the dashboard can show, in the
+  design's eight sections, each with its constraints, current value, where
+  the value comes from (default, `config.yaml` or the dashboard), whether
+  a change needs a restart and whether one is pending. `PUT /api/settings`
+  saves a whole form at once (`changes` and `reset`), validated first and
+  written in one step, in the dashboard's settings file (never
+  `config.yaml`). Credentials (the S3 access keys and the Redis URL) are
+  write-only and stored encrypted. Changes are audit-logged by key name
+  (`settings_update`).
+- Only settings the program actually reads are offered. Controls that would
+  change nothing (rotation timeout and retry attempts, a backup master
+  switch, backup compression, max backups per secret, log masking, rate
+  limiting, and e-mail/Slack notifications, which no code sends) are listed
+  per section as unavailable, with the reason. Four settings are shown but
+  cannot be changed from the dashboard (encryption on/off, the master key
+  file, the backup directory and the log file), and the Flask secret key,
+  admin credentials and dashboard on/off switch are not offered at all.
+- Six settings take effect without a restart (default schedule, log level,
+  backing up old secrets, retention days and two distributed-mode
+  timeouts); every other change is flagged as needing one until it is
+  reverted or the process restarts. `RotationScheduler.set_default_schedule()`
+  applies a new default schedule live.
+- Cross-field checks: remote backup needs a bucket, distributed mode needs
+  a Redis URL (or `REDIS_URL`), and the two S3 keys go together.
+
+### Added (Settings page)
+
+- New **Settings** page at `/settings`: the design's eight sections (a
+  list on the left, one card per section, reachable by `#section`), with a
+  control suited to each setting (switch, number, choice, time, text), its
+  help text, where the value comes from and **Reset** for dashboard
+  changes. Edits are collected and saved together from an "Unsaved
+  changes" bar (**Save** / **Discard**); the server validates the whole
+  form and messages appear beside the settings concerned. Settings that
+  take effect immediately say so; others show **Restart required** once
+  edited or saved, and a banner lists what is waiting for a restart.
+  Credentials are write-only (**Set…** / **Replace…** / **Clear**) and are
+  never in the page. Settings that cannot be changed here are shown with
+  the reason, and features this version does not have (notifications,
+  retry attempts, ...) are listed as not available instead of being given
+  controls that do nothing. Leaving the page with unsaved edits asks first.
+
+### Removed
+
+- The previous single-page dashboard: `web_interface.py` (deprecated since
+  the Flask dashboard became the default), the `/legacy` and `/health`
+  pages, their templates and their JavaScript/CSS bundle. Every page now
+  lives at its own URL: `/`, `/jobs`, `/jobs/<name>`, `/backups`,
+  `/backup-health`, `/activity`, `/providers`, `/rotators` and `/settings`.
+- The `web.use_flask` setting (the Flask dashboard is the only one). It is
+  ignored if still present in `config.yaml`.
+- Three API endpoints that only the previous dashboard used:
+  `GET /api/backup-health` and `GET /api/verification-history` (the same
+  data under two names) and `POST /api/run-verification` (which ran the
+  whole verification inside the request). Use `GET
+  /api/verification/summary`, `POST /api/verification/run` and `GET
+  /api/verification/status` instead. The other read-only endpoints
+  (`/api/status`, `GET /api/jobs`, `GET /api/backups`) and
+  `/api/healthz` are unchanged.
+- The `web_interface.py` exclusions from flake8, mypy and coverage.
+
+### Fixed
+
+- `pyproject.toml` package-data now includes the web templates and
+  static assets, so wheel/sdist installs ship a working dashboard
+
 ## [1.3.1] - 2026-10-03
 
 A minor release: a codebase audit turned up five additional

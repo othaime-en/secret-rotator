@@ -74,7 +74,14 @@ secret-rotator-backup = "secret_rotator.tools.manage_key_backups:main"
 packages = { find = { where = ["src"] } }
 
 [tool.setuptools.package-data]
-secret_rotator = ["py.typed"]
+secret_rotator = [
+    "py.typed",
+    "web/templates/*.html",
+    "web/templates/**/*.html",
+    "web/static/css/*.css",
+    "web/static/js/*.js",
+    "web/static/fonts/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -85,13 +92,6 @@ addopts = "-v --cov=secret_rotator --cov-report=html --cov-report=term-missing -
 
 [tool.coverage.run]
 source = ["secret_rotator"]
-omit = [
-    # Deprecated legacy web server, superseded by web/ (Flask blueprints)
-    # and scheduled for removal in 1.4.0 - see README/CHANGELOG. Counting
-    # coverage on code that's being deleted just distorts the signal for
-    # everything that isn't going away.
-    "*/web_interface.py",
-]
 
 [tool.coverage.report]
 # Lines/branches that exist only to be defensive (should be unreachable in

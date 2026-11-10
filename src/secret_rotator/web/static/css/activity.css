@@ -1,0 +1,60 @@
+/* Activity page. */
+
+.card-h form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.log {
+    font: 12.5px/1.85 var(--mono);
+    background: #111;
+    color: #c9c9c9;
+    border-radius: 0 0 8px 8px;
+    padding: 14px 18px;
+    max-height: 420px;
+    overflow: auto;
+}
+
+.log:focus-visible {
+    outline-offset: -2px;
+    outline-color: #8fb8dd;
+}
+
+.log .line {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.log .line.none {
+    color: #6b6b6b;
+}
+
+.log .t {
+    color: #6b6b6b;
+}
+
+.log .lv {
+    display: inline-block;
+    min-width: 5ch;
+}
+
+.log .i {
+    color: #8fb8dd;
+}
+
+.log .w {
+    color: #e0a94a;
+}
+
+.log .e {
+    color: #f0735f;
+}
+
+.log .s {
+    color: #6fcf9f;
+}
+
+.card.has-foot .log {
+    border-radius: 0;
+}
