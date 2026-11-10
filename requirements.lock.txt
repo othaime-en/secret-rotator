@@ -681,9 +681,9 @@ psycopg2-binary==2.9.12 \
     --hash=sha256:fb1828cf3da68f99e45ebce1355d65d2d12b6a78fb5dfb16247aad6bdef5f5d2 \
     --hash=sha256:ffdd7dc5463ccd61845ac37b7012d0f35a1548df9febe14f8dd549be4a0bc81e
     # via -r requirements.txt
-pycparser==3.0 \
-    --hash=sha256:600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29 \
-    --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
+pycparser==3.11 \
+    --hash=sha256:51d5a8ba2be0bbe440b99d2112604c95bbbc3c2748a64260186c541e1729cd80 \
+    --hash=sha256:d875f09c3507d00e1aba0eecc6dcadc1352f30fff09dc6bff2f1c2935e97c2bc
     # via cffi
 pyjwt==2.15.1 \
     --hash=sha256:42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193 \
