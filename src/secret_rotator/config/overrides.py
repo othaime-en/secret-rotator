@@ -84,7 +84,7 @@ from cryptography.fernet import Fernet, InvalidToken
 try:  # POSIX only; Windows falls back to the in-process lock alone.
     import fcntl
 except ImportError:  # pragma: no cover
-    fcntl = None
+    fcntl = None  # type: ignore[assignment]
 
 # Not secret_rotator.utils.logger: that module imports settings, which imports
 # this one. A child of the application's logger reaches the same handlers
@@ -202,7 +202,7 @@ class OverridesStore:
 
     @property
     def revision(self) -> int:
-        return self._data["revision"]
+        return int(self._data["revision"])
 
     @property
     def updated_at(self) -> Optional[str]:
@@ -473,7 +473,7 @@ class OverridesStore:
             logger.info(
                 f"Dashboard settings changed by {actor}: {description} (revision {data['revision']})"
             )
-            return data["revision"]
+            return int(data["revision"])
 
     def _move_aside(self) -> None:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")

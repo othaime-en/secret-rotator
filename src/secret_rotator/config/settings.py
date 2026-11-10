@@ -2,7 +2,7 @@ import copy
 import yaml
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from secret_rotator.config.overrides import OverridesStore
 
@@ -57,7 +57,7 @@ class Settings:
         else:
             self.config_path = self._find_config()
 
-        self.base_config = {}
+        self.base_config: Dict[str, Any] = {}
         self.overrides = OverridesStore(
             path=Path(DEFAULT_OVERRIDES_FILE), base_provider=lambda: self.base_config
         )
