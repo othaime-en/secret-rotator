@@ -45,8 +45,8 @@ MAX_REASON_LENGTH = 300
 def _clip(text: Any) -> Optional[str]:
     if text is None:
         return None
-    text = str(text)
-    return text if len(text) <= MAX_REASON_LENGTH else text[: MAX_REASON_LENGTH - 1] + "…"
+    shown = str(text)
+    return shown if len(shown) <= MAX_REASON_LENGTH else shown[: MAX_REASON_LENGTH - 1] + "…"
 
 
 class JobStatusService:
@@ -139,7 +139,7 @@ class JobStatusService:
 
             last_error = None
             if status == STATUS_FAILED:
-                last_error = (attempt.get("details") or {}).get("reason")
+                last_error = ((attempt or {}).get("details") or {}).get("reason")
 
             schedule_name = job.get("schedule") or default_schedule
             paused = bool(job.get("paused"))

@@ -57,8 +57,8 @@ _COMPONENT_VERBS = {"create": "created", "update": "changed", "delete": "deleted
 
 
 def _clip(text: Any) -> str:
-    text = str(text)
-    return text if len(text) <= MAX_MESSAGE_LENGTH else text[: MAX_MESSAGE_LENGTH - 1] + "…"
+    shown = str(text)
+    return shown if len(shown) <= MAX_MESSAGE_LENGTH else shown[: MAX_MESSAGE_LENGTH - 1] + "…"
 
 
 def _level(event: Dict[str, Any]) -> str:
@@ -74,7 +74,7 @@ def _level(event: Dict[str, Any]) -> str:
 
 
 def _message(event: Dict[str, Any]) -> str:
-    action = event.get("action")
+    action = event.get("action") or ""
     actor = event.get("actor") or "unknown"
     details = event.get("details") or {}
     success = bool(event.get("success"))
