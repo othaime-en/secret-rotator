@@ -163,13 +163,15 @@ class BackupHealthService:
             return self._run is not None and self._run["status"] == RUN_RUNNING
 
     @staticmethod
-    def _public(run: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-        if run is None:
-            return None
+    def _copy_run(run: Dict[str, Any]) -> Dict[str, Any]:
         copy = dict(run)
         if copy.get("report") is not None:
             copy["report"] = dict(copy["report"])
         return copy
+
+    @classmethod
+    def _public(cls, run: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        return None if run is None else cls._copy_run(run)
 
     def start_verification(self, actor: str) -> Tuple[Dict[str, Any], bool]:
         """Start a verification of every backup in the background.
@@ -181,7 +183,7 @@ class BackupHealthService:
         """
         with self._lock:
             if self._run is not None and self._run["status"] == RUN_RUNNING:
-                return self._public(self._run), False
+                return self._copy_run(self._run), False
             run = {
                 "status": RUN_RUNNING,
                 "actor": actor,
@@ -195,7 +197,7 @@ class BackupHealthService:
                 target=self._execute, args=(run, actor), daemon=True, name="backup-verification"
             )
             thread = self._thread
-            snapshot = self._public(run)
+            snapshot = self._copy_run(run)
 
         thread.start()
         return snapshot, True

@@ -445,7 +445,7 @@ class RotationEngine:
             ) from e
 
         try:
-            return self.rotate_secret(job, actor=actor)
+            return bool(self.rotate_secret(job, actor=actor))
         finally:
             self._rotation_lock.release()
 

@@ -222,8 +222,8 @@ class RotationScheduler:
         """When the soonest rotation of any schedule fires (UTC), or None
         if no rotation schedule is set up in this process."""
         times = [self.next_rotation_for(name) for name in self._rotation_schedules]
-        times = [t for t in times if t is not None]
-        return min(times) if times else None
+        scheduled = [t for t in times if t is not None]
+        return min(scheduled) if scheduled else None
 
     # ---- firing ------------------------------------------------------------
 
@@ -247,7 +247,7 @@ class RotationScheduler:
     def _rotate_for(self, schedule_name: str) -> Dict[str, bool]:
         due = self._jobs_due(schedule_name)
         if due is None:
-            return self.rotation_function()
+            return dict(self.rotation_function())
         if not due:
             return {}
         if self.rotate_jobs_function is None:
